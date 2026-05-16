@@ -46,14 +46,13 @@ The current manga production process is fragmented across multiple unconnected t
 
 > Update with actual names before publishing.
 
-| Name | Role | Responsibilities |
-|------|------|-----------------|
-| *(Member 1)* | Project Leader | Sprint planning, team coordination, milestone tracking, final delivery |
-| *(Member 2)* | Business Analyst | Requirements elicitation, business rule documentation, use case and workflow modeling |
-| *(Member 3)* | Backend Developer | Spring Boot API, business logic implementation, database schema design, BR enforcement |
-| *(Member 4)* | Frontend Developer | JSP/Bootstrap UI, role-based view rendering, form validation, notification display |
-| *(Member 5)* | UI/UX Designer | Wireframes, prototype (v0/Lovable), usability review, screen flow design |
-| *(Member 6)* | QA Engineer | Test case design, BR validation testing, regression testing, UAT support |
+| Name | ID | Role | Responsibilities |
+|------|----|------|-----------------|
+| Nguyễn Hồng Quân | SE203653 | Project Leader | Sprint planning, team coordination, milestone tracking, final delivery |
+| Nguyễn Đình Cao Thắng| SE203709 | Business Analyst | Requirements elicitation, business rule documentation, use case and workflow modeling |
+| Nguyễn Thành Lộc | SE203692 | Backend Developer | Spring Boot API, business logic implementation, database schema design, BR enforcement |
+| Vũ Nguyễn Trung Nguyên  | 	SE204969 | Frontend Developer | JSP/Bootstrap UI, role-based view rendering, form validation, notification display |
+| Phan Đức Thịnh | SE204966 | UI/UX Designer |  | Wireframes, prototype (v0/Lovable), usability review, screen flow design |
 
 ## System Roles
 
