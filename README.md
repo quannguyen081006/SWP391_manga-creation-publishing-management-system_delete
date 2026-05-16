@@ -44,7 +44,6 @@ The current manga production process is fragmented across multiple unconnected t
 
 ## Team Members
 
-> Update with actual names before publishing.
 
 | Name | ID | Role | Responsibilities |
 |------|----|------|-----------------|
