@@ -7,6 +7,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptSummary;
 import java.util.List;
 import javax.servlet.http.HttpSession;
+import manga.model.AnnotationSummary;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -95,9 +96,16 @@ public class ManuscriptApiController {
         manuscriptRepository.addAnnotation(id, user.getId(), pageNumber, content);
         return ApiResponse.ok(null, "Annotation added");
     }
+
+    @RequestMapping(value = "/manuscripts/{id}/annotations", method = RequestMethod.GET)
+    public ApiResponse<List<AnnotationSummary>> annotations(
+            @PathVariable("id") long id,
+            HttpSession session) {
+
+        SessionUserUtil.requireUser(session);
+
+        return ApiResponse.ok(
+                manuscriptRepository.listAnnotations(id),
+                "Annotations");
+    }
 }
-
-
-
-
-
