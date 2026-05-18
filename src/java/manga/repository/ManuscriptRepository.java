@@ -123,7 +123,7 @@ public class ManuscriptRepository {
     }
 
     public void approve(long manuscriptId) {
-        String sql = "UPDATE Manuscript SET status='APPROVED' WHERE id = ? AND status IN ('SUBMITTED','UNDER_REVIEW')";
+        String sql = "UPDATE Manuscript SET status='APPROVED' WHERE id = ? AND status = 'UNDER_REVIEW'";
         updateStatus(sql, manuscriptId, "Cannot approve manuscript");
     }
 
@@ -197,18 +197,50 @@ public class ManuscriptRepository {
         m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
         return m;
     }
-    
+
+    public String getStatus(long manuscriptId) {
+
+        String sql = "SELECT status FROM Manuscript WHERE id = ?";
+
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setLong(1, manuscriptId);
+
+            try ( ResultSet rs = ps.executeQuery()) {
+
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Manuscript not found");
+                }
+
+                return rs.getString("status");
+            }
+
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot get manuscript status", ex);
+        }
+    }
+
+    public void startReview(long manuscriptId) {
+
+        String sql = "UPDATE Manuscript "
+                + "SET status='UNDER_REVIEW', "
+                + "reviewDeadline=DATEADD(DAY,7,GETDATE()) "
+                + "WHERE id = ? AND status = 'SUBMITTED'";
+
+        updateStatus(sql, manuscriptId, "Cannot start review");
+    }
+
     private AnnotationSummary mapAnnotation(ResultSet rs) throws SQLException {
 
-    AnnotationSummary a = new AnnotationSummary();
+        AnnotationSummary a = new AnnotationSummary();
 
-    a.setId(rs.getLong("id"));
-    a.setManuscriptId(rs.getLong("manuscriptId"));
-    a.setEditorId(rs.getLong("editorId"));
-    a.setPageNumber(rs.getInt("pageNumber"));
-    a.setContent(rs.getString("content"));
-    a.setCreatedAt(rs.getTimestamp("createdAt"));
+        a.setId(rs.getLong("id"));
+        a.setManuscriptId(rs.getLong("manuscriptId"));
+        a.setEditorId(rs.getLong("editorId"));
+        a.setPageNumber(rs.getInt("pageNumber"));
+        a.setContent(rs.getString("content"));
+        a.setCreatedAt(rs.getTimestamp("createdAt"));
 
-    return a;
-}
+        return a;
+    }
 }
