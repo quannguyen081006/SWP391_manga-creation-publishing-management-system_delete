@@ -1,9 +1,11 @@
 package manga.controller.web;
 
+import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptSummary;
 import manga.model.TaskSummary;
 import manga.repository.ProductionRepository;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +34,8 @@ public class ProductionController {
 
     @RequestMapping(value = "/tasks", method = RequestMethod.GET)
     public String tasks(HttpSession session, Model model) {
-        List<TaskSummary> tasks = productionRepository.listTasks();
+        AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        List<TaskSummary> tasks = visibleTasks(user, productionRepository.listTasks());
         int active = 0;
         int submitted = 0;
         int completed = 0;
@@ -61,6 +64,19 @@ public class ProductionController {
         model.addAttribute("completedTasks", completed);
         model.addAttribute("overdueTasks", overdue);
         return "task/list";
+    }
+
+    private List<TaskSummary> visibleTasks(AuthenticatedUser user, List<TaskSummary> allTasks) {
+        if (user == null || !user.hasRole("ASSISTANT")) {
+            return allTasks;
+        }
+        List<TaskSummary> assigned = new ArrayList<TaskSummary>();
+        for (TaskSummary task : allTasks) {
+            if (task.getAssistantId() == user.getId()) {
+                assigned.add(task);
+            }
+        }
+        return assigned;
     }
 
     @RequestMapping(value = "/manuscripts", method = RequestMethod.GET)

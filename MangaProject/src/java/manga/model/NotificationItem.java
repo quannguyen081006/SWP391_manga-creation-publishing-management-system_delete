@@ -7,6 +7,8 @@ public class NotificationItem {
     private long userId;
     private String type;
     private String message;
+    private Long referenceId;
+    private String referenceType;
     private boolean read;
     private Timestamp createdAt;
 
@@ -18,6 +20,10 @@ public class NotificationItem {
     public void setType(String type) { this.type = type; }
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
+    public Long getReferenceId() { return referenceId; }
+    public void setReferenceId(Long referenceId) { this.referenceId = referenceId; }
+    public String getReferenceType() { return referenceType; }
+    public void setReferenceType(String referenceType) { this.referenceType = referenceType; }
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
     public Timestamp getCreatedAt() { return createdAt; }
