@@ -148,8 +148,8 @@ public class ManuscriptRepository {
     }
 
     public void startReview(long manuscriptId) {
-        String sql = "UPDATE Manuscript SET status='UNDER_REVIEW' WHERE id = ? AND status = 'SUBMITTED'";
-        updateStatus(sql, manuscriptId, "Cannot start manuscript review");
+        String sql = "UPDATE Manuscript SET status='UNDER_REVIEW', reviewDeadline=DATEADD(DAY,7,GETDATE()) WHERE id = ? AND status = 'SUBMITTED'";
+        updateStatus(sql, manuscriptId, "Cannot start review: manuscript must be in SUBMITTED status");
     }
 
     public long getChapterMangaka(long chapterId) {

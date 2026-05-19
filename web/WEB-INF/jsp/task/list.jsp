@@ -70,6 +70,7 @@
                 <th>Assigned To</th>
                 <th>Status</th>
                 <th>Due Date</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -83,9 +84,10 @@
                         <span class="status-chip ${t.status=='OVERDUE' ? 'status-overdue' : (t.status=='IN_PROGRESS' ? 'status-progress' : (t.status=='PENDING' ? 'status-pending' : (t.status=='APPROVED' ? 'status-approved' : 'status-draft')))}">${t.status}</span>
                     </td>
                     <td>${t.dueDate}</td>
+                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/tasks/${t.id}">View</a></td>
                 </tr>
             </c:forEach>
-            <c:if test="${empty tasks}"><tr><td colspan="6">No tasks found.</td></tr></c:if>
+            <c:if test="${empty tasks}"><tr><td colspan="7">No tasks found.</td></tr></c:if>
         </tbody>
     </table>
 </div>

@@ -25,11 +25,16 @@
         <p><strong>Votes:</strong> Approve ${proposal.approveVotes} | Reject ${proposal.rejectVotes} | Abstain ${proposal.abstainVotes}</p>
     </div>
 
-    <c:if test="${canSubmit}">
-        <div class="action-row">
+    <c:if test="${canEdit || canSubmit}">
+        <div class="action-row detail-actions">
+            <c:if test="${canEdit}">
+                <a class="btn" href="${pageContext.request.contextPath}/main/proposals/${proposal.id}/edit">Edit Draft</a>
+            </c:if>
+            <c:if test="${canSubmit}">
             <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/submit">
                 <button class="btn" type="submit">Submit To Editorial Board</button>
             </form>
+            </c:if>
         </div>
     </c:if>
 

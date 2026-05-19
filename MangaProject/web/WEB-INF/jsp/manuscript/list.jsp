@@ -1,4 +1,4 @@
-﻿<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <%@taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
 <!DOCTYPE html>
@@ -44,7 +44,7 @@
                     <td>${m.submittedAt}</td>
                     <td>${m.reviewDeadline}</td>
                     <td><span class="status-chip ${m.status=='APPROVED' ? 'status-approved' : (m.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${m.status}</span></td>
-                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${m.id}">Detail</a></td>
+                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${m.id}">View</a></td>
                 </tr>
             </c:forEach>
             <c:if test="${empty manuscripts}"><tr><td colspan="7">No manuscripts found.</td></tr></c:if>
