@@ -66,6 +66,7 @@
         <a class="nav-item ${fn:contains(uri, '/main/dashboard') ? 'active' : ''}" href="${ctx}/main/dashboard">Dashboard</a>
         <a class="nav-item ${fn:contains(uri, '/main/proposals') ? 'active' : ''}" href="${ctx}/main/proposals">Proposals</a>
         <a class="nav-item ${fn:contains(uri, '/main/series') ? 'active' : ''}" href="${ctx}/main/series">Series</a>
+        <a class="nav-item ${fn:contains(uri, '/main/chapters') ? 'active' : ''}" href="${ctx}/main/chapters">Chapters</a>
         <a class="nav-item ${fn:contains(uri, '/main/tasks') ? 'active' : ''}" href="${ctx}/main/tasks">Tasks</a>
         <a class="nav-item ${fn:contains(uri, '/main/manuscripts') ? 'active' : ''}" href="${ctx}/main/manuscripts">Manuscripts</a>
 
