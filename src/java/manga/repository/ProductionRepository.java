@@ -9,7 +9,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -114,6 +116,48 @@ public class ProductionRepository {
         }
     }
 
+    public long findSeriesTantou(long seriesId) {
+        String sql = "SELECT tantouEditorId FROM Series WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, seriesId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Series not found");
+                }
+                return rs.getLong(1);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot load series tantou", ex);
+        }
+    }
+
+    public List<Map<String, Object>> listSeriesAssistants(long seriesId) {
+        String sql =
+            "SELECT u.id, u.username, u.fullName, u.email "
+            + "FROM SeriesAssistant sa "
+            + "JOIN [User] u ON u.id = sa.assistantId "
+            + "WHERE sa.seriesId = ? AND u.status = 'ACTIVE' "
+            + "ORDER BY u.fullName";
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, seriesId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<String, Object>();
+                    row.put("id", rs.getLong("id"));
+                    row.put("username", rs.getString("username"));
+                    row.put("fullName", rs.getString("fullName"));
+                    row.put("email", rs.getString("email"));
+                    rows.add(row);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot load series assistants", ex);
+        }
+        return rows;
+    }
     public List<ChapterSummary> listChapters() {
         String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter ORDER BY createdAt DESC";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
@@ -210,4 +254,5 @@ public class ProductionRepository {
         return rows;
     }
 }
+
 

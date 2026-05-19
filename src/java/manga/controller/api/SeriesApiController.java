@@ -6,6 +6,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.SeriesSummary;
 import manga.repository.ProductionRepository;
 import java.util.List;
+import java.util.Map;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,6 +40,20 @@ public class SeriesApiController {
         throw new IllegalArgumentException("Series not found");
     }
 
+    @RequestMapping(value = "/{id}/assistants", method = RequestMethod.GET)
+    public ApiResponse<List<Map<String, Object>>> assistants(@PathVariable("id") long id, HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        if (!user.hasRole("ADMIN")) {
+            long ownerId = productionRepository.findSeriesOwnerMangaka(id);
+            long tantouId = productionRepository.findSeriesTantou(id);
+            boolean allowed = (user.hasRole("MANGAKA") && ownerId == user.getId())
+                    || (user.hasRole("TANTOU_EDITOR") && tantouId == user.getId());
+            if (!allowed) {
+                throw new IllegalArgumentException("Only series owner/assigned Tantou/Admin can view assistants");
+            }
+        }
+        return ApiResponse.ok(productionRepository.listSeriesAssistants(id), "Series assistants");
+    }
     @RequestMapping(value = "/{id}/assistants", method = RequestMethod.POST)
     public ApiResponse<Object> enrollAssistant(
             @PathVariable("id") long id,
@@ -67,5 +82,6 @@ public class SeriesApiController {
         return ApiResponse.ok(null, "Assistant removed");
     }
 }
+
 
 

@@ -22,10 +22,36 @@ public class PageTaskApiController {
     @Autowired
     private PageTaskRepository pageTaskRepository;
 
+    @RequestMapping(value = "/tasks", method = RequestMethod.GET)
+    public ApiResponse<List<TaskSummary>> listVisible(HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(pageTaskRepository.listVisible(user), "Task list");
+    }
     @RequestMapping(value = "/chapters/{chapterId}/tasks", method = RequestMethod.GET)
     public ApiResponse<List<TaskSummary>> list(@PathVariable("chapterId") long chapterId, HttpSession session) {
-        SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(pageTaskRepository.listByChapter(chapterId), "Task list");
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+
+        if (user.hasRole("ADMIN")) {
+            return ApiResponse.ok(pageTaskRepository.listByChapter(chapterId), "Task list");
+        }
+
+        if (user.hasRole("MANGAKA")) {
+            long ownerId = pageTaskRepository.findChapterOwnerMangaka(chapterId);
+            if (ownerId != user.getId()) {
+                throw new IllegalArgumentException("Only chapter owner Mangaka can view this task list (BR-42)");
+            }
+            return ApiResponse.ok(pageTaskRepository.listByChapter(chapterId), "Task list");
+        }
+
+        if (user.hasRole("TANTOU_EDITOR")) {
+            long tantouId = pageTaskRepository.findChapterTantouEditor(chapterId);
+            if (tantouId != user.getId()) {
+                throw new IllegalArgumentException("Only assigned Tantou can view this chapter task list (BR-42)");
+            }
+            return ApiResponse.ok(pageTaskRepository.listByChapter(chapterId), "Task list");
+        }
+
+        throw new IllegalArgumentException("Only MANGAKA/TANTOU_EDITOR/ADMIN can view chapter task list (BR-42)");
     }
 
     @RequestMapping(value = "/chapters/{chapterId}/tasks", method = RequestMethod.POST)
@@ -40,6 +66,11 @@ public class PageTaskApiController {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can create task");
 
+        long ownerId = pageTaskRepository.findChapterOwnerMangaka(chapterId);
+        if (ownerId != user.getId()) {
+            throw new IllegalArgumentException("Only chapter owner can assign task (BR-31)");
+        }
+
         long taskId = pageTaskRepository.create(
                 chapterId,
                 assistantId,
@@ -52,11 +83,25 @@ public class PageTaskApiController {
 
     @RequestMapping(value = "/tasks/{id}", method = RequestMethod.GET)
     public ApiResponse<TaskSummary> detail(@PathVariable("id") long id, HttpSession session) {
-        SessionUserUtil.requireUser(session);
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
         TaskSummary task = pageTaskRepository.findById(id);
         if (task == null) {
             throw new IllegalArgumentException("Task not found");
         }
+
+        long chapterId = task.getChapterId();
+        long ownerMangakaId = pageTaskRepository.findChapterOwnerMangaka(chapterId);
+        long tantouId = pageTaskRepository.findChapterTantouEditor(chapterId);
+
+        boolean allowed = user.hasRole("ADMIN")
+                || (user.hasRole("MANGAKA") && ownerMangakaId == user.getId())
+                || (user.hasRole("TANTOU_EDITOR") && tantouId == user.getId())
+                || (user.hasRole("ASSISTANT") && task.getAssistantId() == user.getId());
+
+        if (!allowed) {
+            throw new IllegalArgumentException("Only assigned roles can view this task (BR-42)");
+        }
+
         return ApiResponse.ok(task, "Task detail");
     }
 
@@ -116,21 +161,8 @@ public class PageTaskApiController {
             throw new IllegalArgumentException("Only task owner Mangaka can reject");
         }
 
-        int rejectCount = pageTaskRepository.rejectByMangaka(id);
-        if (rejectCount >= 3) {
-            long tantouId = pageTaskRepository.getTaskTantouEditor(id);
-            pageTaskRepository.createNotification(
-                    tantouId,
-                    "TASK_ESCALATED",
-                    "Task #" + id + " reached 3 rejections and requires intervention.",
-                    id,
-                    "TASK");
-        }
-
+        pageTaskRepository.rejectByMangaka(id);
         return ApiResponse.ok(null, "Task rejected");
     }
 }
-
-
-
 
