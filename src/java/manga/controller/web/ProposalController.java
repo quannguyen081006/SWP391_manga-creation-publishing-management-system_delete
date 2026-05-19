@@ -62,7 +62,7 @@ public class ProposalController {
     @RequestMapping(value = "/proposals/{id}", method = RequestMethod.GET)
     public String detail(@PathVariable("id") long id, HttpSession session, Model model) {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
-        Proposal proposal = proposalService.getDetail(id);
+        Proposal proposal = proposalService.getDetail(user, id);
         model.addAttribute("proposal", proposal);
         model.addAttribute("user", user);
         boolean canEditDraft = user.hasRole("MANGAKA") && proposal.getMangakaId() == user.getId() && "DRAFT".equalsIgnoreCase(proposal.getStatus());

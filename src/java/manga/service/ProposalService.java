@@ -1,5 +1,7 @@
 package manga.service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import manga.model.AuthenticatedUser;
 import manga.model.Proposal;
 import manga.repository.ProposalRepository;
@@ -24,13 +26,16 @@ public class ProposalService {
         throw new IllegalArgumentException("You do not have permission to view proposals");
     }
 
-    public Proposal getDetail(long proposalId) {
-        Proposal p = proposalRepository.findById(proposalId);
-        if (p == null) {
-            throw new IllegalArgumentException("Proposal not found");
-        }
-        return p;
+public Proposal getDetail(AuthenticatedUser user, long proposalId) {
+    Proposal p = proposalRepository.findById(proposalId);
+    if (p == null) throw new IllegalArgumentException("Proposal not found");
+
+    // BR-09: Draft chỉ owner mới xem được
+    if ("DRAFT".equalsIgnoreCase(p.getStatus()) && p.getMangakaId() != user.getId()) {
+        throw new IllegalArgumentException("You do not have access to this proposal");
     }
+    return p;
+}
 
     public long createProposal(AuthenticatedUser user, String title, String genre, String synopsis) {
         requireRole(user, "MANGAKA", "Only MANGAKA can create proposals");
@@ -48,13 +53,24 @@ public class ProposalService {
         proposalRepository.updateDraft(proposalId, user.getId(), title.trim(), genre.trim(), synopsis.trim());
     }
 
-    public void submitProposal(AuthenticatedUser user, long proposalId) {
-        requireRole(user, "MANGAKA", "Only MANGAKA can submit proposals");
-        if (proposalRepository.hasActiveProposal(user.getId())) {
-            throw new IllegalArgumentException("You already have an active SUBMITTED/VOTING proposal (BR-01)");
-        }
-        proposalRepository.submitProposal(proposalId, user.getId());
+public void submitProposal(AuthenticatedUser user, long proposalId) {
+    requireRole(user, "MANGAKA", "Only MANGAKA can submit proposals");
+    if (proposalRepository.hasActiveProposal(user.getId())) {
+        throw new IllegalArgumentException("You already have an active proposal (BR-01)");
     }
+    // BR-12: 30-day cooldown   
+    Proposal p = proposalRepository.findById(proposalId);
+    if (p == null) throw new IllegalArgumentException("Proposal not found");
+    if (p.getRejectedAt() != null) {
+        long days = ChronoUnit.DAYS.between(
+            p.getRejectedAt().toInstant(), Instant.now());
+        if (days < 30) {
+            throw new IllegalArgumentException(
+                "Must wait 30 days after rejection. Days remaining: " + (30 - days));
+        }
+    }
+    proposalRepository.submitProposal(proposalId, user.getId());
+}
 
     public void castVote(AuthenticatedUser user, long proposalId, String voteType, String reason) {
         requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can vote");

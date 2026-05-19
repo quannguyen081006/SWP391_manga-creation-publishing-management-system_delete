@@ -36,13 +36,13 @@ public class ProposalApiController {
             @RequestParam("synopsis") String synopsis) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         long id = proposalService.createProposal(user, title, genre, synopsis);
-        return ApiResponse.ok(proposalService.getDetail(id), "Draft proposal created");
+        return ApiResponse.ok(proposalService.getDetail(user, id), "Draft proposal created");
     }
 
     @RequestMapping(value = "/{id}", method = RequestMethod.GET)
     public ApiResponse<Proposal> detail(@PathVariable("id") long id, HttpSession session) {
-        SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(proposalService.getDetail(id), "Proposal detail");
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(proposalService.getDetail(user, id), "Proposal detail");
     }
 
     @RequestMapping(value = "/{id}", method = RequestMethod.PUT)
@@ -54,7 +54,7 @@ public class ProposalApiController {
             @RequestParam("synopsis") String synopsis) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         proposalService.updateDraft(user, id, title, genre, synopsis);
-        return ApiResponse.ok(proposalService.getDetail(id), "Draft proposal updated");
+        return ApiResponse.ok(proposalService.getDetail(user, id), "Draft proposal updated");
     }
 
     @RequestMapping(value = "/{id}/submit", method = RequestMethod.POST)
