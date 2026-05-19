@@ -198,37 +198,30 @@ public class ManuscriptRepository {
         return m;
     }
 
-    public String getStatus(long manuscriptId) {
-
-        String sql = "SELECT status FROM Manuscript WHERE id = ?";
-
-        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
-
+    public List<java.util.Map<String, Object>> listAnnotations(long manuscriptId) {
+        String sql = "SELECT id, manuscriptId, editorId, pageNumber, content, createdAt FROM Annotation WHERE manuscriptId = ? ORDER BY createdAt DESC";
+        List<java.util.Map<String, Object>> rows = new ArrayList<java.util.Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, manuscriptId);
-
-            try ( ResultSet rs = ps.executeQuery()) {
-
-                if (!rs.next()) {
-                    throw new IllegalArgumentException("Manuscript not found");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    java.util.Map<String, Object> row = new java.util.HashMap<String, Object>();
+                    row.put("id", rs.getLong("id"));
+                    row.put("manuscriptId", rs.getLong("manuscriptId"));
+                    row.put("editorId", rs.getLong("editorId"));
+                    row.put("pageNumber", rs.getInt("pageNumber"));
+                    row.put("content", rs.getString("content"));
+                    row.put("createdAt", rs.getTimestamp("createdAt"));
+                    rows.add(row);
                 }
-
-                return rs.getString("status");
             }
-
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot get manuscript status", ex);
+            throw new RuntimeException("Cannot list annotations", ex);
         }
+        return rows;
     }
-
-    public void startReview(long manuscriptId) {
-
-        String sql = "UPDATE Manuscript "
-                + "SET status='UNDER_REVIEW', "
-                + "reviewDeadline=DATEADD(DAY,7,GETDATE()) "
-                + "WHERE id = ? AND status = 'SUBMITTED'";
-
-        updateStatus(sql, manuscriptId, "Cannot start review");
-    }
+}
 
     private AnnotationSummary mapAnnotation(ResultSet rs) throws SQLException {
 
