@@ -1,4 +1,4 @@
-<%@page contentType="text/html" pageEncoding="UTF-8"%>
+﻿<%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <!DOCTYPE html>
 <html>
@@ -25,16 +25,9 @@
         <p><strong>Votes:</strong> Approve ${proposal.approveVotes} | Reject ${proposal.rejectVotes} | Abstain ${proposal.abstainVotes}</p>
     </div>
 
-    <c:if test="${canEdit || canSubmit}">
-        <div class="action-row detail-actions">
-            <c:if test="${canEdit}">
-                <a class="btn" href="${pageContext.request.contextPath}/main/proposals/${proposal.id}/edit">Edit Draft</a>
-            </c:if>
-            <c:if test="${canSubmit}">
-            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/submit">
-                <button class="btn" type="submit">Submit To Editorial Board</button>
-            </form>
-            </c:if>
+    <c:if test="${canSubmit}">
+        <div class="action-row">
+            <a class="btn" href="${pageContext.request.contextPath}/main/proposals/${proposal.id}/edit">Edit Draft</a>`r`n            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/submit">`r`n                <button class="btn primary" type="submit">Submit To Editorial Board</button>`r`n            </form>
         </div>
     </c:if>
 
@@ -63,5 +56,6 @@
 <jsp:include page="../common/footer.jsp" />
 </body>
 </html>
+
 
 

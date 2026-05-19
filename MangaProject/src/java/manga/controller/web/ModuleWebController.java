@@ -7,19 +7,15 @@ import manga.model.Proposal;
 import manga.model.SeriesSummary;
 import manga.model.TaskSummary;
 import manga.repository.ChapterRepository;
-import manga.repository.AuditLogRepository;
 import manga.repository.DecisionRepository;
 import manga.repository.ManuscriptRepository;
 import manga.repository.PageTaskRepository;
 import manga.repository.ProductionRepository;
 import manga.repository.RankingRepository;
 import manga.repository.UserAdminRepository;
-import manga.service.AuditLogService;
-import manga.service.NotificationService;
 import manga.service.ProposalService;
 import java.sql.Date;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpSession;
@@ -58,15 +54,6 @@ public class ModuleWebController {
 
     @Autowired
     private UserAdminRepository userAdminRepository;
-
-    @Autowired
-    private AuditLogRepository auditLogRepository;
-
-    @Autowired
-    private AuditLogService auditLogService;
-
-    @Autowired
-    private NotificationService notificationService;
 
     @RequestMapping(value = "/proposals/{id}/edit", method = RequestMethod.GET)
     public String proposalEditPage(@PathVariable("id") long id, HttpSession session, Model model) {
@@ -151,15 +138,9 @@ public class ModuleWebController {
         if (task == null) {
             throw new IllegalArgumentException("Task not found");
         }
-        boolean canAssistantUpdate = user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId();
-        boolean canMangakaReview = user.hasRole("MANGAKA") && pageTaskRepository.getTaskOwnerMangaka(id) == user.getId();
-        boolean canTantouView = user.hasRole("TANTOU_EDITOR") && pageTaskRepository.getTaskTantouEditor(id) == user.getId();
-        if (!user.hasRole("ADMIN") && !canAssistantUpdate && !canMangakaReview && !canTantouView) {
-            throw new IllegalArgumentException("You can only view tasks assigned to your role");
-        }
         model.addAttribute("task", task);
-        model.addAttribute("canAssistantUpdate", canAssistantUpdate);
-        model.addAttribute("canMangakaReview", canMangakaReview);
+        model.addAttribute("canAssistantUpdate", user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId());
+        model.addAttribute("canMangakaReview", user.hasRole("MANGAKA") && pageTaskRepository.getTaskOwnerMangaka(id) == user.getId());
         return "task/detail";
     }
 
@@ -206,7 +187,7 @@ public class ModuleWebController {
             int rejectCount = pageTaskRepository.rejectByMangaka(id);
             if (rejectCount >= 3) {
                 long tantouId = pageTaskRepository.getTaskTantouEditor(id);
-                notificationService.notifyUser(
+                pageTaskRepository.createNotification(
                         tantouId,
                         "TASK_ESCALATED",
                         "Task #" + id + " reached 3 rejections and requires intervention.",
@@ -416,43 +397,11 @@ public class ModuleWebController {
     }
 
     @RequestMapping(value = "/users", method = RequestMethod.GET)
-    public String users(
-            HttpSession session,
-            @RequestParam(value = "created", required = false) Long created,
-            @RequestParam(value = "username", required = false) String createdUsername,
-            Model model) {
+    public String users(HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
         requireAdmin(user);
         model.addAttribute("users", userAdminRepository.listUsers());
-        if (created != null) {
-            model.addAttribute("success", "User " + createdUsername + " created successfully");
-            model.addAttribute("createdUserId", created);
-        }
         return "user/list";
-    }
-
-    private String users(HttpSession session, Model model) {
-        return users(session, null, null, model);
-    }
-
-    @RequestMapping(value = "/audit-logs", method = RequestMethod.GET)
-    public String auditLogs(
-            HttpSession session,
-            @RequestParam(value = "actorId", required = false) Integer actorId,
-            @RequestParam(value = "action", required = false) String action,
-            @RequestParam(value = "entityType", required = false) String entityType,
-            @RequestParam(value = "limit", defaultValue = "100") int limit,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        requireAdmin(user);
-        int safeLimit = limit < 1 ? 100 : Math.min(limit, 500);
-        model.addAttribute("auditLogs", auditLogRepository.search(actorId, action, entityType, safeLimit));
-        model.addAttribute("actorId", actorId);
-        model.addAttribute("action", action);
-        model.addAttribute("entityType", entityType);
-        model.addAttribute("limit", safeLimit);
-        model.addAttribute("availableActions", auditLogRepository.listActions());
-        return "audit/list";
     }
 
     @RequestMapping(value = "/users/new", method = RequestMethod.GET)
@@ -460,8 +409,6 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         requireAdmin(user);
         model.addAttribute("editing", false);
-        model.addAttribute("availableRoles", availableRoles());
-        model.addAttribute("selectedRolesCsv", "");
         return "user/form";
     }
 
@@ -475,7 +422,6 @@ public class ModuleWebController {
         }
         model.addAttribute("editing", true);
         model.addAttribute("editUser", row);
-        model.addAttribute("availableRoles", availableRoles());
         return "user/form";
     }
 
@@ -484,34 +430,21 @@ public class ModuleWebController {
             HttpSession session,
             @RequestParam("username") String username,
             @RequestParam("password") String password,
-            @RequestParam("confirmPassword") String confirmPassword,
             @RequestParam("fullName") String fullName,
             @RequestParam("email") String email,
-            @RequestParam(value = "roles", required = false) String[] roles,
+            @RequestParam(value = "role", required = false) String role,
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
             requireAdmin(user);
-            validateCreateUser(username, password, confirmPassword, fullName, email, roles);
             long id = userAdminRepository.createUser(username, password, fullName, email);
-            auditLogService.append(user, "USER_CREATED", "USER", id, auditLogService.jsonTwoPairs("username", username, "email", email));
-            for (String role : roles) {
-                String normalizedRole = role.trim().toUpperCase();
-                userAdminRepository.addRole(id, normalizedRole);
-                auditLogService.append(user, "USER_ROLE_ASSIGNED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
+            if (role != null && !role.trim().isEmpty()) {
+                userAdminRepository.addRole(id, role.trim().toUpperCase());
             }
-            notificationService.notifyUser(id, "ACCOUNT_CREATED", "Your MangaFlow account has been created.", 0, null);
-            return "redirect:/main/users?created=" + id + "&username=" + username.trim();
+            return "redirect:/main/users";
         } catch (RuntimeException ex) {
             model.addAttribute("editing", false);
             model.addAttribute("error", ex.getMessage());
-            model.addAttribute("formUsername", username);
-            model.addAttribute("formFullName", fullName);
-            model.addAttribute("formEmail", email);
-            model.addAttribute("formPassword", password);
-            model.addAttribute("selectedRoles", roles == null ? new String[0] : roles);
-            model.addAttribute("selectedRolesCsv", rolesCsv(roles));
-            model.addAttribute("availableRoles", availableRoles());
             return "user/form";
         }
     }
@@ -527,12 +460,10 @@ public class ModuleWebController {
         try {
             requireAdmin(user);
             userAdminRepository.updateUser(id, fullName, email);
-            auditLogService.append(user, "USER_UPDATED", "USER", id, auditLogService.jsonTwoPairs("fullName", fullName, "email", email));
             return "redirect:/main/users";
         } catch (RuntimeException ex) {
             model.addAttribute("editing", true);
             model.addAttribute("editUser", userAdminRepository.getUser(id));
-            model.addAttribute("availableRoles", availableRoles());
             model.addAttribute("error", ex.getMessage());
             return "user/form";
         }
@@ -547,10 +478,7 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         try {
             requireAdmin(user);
-            String normalizedStatus = status.trim().toUpperCase();
-            userAdminRepository.updateStatus(id, normalizedStatus);
-            auditLogService.append(user, "USER_STATUS_CHANGED", "USER", id, auditLogService.jsonPair("status", normalizedStatus));
-            notificationService.notifyUser(id, "ACCOUNT_STATUS_CHANGED", "Your account status changed to " + normalizedStatus + ".", 0, null);
+            userAdminRepository.updateStatus(id, status.trim().toUpperCase());
             return "redirect:/main/users";
         } catch (RuntimeException ex) {
             users(session, model);
@@ -563,48 +491,12 @@ public class ModuleWebController {
     public String userRole(
             @PathVariable("id") long id,
             HttpSession session,
-            @RequestParam(value = "role", required = false) String role,
-            @RequestParam(value = "roles", required = false) String[] roles,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            requireAdmin(user);
-            List<String> requestedRoles = selectedRoles(role, roles);
-            if (requestedRoles.isEmpty()) {
-                throw new IllegalArgumentException("Select at least one role");
-            }
-            List<String> currentRoles = userAdminRepository.listRoles(id);
-            for (String normalizedRole : requestedRoles) {
-                userAdminRepository.addRole(id, normalizedRole);
-                if (!currentRoles.contains(normalizedRole)) {
-                    auditLogService.append(user, "USER_ROLE_ASSIGNED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
-                    notificationService.notifyUser(id, "ROLE_ASSIGNED", "Role " + normalizedRole + " was assigned to your account.", 0, null);
-                }
-            }
-            return "redirect:/main/users";
-        } catch (RuntimeException ex) {
-            users(session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "user/list";
-        }
-    }
-
-    @RequestMapping(value = "/users/{id}/roles/remove", method = RequestMethod.POST)
-    public String userRoleRemove(
-            @PathVariable("id") long id,
-            HttpSession session,
             @RequestParam("role") String role,
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
             requireAdmin(user);
-            String normalizedRole = role.trim().toUpperCase();
-            List<String> currentRoles = userAdminRepository.listRoles(id);
-            userAdminRepository.removeRole(id, normalizedRole);
-            if (currentRoles.contains(normalizedRole)) {
-                auditLogService.append(user, "USER_ROLE_REMOVED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
-                notificationService.notifyUser(id, "ROLE_REMOVED", "Role " + normalizedRole + " was removed from your account.", 0, null);
-            }
+            userAdminRepository.addRole(id, role.trim().toUpperCase());
             return "redirect:/main/users";
         } catch (RuntimeException ex) {
             users(session, model);
@@ -625,67 +517,5 @@ public class ModuleWebController {
         if (user == null || !user.hasRole("ADMIN")) {
             throw new IllegalArgumentException("Only ADMIN can perform this action");
         }
-    }
-
-    private List<String> availableRoles() {
-        return Arrays.asList("ADMIN", "MANGAKA", "ASSISTANT", "TANTOU_EDITOR", "EDITORIAL_BOARD");
-    }
-
-    private String rolesCsv(String[] roles) {
-        if (roles == null || roles.length == 0) {
-            return "";
-        }
-        StringBuilder builder = new StringBuilder("|");
-        for (String role : roles) {
-            if (!isBlank(role)) {
-                builder.append(role.trim().toUpperCase()).append("|");
-            }
-        }
-        return builder.toString();
-    }
-
-    private List<String> selectedRoles(String role, String[] roles) {
-        List<String> selected = new ArrayList<String>();
-        if (!isBlank(role)) {
-            addSelectedRole(selected, role);
-        }
-        if (roles != null) {
-            for (String item : roles) {
-                addSelectedRole(selected, item);
-            }
-        }
-        return selected;
-    }
-
-    private void addSelectedRole(List<String> selected, String role) {
-        if (isBlank(role)) {
-            return;
-        }
-        String normalizedRole = role.trim().toUpperCase();
-        if (!selected.contains(normalizedRole)) {
-            selected.add(normalizedRole);
-        }
-    }
-
-    private void validateCreateUser(String username, String password, String confirmPassword, String fullName, String email, String[] roles) {
-        if (isBlank(username) || isBlank(password) || isBlank(confirmPassword) || isBlank(fullName) || isBlank(email)) {
-            throw new IllegalArgumentException("All user fields are required");
-        }
-        if (!password.equals(confirmPassword)) {
-            throw new IllegalArgumentException("Password confirmation does not match");
-        }
-        if (password.length() < 5) {
-            throw new IllegalArgumentException("Password must be at least 5 characters");
-        }
-        if (!email.contains("@")) {
-            throw new IllegalArgumentException("Email is invalid");
-        }
-        if (roles == null || roles.length == 0) {
-            throw new IllegalArgumentException("Select at least one role");
-        }
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
     }
 }

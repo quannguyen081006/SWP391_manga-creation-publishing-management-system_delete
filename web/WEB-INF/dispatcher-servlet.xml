@@ -13,11 +13,7 @@
            http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.3.xsd">
 
     <context:component-scan base-package="manga" />
-    <mvc:annotation-driven>
-        <mvc:message-converters register-defaults="true">
-            <bean class="manga.web.json.SimpleJsonMessageConverter"/>
-        </mvc:message-converters>
-    </mvc:annotation-driven>
+    <mvc:annotation-driven />
 
     <mvc:resources mapping="/assets/**" location="/assets/"/>
 

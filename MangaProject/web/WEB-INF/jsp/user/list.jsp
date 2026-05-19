@@ -13,7 +13,6 @@
 <h2 class="page-title">Users</h2>
 <p class="page-sub">Admin user and role management</p>
 
-<c:if test="${not empty success}"><div class="alert success">${success}</div></c:if>
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
 
 <div class="section-head">
@@ -23,60 +22,31 @@
 
 <div class="section-card">
     <table class="data-table">
-        <thead><tr><th>ID</th><th>Username</th><th>Name</th><th>Email</th><th>Status</th><th>Roles</th><th>Add Role</th><th>Actions</th></tr></thead>
+        <thead><tr><th>ID</th><th>Username</th><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
             <c:forEach items="${users}" var="u">
-                <tr class="${createdUserId == u.id ? 'row-created' : ''}">
+                <tr>
                     <td>${u.id}</td>
                     <td>${u.username}</td>
                     <td>${u.fullName}</td>
                     <td>${u.email}</td>
+                    <td>${u.status}</td>
                     <td>
-                        <span class="status-badge ${u.status == 'ACTIVE' ? 'status-active' : 'status-inactive'}">${u.status}</span>
-                    </td>
-                    <td class="role-cell">
-                        <c:choose>
-                            <c:when test="${empty u.roles}">
-                                <span class="muted">No roles</span>
-                            </c:when>
-                            <c:otherwise>
-                                <div class="role-list">
-                                    <c:forEach items="${u.roles}" var="r">
-                                        <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles/remove" class="role-chip-form">
-                                            <input type="hidden" name="role" value="${r}" />
-                                            <span class="role-chip">
-                                                <span>${r}</span>
-                                                <button class="role-remove" type="submit" title="Remove ${r}" onclick="return confirm('Remove role ${r} from ${u.username}?');">x</button>
-                                            </span>
-                                        </form>
-                                    </c:forEach>
-                                </div>
-                            </c:otherwise>
-                        </c:choose>
-                    </td>
-                    <td class="add-role-cell">
-                        <details class="add-role-panel">
-                            <summary class="btn small add-role-summary">Add</summary>
-                            <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles" class="role-check-form">
-                                <div class="role-check-grid compact">
-                                    <label class="role-check"><input type="checkbox" name="roles" value="ADMIN" /> ADMIN</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="MANGAKA" /> MANGAKA</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="ASSISTANT" /> ASSISTANT</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="TANTOU_EDITOR" /> TANTOU_EDITOR</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="EDITORIAL_BOARD" /> EDITORIAL_BOARD</label>
-                                </div>
-                                <button class="btn small primary" type="submit">Apply</button>
-                            </form>
-                        </details>
-                    </td>
-                    <td>
-                        <div class="row-actions">
-                            <a class="btn small" href="${pageContext.request.contextPath}/main/users/${u.id}/edit">Edit</a>
-                            <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/status">
-                                <input type="hidden" name="status" value="${u.status == 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}" />
-                                <button class="btn small ${u.status == 'ACTIVE' ? 'danger-soft' : 'success-soft'}" type="submit" onclick="return confirm('${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'} ${u.username}?');">${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
-                            </form>
-                        </div>
+                        <a class="btn small" href="${pageContext.request.contextPath}/main/users/${u.id}/edit">Edit</a>
+                        <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/status" style="display:inline-block;">
+                            <input type="hidden" name="status" value="${u.status == 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}" />
+                            <button class="btn small" type="submit">Toggle Status</button>
+                        </form>
+                        <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles" style="display:inline-flex; gap:6px; align-items:center;">
+                            <select name="role">
+                                <option value="ADMIN">ADMIN</option>
+                                <option value="MANGAKA">MANGAKA</option>
+                                <option value="ASSISTANT">ASSISTANT</option>
+                                <option value="TANTOU_EDITOR">TANTOU_EDITOR</option>
+                                <option value="EDITORIAL_BOARD">EDITORIAL_BOARD</option>
+                            </select>
+                            <button class="btn small" type="submit">Add Role</button>
+                        </form>
                     </td>
                 </tr>
             </c:forEach>

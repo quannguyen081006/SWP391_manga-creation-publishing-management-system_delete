@@ -45,23 +45,7 @@
         <span>Result: ${sessionDetail.result}</span>
     </div>
 
-    <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">
-        <form method="post" action="${pageContext.request.contextPath}/main/decisions/${sessionDetail.id}/votes" class="decision-vote-form">
-            <div>
-                <label>Decision</label>
-                <select name="decision">
-                    <option value="CONTINUE">CONTINUE</option>
-                    <option value="CANCEL">CANCEL</option>
-                    <option value="CHANGE_TYPE">CHANGE_TYPE</option>
-                </select>
-            </div>
-            <div>
-                <label>Justification (required for CANCEL)</label>
-                <input type="text" name="justification" />
-            </div>
-            <div><button class="btn primary" type="submit">Cast Vote</button></div>
-        </form>
-    </c:if>
+    <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">`r`n    <form method="post" action="${pageContext.request.contextPath}/main/decisions/${sessionDetail.id}/votes" style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:end;margin-top:12px;">`r`n        <div>`r`n            <label>Decision</label>`r`n            <select name="decision">`r`n                <option value="CONTINUE">CONTINUE</option>`r`n                <option value="CANCEL">CANCEL</option>`r`n                <option value="CHANGE_TYPE">CHANGE_TYPE</option>`r`n            </select>`r`n        </div>`r`n        <div>`r`n            <label>Justification (required for CANCEL)</label>`r`n            <input type="text" name="justification" />`r`n        </div>`r`n        <div><button class="btn primary" type="submit">Cast Vote</button></div>`r`n    </form>`r`n</c:if>
 </div>
 
 <div class="section-card">
