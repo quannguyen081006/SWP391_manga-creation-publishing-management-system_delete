@@ -33,7 +33,9 @@
 
     <form id="chapterCreateForm" class="panel form-grid chapter-pane" style="display:none; max-width:560px;" data-pane-id="chapterCreatePane">
         <strong>Create Chapter</strong>
-        <input name="seriesId" type="number" min="1" placeholder="Series ID" required />
+        <select id="createSeriesId" name="seriesId" required>
+            <option value="">Select Series</option>
+        </select>
         <input name="chapterNumber" type="number" min="1" placeholder="Chapter Number" required />
         <input name="title" type="text" placeholder="Title" required />
         <input name="publicationDate" type="date" required />
@@ -42,7 +44,12 @@
 
     <form id="chapterUpdateForm" class="panel form-grid chapter-pane" style="display:none; max-width:560px;" data-pane-id="chapterUpdatePane">
         <strong>Update Chapter Metadata</strong>
-        <input name="chapterId" type="number" min="1" placeholder="Chapter ID" required />
+        <select name="chapterId" required>
+            <option value="">Select Chapter</option>
+            <c:forEach items="${chapters}" var="ch">
+                <option value="${ch.id}">#${ch.id} - S${ch.seriesId} - Ch.${ch.chapterNumber} - ${ch.title}</option>
+            </c:forEach>
+        </select>
         <input name="title" type="text" placeholder="New Title" required />
         <input name="publicationDate" type="date" required />
         <button class="btn" type="submit">Update</button>
@@ -50,7 +57,12 @@
 
     <form id="chapterSubmitForm" class="panel form-grid chapter-pane" style="display:none; max-width:560px;" data-pane-id="chapterSubmitPane">
         <strong>Submit For Review</strong>
-        <input name="chapterId" type="number" min="1" placeholder="Chapter ID" required />
+        <select name="chapterId" required>
+            <option value="">Select Chapter</option>
+            <c:forEach items="${chapters}" var="ch">
+                <option value="${ch.id}">#${ch.id} - S${ch.seriesId} - Ch.${ch.chapterNumber} - ${ch.title}</option>
+            </c:forEach>
+        </select>
         <button class="btn" type="submit">Submit Review</button>
         <small class="section-desc">Only owner Mangaka, and chapter must be 100% complete.</small>
     </form>
@@ -165,6 +177,32 @@
         return body;
     }
 
+    async function loadSeriesOptions() {
+        var select = document.getElementById('createSeriesId');
+        if (!select) {
+            return;
+        }
+
+        try {
+            var response = await callApi('GET', '/api/v1/series');
+            var list = (response && response.data) ? response.data : [];
+            var currentUserId = Number('${sessionScope.AUTH_USER.id}');
+            var options = ['<option value="">Select Series</option>'];
+
+            for (var i = 0; i < list.length; i++) {
+                var s = list[i];
+                if (!currentUserId || Number(s.mangakaId) !== currentUserId) {
+                    continue;
+                }
+                options.push('<option value="' + s.id + '">#' + s.id + ' - ' + (s.title || 'Untitled Series') + '</option>');
+            }
+
+            select.innerHTML = options.join('');
+        } catch (err) {
+            showMessage('Cannot load series list: ' + err.message, true);
+        }
+    }
+
     var createForm = document.getElementById('chapterCreateForm');
     if (createForm) {
         createForm.addEventListener('submit', async function (e) {
@@ -216,6 +254,8 @@
             }
         });
     }
+
+    loadSeriesOptions();
 })();
 </script>
 
