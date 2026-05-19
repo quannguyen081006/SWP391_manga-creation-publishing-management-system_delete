@@ -122,6 +122,21 @@ public class ManuscriptRepository {
         }
     }
 
+    public String getStatus(long manuscriptId) {
+        String sql = "SELECT status FROM Manuscript WHERE id = ?";
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, manuscriptId);
+            try ( ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Manuscript not found");
+                }
+                return rs.getString("status");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot load manuscript status", ex);
+        }
+    }
+
     public void approve(long manuscriptId) {
         String sql = "UPDATE Manuscript SET status='APPROVED' WHERE id = ? AND status = 'UNDER_REVIEW'";
         updateStatus(sql, manuscriptId, "Cannot approve manuscript");
@@ -130,6 +145,11 @@ public class ManuscriptRepository {
     public void reject(long manuscriptId) {
         String sql = "UPDATE Manuscript SET status='REJECTED', revisionDeadline=DATEADD(DAY,3,GETDATE()) WHERE id = ? AND status IN ('SUBMITTED','UNDER_REVIEW')";
         updateStatus(sql, manuscriptId, "Cannot reject manuscript");
+    }
+
+    public void startReview(long manuscriptId) {
+        String sql = "UPDATE Manuscript SET status='UNDER_REVIEW' WHERE id = ? AND status = 'SUBMITTED'";
+        updateStatus(sql, manuscriptId, "Cannot start manuscript review");
     }
 
     public long getChapterMangaka(long chapterId) {
@@ -197,7 +217,6 @@ public class ManuscriptRepository {
         m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
         return m;
     }
-}
 
     private AnnotationSummary mapAnnotation(ResultSet rs) throws SQLException {
 

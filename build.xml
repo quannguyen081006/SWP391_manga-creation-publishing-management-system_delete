@@ -69,7 +69,7 @@
 
     -->
 
-    <target name="copy-jdbc-properties" depends="-do-compile">
+    <target name="-post-compile">
         <copy file="${conf.dir}/jdbc.properties" todir="${build.web.dir}/WEB-INF" overwrite="true" failonerror="false"/>
         <copy file="${conf.dir}/jdbc.properties" todir="${build.classes.dir}" overwrite="true" failonerror="false"/>
     </target>
