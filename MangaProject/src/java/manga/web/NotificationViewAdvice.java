@@ -3,7 +3,6 @@ package manga.web;
 import manga.model.AuthenticatedUser;
 import manga.model.NotificationItem;
 import manga.repository.NotificationRepository;
-import java.util.ArrayList;
 import java.util.List;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,25 +22,16 @@ public class NotificationViewAdvice {
         if (user == null) {
             return 0;
         }
-        List<NotificationItem> all = notificationRepository.listByUser(user.getId());
-        int unread = 0;
-        for (NotificationItem item : all) {
-            if (!item.isRead()) {
-                unread++;
-            }
-        }
-        return unread;
+        return notificationRepository.unreadCount(user.getId());
     }
 
     @ModelAttribute("headerNotifications")
     public List<NotificationItem> latestNotifications(HttpSession session) {
         AuthenticatedUser user = getUser(session);
         if (user == null) {
-            return new ArrayList<NotificationItem>();
+            return java.util.Collections.emptyList();
         }
-        List<NotificationItem> all = notificationRepository.listByUser(user.getId());
-        int size = Math.min(all.size(), 5);
-        return new ArrayList<NotificationItem>(all.subList(0, size));
+        return notificationRepository.listByUser(user.getId(), 5);
     }
 
     private AuthenticatedUser getUser(HttpSession session) {
