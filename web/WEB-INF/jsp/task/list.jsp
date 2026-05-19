@@ -70,11 +70,24 @@
                 <th>Assigned To</th>
                 <th>Status</th>
                 <th>Due Date</th>
-                <th>Actions</th>
+                <th>Action</th>
             </tr>
         </thead>
-        <tbody id="taskRows">
-            <tr><td colspan="8">Loading tasks...</td></tr>
+        <tbody>
+            <c:forEach items="${tasks}" var="t">
+                <tr>
+                    <td><strong>${t.seriesTitle}</strong><br/>Ch. ${t.chapterNumber} - ${t.chapterTitle}</td>
+                    <td>${t.pageRangeStart}-${t.pageRangeEnd}</td>
+                    <td>${t.taskType}</td>
+                    <td>${t.assistantName}</td>
+                    <td>
+                        <span class="status-chip ${t.status=='OVERDUE' ? 'status-overdue' : (t.status=='IN_PROGRESS' ? 'status-progress' : (t.status=='PENDING' ? 'status-pending' : (t.status=='APPROVED' ? 'status-approved' : 'status-draft')))}">${t.status}</span>
+                    </td>
+                    <td>${t.dueDate}</td>
+                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/tasks/${t.id}">View</a></td>
+                </tr>
+            </c:forEach>
+            <c:if test="${empty tasks}"><tr><td colspan="7">No tasks found.</td></tr></c:if>
         </tbody>
     </table>
 </div>
