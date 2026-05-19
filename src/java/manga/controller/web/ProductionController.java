@@ -28,7 +28,6 @@ public class ProductionController {
 
     @RequestMapping(value = "/chapters", method = RequestMethod.GET)
     public String chapters(HttpSession session, Model model) {
-        model.addAttribute("chapters", productionRepository.listChapters());
         return "chapter/list";
     }
 
@@ -108,6 +107,3 @@ public class ProductionController {
         return "manuscript/list";
     }
 }
-
-
-
