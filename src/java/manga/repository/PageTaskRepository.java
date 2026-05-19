@@ -1,5 +1,6 @@
 package manga.repository;
 
+import manga.model.AuthenticatedUser;
 import manga.model.TaskSummary;
 import java.sql.Connection;
 import java.sql.Date;
@@ -9,6 +10,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,15 +22,86 @@ public class PageTaskRepository {
     @Autowired
     private DataSource dataSource;
 
+    public List<TaskSummary> listVisible(AuthenticatedUser user) {
+        String baseSql =
+            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
+            + "FROM PageTask t "
+            + "JOIN Chapter c ON c.id = t.chapterId "
+            + "JOIN Series s ON s.id = c.seriesId "
+            + "LEFT JOIN [User] u ON u.id = t.assistantId";
+
+        List<TaskSummary> rows = new ArrayList<TaskSummary>();
+        List<String> conditions = new ArrayList<String>();
+        if (!user.hasRole("ADMIN")) {
+            if (user.hasRole("MANGAKA")) {
+                conditions.add("s.mangakaId = ?");
+            }
+            if (user.hasRole("TANTOU_EDITOR")) {
+                conditions.add("s.tantouEditorId = ?");
+            }
+            if (user.hasRole("ASSISTANT")) {
+                conditions.add("t.assistantId = ?");
+            }
+            if (conditions.isEmpty()) {
+                return rows;
+            }
+        }
+
+        StringBuilder sql = new StringBuilder(baseSql);
+        if (!user.hasRole("ADMIN")) {
+            sql.append(" WHERE (");
+            for (int i = 0; i < conditions.size(); i++) {
+                if (i > 0) {
+                    sql.append(" OR ");
+                }
+                sql.append(conditions.get(i));
+            }
+            sql.append(")");
+        }
+        sql.append(" ORDER BY t.updatedAt DESC");
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            if (!user.hasRole("ADMIN")) {
+                int index = 1;
+                if (user.hasRole("MANGAKA")) {
+                    ps.setLong(index++, user.getId());
+                }
+                if (user.hasRole("TANTOU_EDITOR")) {
+                    ps.setLong(index++, user.getId());
+                }
+                if (user.hasRole("ASSISTANT")) {
+                    ps.setLong(index++, user.getId());
+                }
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(mapDetailed(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list tasks", ex);
+        }
+        return rows;
+    }
     public List<TaskSummary> listByChapter(long chapterId) {
-        String sql = "SELECT id, chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount FROM PageTask WHERE chapterId = ? ORDER BY id DESC";
+        String sql =
+            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
+            + "FROM PageTask t "
+            + "JOIN Chapter c ON c.id = t.chapterId "
+            + "JOIN Series s ON s.id = c.seriesId "
+            + "LEFT JOIN [User] u ON u.id = t.assistantId "
+            + "WHERE t.chapterId = ? "
+            + "ORDER BY t.id DESC";
         List<TaskSummary> rows = new ArrayList<TaskSummary>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, chapterId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    rows.add(map(rs));
+                    rows.add(mapDetailed(rs));
                 }
             }
         } catch (SQLException ex) {
@@ -38,7 +111,14 @@ public class PageTaskRepository {
     }
 
     public TaskSummary findById(long taskId) {
-        String sql = "SELECT id, chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount FROM PageTask WHERE id = ?";
+        String sql =
+            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
+            + "FROM PageTask t "
+            + "JOIN Chapter c ON c.id = t.chapterId "
+            + "JOIN Series s ON s.id = c.seriesId "
+            + "LEFT JOIN [User] u ON u.id = t.assistantId "
+            + "WHERE t.id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, taskId);
@@ -46,7 +126,7 @@ public class PageTaskRepository {
                 if (!rs.next()) {
                     return null;
                 }
-                return map(rs);
+                return mapDetailed(rs);
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load task", ex);
@@ -60,6 +140,7 @@ public class PageTaskRepository {
         String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, GETDATE(), GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
+            taskType = normalizeTaskType(taskType);
             validateTaskAssignment(conn, 0L, chapterId, assistantId, start, end, taskType, dueDate, overlapSql, chapterSql, enrollmentSql);
 
             long newId;
@@ -68,7 +149,7 @@ public class PageTaskRepository {
                 insert.setLong(2, assistantId);
                 insert.setInt(3, start);
                 insert.setInt(4, end);
-                insert.setString(5, taskType.trim());
+                insert.setString(5, taskType);
                 insert.setDate(6, dueDate);
                 insert.executeUpdate();
                 try (ResultSet rs = insert.getGeneratedKeys()) {
@@ -91,6 +172,7 @@ public class PageTaskRepository {
         String updateSql = "UPDATE PageTask SET assistantId = ?, pageRangeStart = ?, pageRangeEnd = ?, taskType = ?, dueDate = ?, status = 'PENDING', rejectionCount = 0, updatedAt = GETDATE(), assignedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection()) {
+            taskType = normalizeTaskType(taskType);
             long chapterId;
             String currentStatus;
             try (PreparedStatement ps = conn.prepareStatement(taskInfoSql)) {
@@ -130,7 +212,7 @@ public class PageTaskRepository {
                 ps.setLong(1, assistantId);
                 ps.setInt(2, start);
                 ps.setInt(3, end);
-                ps.setString(4, taskType.trim());
+                ps.setString(4, taskType);
                 ps.setDate(5, dueDate);
                 ps.setLong(6, taskId);
                 if (ps.executeUpdate() == 0) {
@@ -144,6 +226,19 @@ public class PageTaskRepository {
         }
     }
 
+    private String normalizeTaskType(String taskType) {
+        if (taskType == null || taskType.trim().isEmpty()) {
+            throw new IllegalArgumentException("taskType is required");
+        }
+        String normalized = taskType.trim().toUpperCase(Locale.ENGLISH);
+        if (!"SKETCHING".equals(normalized)
+                && !"INKING".equals(normalized)
+                && !"COLORING".equals(normalized)
+                && !"LETTERING".equals(normalized)) {
+            throw new IllegalArgumentException("taskType must be SKETCHING, INKING, COLORING, or LETTERING");
+        }
+        return normalized;
+    }
     private void validateTaskAssignment(
             Connection conn,
             long taskId,
@@ -643,6 +738,14 @@ public class PageTaskRepository {
         return true;
     }
 
+    private TaskSummary mapDetailed(ResultSet rs) throws SQLException {
+        TaskSummary t = map(rs);
+        t.setChapterTitle(rs.getString("chapterTitle"));
+        t.setChapterNumber(rs.getInt("chapterNumber"));
+        t.setSeriesTitle(rs.getString("seriesTitle"));
+        t.setAssistantName(rs.getString("assistantName"));
+        return t;
+    }
     private TaskSummary map(ResultSet rs) throws SQLException {
         TaskSummary t = new TaskSummary();
         t.setId(rs.getLong("id"));
@@ -657,3 +760,4 @@ public class PageTaskRepository {
         return t;
     }
 }
+

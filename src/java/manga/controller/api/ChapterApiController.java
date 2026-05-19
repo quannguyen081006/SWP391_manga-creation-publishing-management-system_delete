@@ -22,6 +22,11 @@ public class ChapterApiController {
     @Autowired
     private ChapterRepository chapterRepository;
 
+    @RequestMapping(value = "/chapters", method = RequestMethod.GET)
+    public ApiResponse<List<ChapterSummary>> listAll(HttpSession session) {
+        SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(chapterRepository.listAll(), "Chapters");
+    }
     @RequestMapping(value = "/series/{seriesId}/chapters", method = RequestMethod.GET)
     public ApiResponse<List<ChapterSummary>> list(@PathVariable("seriesId") long seriesId, HttpSession session) {
         SessionUserUtil.requireUser(session);
@@ -83,6 +88,7 @@ public class ChapterApiController {
         return ApiResponse.ok(null, "Chapter submitted for editorial review");
     }
 }
+
 
 
 

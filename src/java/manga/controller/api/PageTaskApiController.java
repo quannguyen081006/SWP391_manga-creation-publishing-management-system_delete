@@ -22,6 +22,11 @@ public class PageTaskApiController {
     @Autowired
     private PageTaskRepository pageTaskRepository;
 
+    @RequestMapping(value = "/tasks", method = RequestMethod.GET)
+    public ApiResponse<List<TaskSummary>> listVisible(HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(pageTaskRepository.listVisible(user), "Task list");
+    }
     @RequestMapping(value = "/chapters/{chapterId}/tasks", method = RequestMethod.GET)
     public ApiResponse<List<TaskSummary>> list(@PathVariable("chapterId") long chapterId, HttpSession session) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
@@ -160,3 +165,4 @@ public class PageTaskApiController {
         return ApiResponse.ok(null, "Task rejected");
     }
 }
+

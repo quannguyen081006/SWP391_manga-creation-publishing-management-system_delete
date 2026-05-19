@@ -18,6 +18,30 @@ public class ChapterRepository {
     @Autowired
     private DataSource dataSource;
 
+    public List<ChapterSummary> listAll() {
+        String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter ORDER BY createdAt DESC";
+        List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                ChapterSummary c = new ChapterSummary();
+                c.setId(rs.getLong("id"));
+                c.setSeriesId(rs.getLong("seriesId"));
+                c.setChapterNumber(rs.getInt("chapterNumber"));
+                c.setTitle(rs.getString("title"));
+                c.setStatus(rs.getString("status"));
+                c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
+                c.setPublicationDate(rs.getDate("publicationDate"));
+                c.setCompletionPct(rs.getDouble("completionPct"));
+                c.setAtRisk(rs.getBoolean("atRisk"));
+                rows.add(c);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list chapters", ex);
+        }
+        return rows;
+    }
     public List<ChapterSummary> listBySeries(long seriesId) {
         String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter WHERE seriesId = ? ORDER BY chapterNumber";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
@@ -176,5 +200,6 @@ public class ChapterRepository {
         }
     }
 }
+
 
 

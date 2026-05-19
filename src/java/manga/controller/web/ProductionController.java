@@ -26,40 +26,11 @@ public class ProductionController {
 
     @RequestMapping(value = "/chapters", method = RequestMethod.GET)
     public String chapters(HttpSession session, Model model) {
-        model.addAttribute("chapters", productionRepository.listChapters());
         return "chapter/list";
     }
 
     @RequestMapping(value = "/tasks", method = RequestMethod.GET)
     public String tasks(HttpSession session, Model model) {
-        List<TaskSummary> tasks = productionRepository.listTasks();
-        int active = 0;
-        int submitted = 0;
-        int completed = 0;
-        int overdue = 0;
-        LocalDate now = LocalDate.now();
-
-        for (TaskSummary task : tasks) {
-            String st = task.getStatus() == null ? "" : task.getStatus().toUpperCase();
-            if ("PENDING".equals(st) || "IN_PROGRESS".equals(st)) {
-                active++;
-            }
-            if ("SUBMITTED".equals(st)) {
-                submitted++;
-            }
-            if ("APPROVED".equals(st)) {
-                completed++;
-            }
-            if ("OVERDUE".equals(st) || (task.getDueDate() != null && task.getDueDate().toLocalDate().isBefore(now) && !"APPROVED".equals(st))) {
-                overdue++;
-            }
-        }
-
-        model.addAttribute("tasks", tasks);
-        model.addAttribute("activeTasks", active);
-        model.addAttribute("submittedTasks", submitted);
-        model.addAttribute("completedTasks", completed);
-        model.addAttribute("overdueTasks", overdue);
         return "task/list";
     }
 
@@ -92,6 +63,3 @@ public class ProductionController {
         return "manuscript/list";
     }
 }
-
-
-
