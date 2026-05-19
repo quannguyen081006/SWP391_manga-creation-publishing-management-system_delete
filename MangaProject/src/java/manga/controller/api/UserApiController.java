@@ -4,7 +4,6 @@ import manga.common.ApiResponse;
 import manga.common.util.SessionUserUtil;
 import manga.model.AuthenticatedUser;
 import manga.repository.UserAdminRepository;
-import manga.service.AuditLogService;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpSession;
@@ -23,9 +22,6 @@ public class UserApiController {
     @Autowired
     private UserAdminRepository userAdminRepository;
 
-    @Autowired
-    private AuditLogService auditLogService;
-
     @RequestMapping(method = RequestMethod.GET)
     public ApiResponse<List<Map<String, Object>>> list(HttpSession session) {
         requireAdmin(session);
@@ -39,9 +35,8 @@ public class UserApiController {
             @RequestParam("password") String password,
             @RequestParam("fullName") String fullName,
             @RequestParam("email") String email) {
-        AuthenticatedUser actor = requireAdmin(session);
+        requireAdmin(session);
         long id = userAdminRepository.createUser(username, password, fullName, email);
-        auditLogService.append(actor, "USER_CREATED", "USER", id, auditLogService.jsonTwoPairs("username", username, "email", email));
         return ApiResponse.ok(userAdminRepository.getUser(id), "User created");
     }
 
@@ -61,9 +56,8 @@ public class UserApiController {
             HttpSession session,
             @RequestParam("fullName") String fullName,
             @RequestParam("email") String email) {
-        AuthenticatedUser actor = requireAdmin(session);
+        requireAdmin(session);
         userAdminRepository.updateUser(id, fullName, email);
-        auditLogService.append(actor, "USER_UPDATED", "USER", id, auditLogService.jsonTwoPairs("fullName", fullName, "email", email));
         return ApiResponse.ok(null, "User updated");
     }
 
@@ -72,13 +66,12 @@ public class UserApiController {
             @PathVariable("id") long id,
             HttpSession session,
             @RequestParam("status") String status) {
-        AuthenticatedUser actor = requireAdmin(session);
+        requireAdmin(session);
         String normalized = status == null ? "" : status.trim().toUpperCase();
         if (!"ACTIVE".equals(normalized) && !"INACTIVE".equals(normalized)) {
             throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
         }
         userAdminRepository.updateStatus(id, normalized);
-        auditLogService.append(actor, "USER_STATUS_CHANGED", "USER", id, auditLogService.jsonPair("status", normalized));
         return ApiResponse.ok(null, "User status updated");
     }
 
@@ -87,29 +80,14 @@ public class UserApiController {
             @PathVariable("id") long id,
             HttpSession session,
             @RequestParam("role") String role) {
-        AuthenticatedUser actor = requireAdmin(session);
-        String normalized = role == null ? "" : role.trim().toUpperCase();
-        userAdminRepository.addRole(id, normalized);
-        auditLogService.append(actor, "USER_ROLE_ASSIGNED", "USER", id, auditLogService.jsonPair("role", normalized));
+        requireAdmin(session);
+        userAdminRepository.addRole(id, role.toUpperCase());
         return ApiResponse.ok(null, "Role assigned");
     }
 
-    @RequestMapping(value = "/{id}/roles", method = RequestMethod.DELETE)
-    public ApiResponse<Object> removeRole(
-            @PathVariable("id") long id,
-            HttpSession session,
-            @RequestParam("role") String role) {
-        AuthenticatedUser actor = requireAdmin(session);
-        String normalized = role == null ? "" : role.trim().toUpperCase();
-        userAdminRepository.removeRole(id, normalized);
-        auditLogService.append(actor, "USER_ROLE_REMOVED", "USER", id, auditLogService.jsonPair("role", normalized));
-        return ApiResponse.ok(null, "Role removed");
-    }
-
-    private AuthenticatedUser requireAdmin(HttpSession session) {
+    private void requireAdmin(HttpSession session) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "ADMIN", "Only ADMIN can manage users");
-        return user;
     }
 }
 

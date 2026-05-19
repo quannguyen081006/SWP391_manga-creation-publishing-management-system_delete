@@ -36,7 +36,7 @@
                 <tr>
                     <td>${p.id}</td>
                     <td>${p.name}</td>
-                    <td>${p.startDate} - ${p.endDate}</td>
+                    <td>${p.startDate} → ${p.endDate}</td>
                     <td>${p.status}</td>
                     <td>
                         <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/results">Results</a>

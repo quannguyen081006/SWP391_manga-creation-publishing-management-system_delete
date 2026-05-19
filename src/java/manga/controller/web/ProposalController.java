@@ -65,9 +65,7 @@ public class ProposalController {
         Proposal proposal = proposalService.getDetail(id);
         model.addAttribute("proposal", proposal);
         model.addAttribute("user", user);
-        boolean canEditDraft = user.hasRole("MANGAKA") && proposal.getMangakaId() == user.getId() && "DRAFT".equalsIgnoreCase(proposal.getStatus());
-        model.addAttribute("canEdit", canEditDraft);
-        model.addAttribute("canSubmit", canEditDraft);
+        model.addAttribute("canSubmit", user.hasRole("MANGAKA") && proposal.getMangakaId() == user.getId() && "DRAFT".equalsIgnoreCase(proposal.getStatus()));
         model.addAttribute("canVote", user.hasRole("EDITORIAL_BOARD") && ("SUBMITTED".equalsIgnoreCase(proposal.getStatus()) || "VOTING".equalsIgnoreCase(proposal.getStatus())));
         return "proposal/detail";
     }

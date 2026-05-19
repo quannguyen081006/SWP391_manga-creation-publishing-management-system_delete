@@ -32,7 +32,6 @@
                 <th>Submitted</th>
                 <th>SLA Deadline</th>
                 <th>Status</th>
-                <th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -44,10 +43,9 @@
                     <td>${m.submittedAt}</td>
                     <td>${m.reviewDeadline}</td>
                     <td><span class="status-chip ${m.status=='APPROVED' ? 'status-approved' : (m.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${m.status}</span></td>
-                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${m.id}">View</a></td>
                 </tr>
             </c:forEach>
-            <c:if test="${empty manuscripts}"><tr><td colspan="7">No manuscripts found.</td></tr></c:if>
+            <c:if test="${empty manuscripts}"><tr><td colspan="6">No manuscripts found.</td></tr></c:if>
         </tbody>
     </table>
 </div>

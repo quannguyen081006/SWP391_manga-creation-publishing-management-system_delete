@@ -26,9 +26,7 @@ public class UserAdminRepository {
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Map<String, Object> row = toMap(rs);
-                row.put("roles", listRoles(conn, rs.getLong("id")));
-                rows.add(row);
+                rows.add(toMap(rs));
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot list users", ex);
@@ -45,9 +43,7 @@ public class UserAdminRepository {
                 if (!rs.next()) {
                     return null;
                 }
-                Map<String, Object> row = toMap(rs);
-                row.put("roles", listRoles(conn, id));
-                return row;
+                return toMap(rs);
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load user", ex);
@@ -55,22 +51,13 @@ public class UserAdminRepository {
     }
 
     public long createUser(String username, String passwordHash, String fullName, String email) {
-        validateUserFields(username, passwordHash, fullName, email);
         String sql = "INSERT INTO [User] (username, passwordHash, fullName, email, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, 'ACTIVE', GETDATE(), GETDATE())";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
-            String normalizedUsername = username.trim();
-            String normalizedEmail = email.trim();
-            if (existsByColumn(conn, "username", normalizedUsername)) {
-                throw new IllegalArgumentException("Username already exists");
-            }
-            if (existsByColumn(conn, "email", normalizedEmail)) {
-                throw new IllegalArgumentException("Email already exists");
-            }
-            ps.setString(1, normalizedUsername);
+            ps.setString(1, username);
             ps.setString(2, passwordHash);
-            ps.setString(3, fullName.trim());
-            ps.setString(4, normalizedEmail);
+            ps.setString(3, fullName);
+            ps.setString(4, email);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -79,20 +66,16 @@ public class UserAdminRepository {
             }
             throw new IllegalStateException("Cannot create user");
         } catch (SQLException ex) {
-            throwDuplicateUserMessage(ex);
             throw new RuntimeException("Cannot create user", ex);
         }
     }
 
     public void updateUser(long id, String fullName, String email) {
-        if (isBlank(fullName) || isBlank(email) || !email.contains("@")) {
-            throw new IllegalArgumentException("Full name and valid email are required");
-        }
         String sql = "UPDATE [User] SET fullName = ?, email = ?, updatedAt = GETDATE() WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, fullName.trim());
-            ps.setString(2, email.trim());
+            ps.setString(1, fullName);
+            ps.setString(2, email);
             ps.setLong(3, id);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("User not found");
@@ -103,11 +86,10 @@ public class UserAdminRepository {
     }
 
     public void updateStatus(long id, String status) {
-        String normalized = normalizeStatus(status);
         String sql = "UPDATE [User] SET status = ?, updatedAt = GETDATE() WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, normalized);
+            ps.setString(1, status);
             ps.setLong(2, id);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("User not found");
@@ -118,28 +100,17 @@ public class UserAdminRepository {
     }
 
     public void addRole(long userId, String roleName) {
-        String normalizedRole = normalizeRole(roleName);
         String roleSql = "SELECT id FROM [Role] WHERE name = ?";
-        String existsSql = "SELECT 1 FROM UserRole WHERE userId = ? AND roleId = ?";
         String insertSql = "INSERT INTO UserRole (userId, roleId) VALUES (?, ?)";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement rolePs = conn.prepareStatement(roleSql)) {
-            rolePs.setString(1, normalizedRole);
+            rolePs.setString(1, roleName);
             long roleId;
             try (ResultSet rs = rolePs.executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalArgumentException("Role not found");
                 }
                 roleId = rs.getLong(1);
-            }
-            try (PreparedStatement existsPs = conn.prepareStatement(existsSql)) {
-                existsPs.setLong(1, userId);
-                existsPs.setLong(2, roleId);
-                try (ResultSet rs = existsPs.executeQuery()) {
-                    if (rs.next()) {
-                        return;
-                    }
-                }
             }
             try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
                 insertPs.setLong(1, userId);
@@ -148,97 +119,6 @@ public class UserAdminRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot add role", ex);
-        }
-    }
-
-    public void removeRole(long userId, String roleName) {
-        String normalizedRole = normalizeRole(roleName);
-        String sql = "DELETE ur FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE ur.userId = ? AND r.name = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, userId);
-            ps.setString(2, normalizedRole);
-            ps.executeUpdate();
-        } catch (SQLException ex) {
-            throw new RuntimeException("Cannot remove role", ex);
-        }
-    }
-
-    public List<String> listRoles(long userId) {
-        try (Connection conn = dataSource.getConnection()) {
-            return listRoles(conn, userId);
-        } catch (SQLException ex) {
-            throw new RuntimeException("Cannot list user roles", ex);
-        }
-    }
-
-    private List<String> listRoles(Connection conn, long userId) throws SQLException {
-        String sql = "SELECT r.name FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE ur.userId = ? ORDER BY r.id";
-        List<String> roles = new ArrayList<String>();
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, userId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    roles.add(rs.getString("name"));
-                }
-            }
-        }
-        return roles;
-    }
-
-    private String normalizeStatus(String status) {
-        String normalized = status == null ? "" : status.trim().toUpperCase();
-        if (!"ACTIVE".equals(normalized) && !"INACTIVE".equals(normalized)) {
-            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
-        }
-        return normalized;
-    }
-
-    private String normalizeRole(String roleName) {
-        String normalized = roleName == null ? "" : roleName.trim().toUpperCase();
-        if (!"ADMIN".equals(normalized)
-                && !"MANGAKA".equals(normalized)
-                && !"ASSISTANT".equals(normalized)
-                && !"TANTOU_EDITOR".equals(normalized)
-                && !"EDITORIAL_BOARD".equals(normalized)) {
-            throw new IllegalArgumentException("Role is invalid");
-        }
-        return normalized;
-    }
-
-    private void validateUserFields(String username, String passwordHash, String fullName, String email) {
-        if (isBlank(username) || isBlank(passwordHash) || isBlank(fullName) || isBlank(email)) {
-            throw new IllegalArgumentException("Username, password, full name, and email are required");
-        }
-        if (!email.contains("@")) {
-            throw new IllegalArgumentException("Email is invalid");
-        }
-        if (passwordHash.length() < 5) {
-            throw new IllegalArgumentException("Password must be at least 5 characters");
-        }
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-
-    private void throwDuplicateUserMessage(SQLException ex) {
-        String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-        if (message.contains("uq_user_username")) {
-            throw new IllegalArgumentException("Username already exists");
-        }
-        if (message.contains("uq_user_email")) {
-            throw new IllegalArgumentException("Email already exists");
-        }
-    }
-
-    private boolean existsByColumn(Connection conn, String column, String value) throws SQLException {
-        String sql = "SELECT 1 FROM [User] WHERE " + column + " = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, value);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
-            }
         }
     }
 
