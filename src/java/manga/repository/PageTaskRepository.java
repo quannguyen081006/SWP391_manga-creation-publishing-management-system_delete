@@ -23,6 +23,10 @@ public class PageTaskRepository {
     private DataSource dataSource;
 
     public List<TaskSummary> listVisible(AuthenticatedUser user) {
+        return listVisible(user, null, null);
+    }
+
+    public List<TaskSummary> listVisible(AuthenticatedUser user, String status, Long chapterId) {
         String baseSql =
             "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
@@ -33,15 +37,19 @@ public class PageTaskRepository {
 
         List<TaskSummary> rows = new ArrayList<TaskSummary>();
         List<String> conditions = new ArrayList<String>();
+        List<Object> params = new ArrayList<Object>();
         if (!user.hasRole("ADMIN")) {
             if (user.hasRole("MANGAKA")) {
                 conditions.add("s.mangakaId = ?");
+                params.add(user.getId());
             }
             if (user.hasRole("TANTOU_EDITOR")) {
                 conditions.add("s.tantouEditorId = ?");
+                params.add(user.getId());
             }
             if (user.hasRole("ASSISTANT")) {
                 conditions.add("t.assistantId = ?");
+                params.add(user.getId());
             }
             if (conditions.isEmpty()) {
                 return rows;
@@ -59,20 +67,28 @@ public class PageTaskRepository {
             }
             sql.append(")");
         }
+        boolean hasWhere = !user.hasRole("ADMIN");
+        if (status != null && !status.trim().isEmpty()) {
+            sql.append(hasWhere ? " AND" : " WHERE");
+            sql.append(" t.status = ?");
+            params.add(status.trim().toUpperCase(Locale.ENGLISH));
+            hasWhere = true;
+        }
+        if (chapterId != null) {
+            sql.append(hasWhere ? " AND" : " WHERE");
+            sql.append(" t.chapterId = ?");
+            params.add(chapterId);
+        }
         sql.append(" ORDER BY t.updatedAt DESC");
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            if (!user.hasRole("ADMIN")) {
-                int index = 1;
-                if (user.hasRole("MANGAKA")) {
-                    ps.setLong(index++, user.getId());
-                }
-                if (user.hasRole("TANTOU_EDITOR")) {
-                    ps.setLong(index++, user.getId());
-                }
-                if (user.hasRole("ASSISTANT")) {
-                    ps.setLong(index++, user.getId());
+            for (int i = 0; i < params.size(); i++) {
+                Object param = params.get(i);
+                if (param instanceof Long) {
+                    ps.setLong(i + 1, ((Long) param).longValue());
+                } else {
+                    ps.setString(i + 1, String.valueOf(param));
                 }
             }
             try (ResultSet rs = ps.executeQuery()) {
@@ -379,7 +395,7 @@ public class PageTaskRepository {
         }
     }
 
-    public void approveByMangaka(long taskId) {
+    public void approveByMangaka(long taskId, long mangakaId) {
         String readSql = "SELECT chapterId, status FROM PageTask WHERE id = ?";
         String updateSql = "UPDATE PageTask SET status = 'APPROVED', updatedAt = GETDATE() WHERE id = ?";
 
@@ -394,6 +410,11 @@ public class PageTaskRepository {
                 }
                 chapterId = rs.getLong("chapterId");
                 currentStatus = rs.getString("status");
+            }
+
+            long ownerId = findChapterOwnerMangaka(chapterId);
+            if (ownerId != mangakaId) {
+                throw new IllegalArgumentException("Only chapter owner Mangaka can approve (BR-39)");
             }
 
             if (!"SUBMITTED".equalsIgnoreCase(currentStatus)) {
@@ -411,7 +432,7 @@ public class PageTaskRepository {
         }
     }
 
-    public int rejectByMangaka(long taskId) {
+    public int rejectByMangaka(long taskId, long mangakaId) {
         String readSql = "SELECT chapterId, status, rejectionCount FROM PageTask WHERE id = ?";
         String updateSql = "UPDATE PageTask SET status = 'REJECTED', rejectionCount = ?, updatedAt = GETDATE() WHERE id = ?";
 
@@ -428,6 +449,11 @@ public class PageTaskRepository {
                 chapterId = rs.getLong("chapterId");
                 currentStatus = rs.getString("status");
                 currentReject = rs.getInt("rejectionCount");
+            }
+
+            long ownerId = findChapterOwnerMangaka(chapterId);
+            if (ownerId != mangakaId) {
+                throw new IllegalArgumentException("Only chapter owner Mangaka can reject (BR-38)");
             }
 
             if (!"SUBMITTED".equalsIgnoreCase(currentStatus)) {

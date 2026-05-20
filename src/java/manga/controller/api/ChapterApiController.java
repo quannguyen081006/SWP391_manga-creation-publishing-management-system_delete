@@ -24,8 +24,8 @@ public class ChapterApiController {
 
     @RequestMapping(value = "/chapters", method = RequestMethod.GET)
     public ApiResponse<List<ChapterSummary>> listAll(HttpSession session) {
-        SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(chapterRepository.listAll(), "Chapters");
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(chapterRepository.listAll(user), "Chapters");
     }
     @RequestMapping(value = "/series/{seriesId}/chapters", method = RequestMethod.GET)
     public ApiResponse<List<ChapterSummary>> list(@PathVariable("seriesId") long seriesId, HttpSession session) {
@@ -86,6 +86,14 @@ public class ChapterApiController {
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can submit chapter for review");
         chapterRepository.submitForReview(id, user.getId());
         return ApiResponse.ok(null, "Chapter submitted for editorial review");
+    }
+
+    @RequestMapping(value = "/chapters/{id}", method = RequestMethod.DELETE)
+    public ApiResponse<Object> delete(@PathVariable("id") long id, HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can delete chapter");
+        chapterRepository.deleteChapter(id, user.getId());
+        return ApiResponse.ok(null, "Chapter deleted");
     }
 }
 

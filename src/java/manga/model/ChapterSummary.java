@@ -1,5 +1,6 @@
 package manga.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.sql.Date;
 
 public class ChapterSummary {
@@ -8,7 +9,9 @@ public class ChapterSummary {
     private int chapterNumber;
     private String title;
     private String status;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private Date submissionDeadline;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private Date publicationDate;
     private double completionPct;
     private boolean atRisk;
