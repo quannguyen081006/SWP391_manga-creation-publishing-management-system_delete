@@ -17,7 +17,7 @@
     <article class="metric-card">
         <div class="metric-label">Proposals</div>
         <div class="metric-value">${proposalCount}</div>
-        <div class="metric-note">${openVotes} active proposal</div>
+        <div class="metric-note">${activeProposalCount} active proposal</div>
     </article>
     <article class="metric-card">
         <div class="metric-label">Active Series</div>
@@ -43,7 +43,7 @@
             <p class="section-desc">Current status of your proposal submission</p>
         </div>
         <c:if test="${not empty activeProposal}">
-            <span class="status-chip status-voting">${activeProposal.status}</span>
+            <span class="status-chip status-review">${activeProposal.status}</span>
         </c:if>
     </div>
 
@@ -52,11 +52,9 @@
             <h3>${activeProposal.title}</h3>
             <p class="page-sub" style="margin-top:2px">${activeProposal.genre}</p>
             <div class="inline-meta">
-                <span>Votes: ${activeProposal.approveVotes + activeProposal.rejectVotes + activeProposal.abstainVotes}/3 required</span>
-                <span>Approve ${activeProposal.approveVotes}</span>
-                <span>Reject ${activeProposal.rejectVotes}</span>
+                <span>Status: ${activeProposal.status}</span>
+                <span>Submit attempt ${activeProposal.submitAttemptCount}/2</span>
             </div>
-            <div class="progress"><span style="width: ${((activeProposal.approveVotes + activeProposal.rejectVotes + activeProposal.abstainVotes) * 100) / 3}%"></span></div>
             <div style="margin-top:14px"><a class="btn" href="${pageContext.request.contextPath}/main/proposals/${activeProposal.id}">View Details</a></div>
         </c:when>
         <c:otherwise>

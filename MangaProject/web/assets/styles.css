@@ -234,6 +234,7 @@ a { color: inherit; text-decoration: none; }
 .status-draft { background: #e5e7eb; color: #374151; }
 .status-approved { background: #dcfce7; color: #166534; }
 .status-rejected { background: #fee2e2; color: #b91c1c; }
+.status-review { background: #dbeafe; color: #1d4ed8; }
 .status-overdue { background: #fee2e2; color: #dc2626; }
 .status-progress { background: #dbeafe; color: #1d4ed8; }
 .status-pending { background: #ede9fe; color: #6d28d9; }
@@ -324,12 +325,23 @@ a { color: inherit; text-decoration: none; }
 .data-table th { color: #6b7280; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
 
 .form-grid { display: grid; gap: 8px; }
+.field-label {
+    color: #4b5563;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 4px 0 -2px;
+}
 input, textarea, select {
     border: 1px solid #d1d5db;
     border-radius: 10px;
     padding: 10px;
     font-size: 14px;
     background: #fff;
+}
+.form-note {
+    margin: 0 0 6px;
+    color: #6b7280;
+    font-size: 13px;
 }
 
 .panel {

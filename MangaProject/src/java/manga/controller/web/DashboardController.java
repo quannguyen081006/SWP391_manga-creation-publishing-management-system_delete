@@ -1,6 +1,5 @@
 package manga.controller.web;
 
-import manga.common.exception.ForbiddenException;
 import manga.model.AuthenticatedUser;
 import manga.model.ChapterSummary;
 import manga.model.ManuscriptSummary;
@@ -33,55 +32,40 @@ public class DashboardController {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
 
         List<Proposal> proposals = new ArrayList<Proposal>();
-        if (user != null && (user.hasRole("MANGAKA") || user.hasRole("EDITORIAL_BOARD") || user.hasRole("TANTOU_EDITOR") || user.hasRole("ADMIN"))) {
-            try {
-                proposals = proposalService.listForUser(user);
-            } catch (ForbiddenException ignored) {
-                proposals = new ArrayList<Proposal>();
-            }
+        try {
+            proposals = proposalService.listForUser(user);
+        } catch (IllegalArgumentException ignored) {
+            // Some roles do not have proposal permission; keep dashboard usable.
         }
 
         List<SeriesSummary> seriesList = productionRepository.listSeries();
-        List<TaskSummary> tasks = (user != null && user.hasRole("ASSISTANT"))
-                ? productionRepository.listTasksByAssistant(user.getId())
-                : productionRepository.listTasks();
+        List<TaskSummary> tasks = productionRepository.listTasks();
         List<ManuscriptSummary> manuscripts = productionRepository.listManuscripts();
         List<ChapterSummary> chapters = productionRepository.listChapters();
 
-        int openVotes = 0;
+        int activeProposalCount = 0;
         int approved = 0;
+        Proposal activeProposal = null;
         for (Proposal p : proposals) {
-            if ("SUBMITTED".equalsIgnoreCase(p.getStatus()) || "VOTING".equalsIgnoreCase(p.getStatus())) {
-                openVotes++;
+            if ("UNDER_REVIEW".equalsIgnoreCase(p.getStatus()) || "REVISION_REQUESTED".equalsIgnoreCase(p.getStatus())) {
+                activeProposalCount++;
+                if (activeProposal == null) {
+                    activeProposal = p;
+                }
             }
             if ("APPROVED".equalsIgnoreCase(p.getStatus())) {
                 approved++;
             }
         }
 
-        int activeTasks = 0;
-        int submittedTasks = 0;
-        int completedTasks = 0;
         int overdueTasks = 0;
         int pendingManuscripts = 0;
-
         LocalDate now = LocalDate.now();
         for (TaskSummary t : tasks) {
-            String st = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
-            if ("PENDING".equals(st) || "IN_PROGRESS".equals(st)) {
-                activeTasks++;
-            }
-            if ("SUBMITTED".equals(st)) {
-                submittedTasks++;
-            }
-            if ("APPROVED".equals(st)) {
-                completedTasks++;
-            }
-            if ("OVERDUE".equals(st) || (t.getDueDate() != null && t.getDueDate().toLocalDate().isBefore(now) && !"APPROVED".equals(st))) {
+            if ("OVERDUE".equalsIgnoreCase(t.getStatus()) || (t.getDueDate() != null && t.getDueDate().toLocalDate().isBefore(now) && !"APPROVED".equalsIgnoreCase(t.getStatus()))) {
                 overdueTasks++;
             }
         }
-
         for (ManuscriptSummary m : manuscripts) {
             if ("SUBMITTED".equalsIgnoreCase(m.getStatus()) || "UNDER_REVIEW".equalsIgnoreCase(m.getStatus())) {
                 pendingManuscripts++;
@@ -100,17 +84,18 @@ public class DashboardController {
 
         model.addAttribute("user", user);
         model.addAttribute("proposalCount", proposals.size());
-        model.addAttribute("openVotes", openVotes);
+        model.addAttribute("activeProposalCount", activeProposalCount);
         model.addAttribute("approvedCount", approved);
-        model.addAttribute("roles", user == null ? null : user.getRoles());
+        model.addAttribute("roles", user.getRoles());
         model.addAttribute("seriesCount", seriesList.size());
         model.addAttribute("overdueTasks", overdueTasks);
         model.addAttribute("pendingManuscripts", pendingManuscripts);
+        model.addAttribute("activeProposal", activeProposal);
         model.addAttribute("inProgressChapters", inProgressChapters);
-        model.addAttribute("activeTasks", activeTasks);
-        model.addAttribute("submittedTasks", submittedTasks);
-        model.addAttribute("completedTasks", completedTasks);
 
         return "dashboard/index";
     }
 }
+
+
+

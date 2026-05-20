@@ -1,20 +1,29 @@
 package manga.service;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
+import java.util.List;
 import manga.model.AuthenticatedUser;
 import manga.model.Proposal;
+import manga.model.ProposalHistory;
 import manga.repository.ProposalRepository;
-import java.util.List;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ProposalService {
 
+    public static final int MAX_SUBMIT_ATTEMPTS = 2;
+
+    private static final List<String> GENRES = Arrays.asList(
+            "Action", "Adventure", "Romance", "Comedy", "Fantasy",
+            "Horror", "Slice of Life", "Mystery", "Drama");
+
     @Autowired
     private ProposalRepository proposalRepository;
+
+    public List<String> listGenres() {
+        return GENRES;
+    }
 
     public List<Proposal> listForUser(AuthenticatedUser user) {
         if (user.hasRole("MANGAKA")) {
@@ -26,72 +35,90 @@ public class ProposalService {
         throw new IllegalArgumentException("You do not have permission to view proposals");
     }
 
-public Proposal getDetail(AuthenticatedUser user, long proposalId) {
-    Proposal p = proposalRepository.findById(proposalId);
-    if (p == null) throw new IllegalArgumentException("Proposal not found");
-
-    // BR-09: Draft chỉ owner mới xem được
-    if ("DRAFT".equalsIgnoreCase(p.getStatus()) && p.getMangakaId() != user.getId()) {
-        throw new IllegalArgumentException("You do not have access to this proposal");
+    public Proposal getDetail(AuthenticatedUser user, long proposalId) {
+        Proposal p = proposalRepository.findById(proposalId);
+        if (p == null) {
+            throw new IllegalArgumentException("Proposal not found");
+        }
+        if ("DRAFT".equalsIgnoreCase(p.getStatus()) && p.getMangakaId() != user.getId()) {
+            throw new IllegalArgumentException("You do not have access to this proposal");
+        }
+        return p;
     }
-    return p;
-}
 
-    public long createProposal(AuthenticatedUser user, String title, String genre, String synopsis) {
+    public long createProposal(AuthenticatedUser user, String title, String genre, String synopsis,
+            String sampleFilePath, String originalFileName, Integer approximateChapter) {
         requireRole(user, "MANGAKA", "Only MANGAKA can create proposals");
+        validateProposalContent(title, genre, synopsis, sampleFilePath, approximateChapter, true);
+        return proposalRepository.createDraft(user, title.trim(), genre.trim(), synopsis.trim(),
+                sampleFilePath, safeTrim(originalFileName), approximateChapter.intValue());
+    }
+
+    public void updateDraft(AuthenticatedUser user, long proposalId, String title, String genre, String synopsis,
+            String sampleFilePath, String originalFileName, Integer approximateChapter) {
+        requireRole(user, "MANGAKA", "Only MANGAKA can update proposals");
+        Proposal p = proposalRepository.findById(proposalId);
+        if (p == null) {
+            throw new IllegalArgumentException("Proposal not found");
+        }
+        boolean hasExistingFile = !isBlank(p.getSampleFilePath());
+        validateProposalContent(title, genre, synopsis, hasExistingFile ? "existing" : sampleFilePath, approximateChapter, true);
+        proposalRepository.updateDraft(user, proposalId, title.trim(), genre.trim(), synopsis.trim(),
+                sampleFilePath, safeTrim(originalFileName), approximateChapter.intValue());
+    }
+
+    public void submitProposal(AuthenticatedUser user, long proposalId) {
+        requireRole(user, "MANGAKA", "Only MANGAKA can submit proposals");
+        Proposal p = proposalRepository.findById(proposalId);
+        if (p == null) {
+            throw new IllegalArgumentException("Proposal not found");
+        }
+        if (proposalRepository.hasActiveProposal(user.getId(), proposalId)) {
+            throw new IllegalArgumentException("You already have an active proposal");
+        }
+        if (p.getSubmitAttemptCount() >= MAX_SUBMIT_ATTEMPTS) {
+            throw new IllegalArgumentException("Proposal submit attempt limit reached");
+        }
+        if (isBlank(p.getSampleFilePath()) || p.getApproximateChapter() == null) {
+            throw new IllegalArgumentException("Proposal file and approximate chapter are required before submit");
+        }
+        proposalRepository.submitForTantouReview(user, proposalId);
+    }
+
+    public void reviewProposal(AuthenticatedUser user, long proposalId, String decision, String note) {
+        requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can review proposals");
+        String normalized = decision == null ? "" : decision.trim().toUpperCase();
+        if (!"APPROVE".equals(normalized) && !"REJECT".equals(normalized) && !"REVISE".equals(normalized)) {
+            throw new IllegalArgumentException("Review decision must be APPROVE, REJECT, or REVISE");
+        }
+        if (("REJECT".equals(normalized) || "REVISE".equals(normalized)) && isBlank(note)) {
+            throw new IllegalArgumentException("A note is required for REJECT and REVISE decisions");
+        }
+        proposalRepository.reviewByTantou(user, proposalId, normalized, safeTrim(note));
+    }
+
+    public List<ProposalHistory> listHistory(AuthenticatedUser user, long proposalId) {
+        getDetail(user, proposalId);
+        if (!user.hasRole("ADMIN") && !user.hasRole("MANGAKA") && !user.hasRole("TANTOU_EDITOR") && !user.hasRole("EDITORIAL_BOARD")) {
+            throw new IllegalArgumentException("You do not have permission to view proposal history");
+        }
+        return proposalRepository.listHistory(proposalId);
+    }
+
+    private void validateProposalContent(String title, String genre, String synopsis, String sampleFilePath,
+            Integer approximateChapter, boolean requireFile) {
         if (isBlank(title) || isBlank(genre) || isBlank(synopsis)) {
             throw new IllegalArgumentException("Title, genre, and synopsis are required");
         }
-        return proposalRepository.createDraft(user.getId(), title.trim(), genre.trim(), synopsis.trim());
-    }
-
-    public void updateDraft(AuthenticatedUser user, long proposalId, String title, String genre, String synopsis) {
-        requireRole(user, "MANGAKA", "Only MANGAKA can update draft proposals");
-        if (isBlank(title) || isBlank(genre) || isBlank(synopsis)) {
-            throw new IllegalArgumentException("Title, genre, and synopsis are required");
+        if (!GENRES.contains(genre.trim())) {
+            throw new IllegalArgumentException("Please select a valid genre");
         }
-        proposalRepository.updateDraft(proposalId, user.getId(), title.trim(), genre.trim(), synopsis.trim());
-    }
-
-public void submitProposal(AuthenticatedUser user, long proposalId) {
-    requireRole(user, "MANGAKA", "Only MANGAKA can submit proposals");
-    if (proposalRepository.hasActiveProposal(user.getId())) {
-        throw new IllegalArgumentException("You already have an active proposal (BR-01)");
-    }
-    // BR-12: 30-day cooldown   
-    Proposal p = proposalRepository.findById(proposalId);
-    if (p == null) throw new IllegalArgumentException("Proposal not found");
-    if (p.getRejectedAt() != null) {
-        long days = ChronoUnit.DAYS.between(
-            p.getRejectedAt().toInstant(), Instant.now());
-        if (days < 30) {
-            throw new IllegalArgumentException(
-                "Must wait 30 days after rejection. Days remaining: " + (30 - days));
+        if (requireFile && isBlank(sampleFilePath)) {
+            throw new IllegalArgumentException("Proposal file upload is required");
         }
-    }
-    proposalRepository.submitProposal(proposalId, user.getId());
-}
-
-    public void castVote(AuthenticatedUser user, long proposalId, String voteType, String reason) {
-        requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can vote");
-
-        String normalizedVote = voteType == null ? "" : voteType.trim().toUpperCase();
-        if (!"APPROVE".equals(normalizedVote) && !"REJECT".equals(normalizedVote) && !"ABSTAIN".equals(normalizedVote)) {
-            throw new IllegalArgumentException("voteType must be APPROVE, REJECT, or ABSTAIN");
+        if (approximateChapter == null || approximateChapter.intValue() < 1) {
+            throw new IllegalArgumentException("Approximate chapter must be at least 1");
         }
-
-        if ("REJECT".equals(normalizedVote) && isBlank(reason)) {
-            throw new IllegalArgumentException("Reason is required for REJECT vote (BR-14)");
-        }
-
-        proposalRepository.castVoteAndResolve(proposalId, user.getId(), normalizedVote, safeTrim(reason));
-    }
-
-    public List<Map<String, Object>> listVotes(AuthenticatedUser user, long proposalId) {
-        if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
-            throw new IllegalArgumentException("Only ADMIN/EDITORIAL_BOARD can view proposal votes");
-        }
-        return proposalRepository.listVotes(proposalId);
     }
 
     private void requireRole(AuthenticatedUser user, String role, String message) {

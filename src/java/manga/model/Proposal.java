@@ -8,117 +8,51 @@ public class Proposal {
     private String title;
     private String genre;
     private String synopsis;
+    private String sampleFilePath;
+    private String originalFileName;
+    private Integer approximateChapter;
     private String status;
     private Timestamp submittedAt;
-    private Timestamp votingDeadline;
     private Timestamp rejectedAt;
     private Long assignedEditorId;
-    private int approveVotes;
-    private int rejectVotes;
-    private int abstainVotes;
+    private int submitAttemptCount;
 
-    public long getId() {
-        return id;
-    }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
-    public void setId(long id) {
-        this.id = id;
-    }
+    public long getMangakaId() { return mangakaId; }
+    public void setMangakaId(long mangakaId) { this.mangakaId = mangakaId; }
 
-    public long getMangakaId() {
-        return mangakaId;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public void setMangakaId(long mangakaId) {
-        this.mangakaId = mangakaId;
-    }
+    public String getGenre() { return genre; }
+    public void setGenre(String genre) { this.genre = genre; }
 
-    public String getTitle() {
-        return title;
-    }
+    public String getSynopsis() { return synopsis; }
+    public void setSynopsis(String synopsis) { this.synopsis = synopsis; }
 
-    public void setTitle(String title) {
-        this.title = title;
-    }
+    public String getSampleFilePath() { return sampleFilePath; }
+    public void setSampleFilePath(String sampleFilePath) { this.sampleFilePath = sampleFilePath; }
 
-    public String getGenre() {
-        return genre;
-    }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
 
-    public void setGenre(String genre) {
-        this.genre = genre;
-    }
+    public Integer getApproximateChapter() { return approximateChapter; }
+    public void setApproximateChapter(Integer approximateChapter) { this.approximateChapter = approximateChapter; }
 
-    public String getSynopsis() {
-        return synopsis;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public void setSynopsis(String synopsis) {
-        this.synopsis = synopsis;
-    }
+    public Timestamp getSubmittedAt() { return submittedAt; }
+    public void setSubmittedAt(Timestamp submittedAt) { this.submittedAt = submittedAt; }
 
-    public String getStatus() {
-        return status;
-    }
+    public Timestamp getRejectedAt() { return rejectedAt; }
+    public void setRejectedAt(Timestamp rejectedAt) { this.rejectedAt = rejectedAt; }
 
-    public void setStatus(String status) {
-        this.status = status;
-    }
+    public Long getAssignedEditorId() { return assignedEditorId; }
+    public void setAssignedEditorId(Long assignedEditorId) { this.assignedEditorId = assignedEditorId; }
 
-    public Timestamp getSubmittedAt() {
-        return submittedAt;
-    }
-
-    public void setSubmittedAt(Timestamp submittedAt) {
-        this.submittedAt = submittedAt;
-    }
-
-    public Timestamp getVotingDeadline() {
-        return votingDeadline;
-    }
-
-    public void setVotingDeadline(Timestamp votingDeadline) {
-        this.votingDeadline = votingDeadline;
-    }
-
-    public Timestamp getRejectedAt() {
-        return rejectedAt;
-    }
-
-    public void setRejectedAt(Timestamp rejectedAt) {
-        this.rejectedAt = rejectedAt;
-    }
-
-    public Long getAssignedEditorId() {
-        return assignedEditorId;
-    }
-
-    public void setAssignedEditorId(Long assignedEditorId) {
-        this.assignedEditorId = assignedEditorId;
-    }
-
-    public int getApproveVotes() {
-        return approveVotes;
-    }
-
-    public void setApproveVotes(int approveVotes) {
-        this.approveVotes = approveVotes;
-    }
-
-    public int getRejectVotes() {
-        return rejectVotes;
-    }
-
-    public void setRejectVotes(int rejectVotes) {
-        this.rejectVotes = rejectVotes;
-    }
-
-    public int getAbstainVotes() {
-        return abstainVotes;
-    }
-
-    public void setAbstainVotes(int abstainVotes) {
-        this.abstainVotes = abstainVotes;
-    }
+    public int getSubmitAttemptCount() { return submitAttemptCount; }
+    public void setSubmitAttemptCount(int submitAttemptCount) { this.submitAttemptCount = submitAttemptCount; }
 }
-

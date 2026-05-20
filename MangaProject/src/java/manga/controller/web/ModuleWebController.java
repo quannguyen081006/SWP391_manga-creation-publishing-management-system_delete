@@ -17,12 +17,17 @@ import manga.repository.UserAdminRepository;
 import manga.service.AuditLogService;
 import manga.service.NotificationService;
 import manga.service.ProposalService;
+import java.io.File;
+import java.io.IOException;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -72,10 +77,13 @@ public class ModuleWebController {
     public String proposalEditPage(@PathVariable("id") long id, HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
         Proposal proposal = proposalService.getDetail(user, id);
-        if (!user.hasRole("MANGAKA") || proposal.getMangakaId() != user.getId() || !"DRAFT".equalsIgnoreCase(proposal.getStatus())) {
-            throw new IllegalArgumentException("Only DRAFT owner can edit proposal");
+        boolean editableStatus = "DRAFT".equalsIgnoreCase(proposal.getStatus()) || "REVISION_REQUESTED".equalsIgnoreCase(proposal.getStatus());
+        if (!user.hasRole("MANGAKA") || proposal.getMangakaId() != user.getId()
+                || !editableStatus || proposal.getSubmitAttemptCount() >= ProposalService.MAX_SUBMIT_ATTEMPTS) {
+            throw new IllegalArgumentException("Only editable proposal owner can edit proposal");
         }
         model.addAttribute("proposal", proposal);
+        model.addAttribute("genres", proposalService.listGenres());
         return "proposal/edit";
     }
 
@@ -83,19 +91,55 @@ public class ModuleWebController {
     public String proposalEdit(
             @PathVariable("id") long id,
             HttpSession session,
+            HttpServletRequest request,
             @RequestParam("title") String title,
             @RequestParam("genre") String genre,
             @RequestParam("synopsis") String synopsis,
+            @RequestParam("approximateChapter") Integer approximateChapter,
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
-            proposalService.updateDraft(user, id, title, genre, synopsis);
+            UploadInfo upload = saveUpload(request, "sampleFile");
+            proposalService.updateDraft(user, id, title, genre, synopsis,
+                    upload.path, upload.originalName, approximateChapter);
             return "redirect:/main/proposals/" + id;
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             Proposal proposal = proposalService.getDetail(user, id);
             model.addAttribute("proposal", proposal);
             model.addAttribute("error", ex.getMessage());
+            model.addAttribute("genres", proposalService.listGenres());
             return "proposal/edit";
+        }
+    }
+
+    private UploadInfo saveUpload(HttpServletRequest request, String fieldName) throws IOException, ServletException {
+        Part part = request.getPart(fieldName);
+        if (part == null || part.getSize() == 0) {
+            return new UploadInfo(null, null);
+        }
+        String submittedName = part.getSubmittedFileName();
+        String originalName = submittedName == null ? "proposal-file" : new File(submittedName).getName();
+        String safeName = originalName.replaceAll("[^A-Za-z0-9._-]", "_");
+        String storedName = System.currentTimeMillis() + "_" + safeName;
+        String uploadPath = request.getServletContext().getRealPath("/uploads/proposals");
+        if (uploadPath == null) {
+            throw new IOException("Upload directory is not available");
+        }
+        File dir = new File(uploadPath);
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Cannot create upload directory");
+        }
+        part.write(new File(dir, storedName).getAbsolutePath());
+        return new UploadInfo("/uploads/proposals/" + storedName, originalName);
+    }
+
+    private static class UploadInfo {
+        private final String path;
+        private final String originalName;
+
+        private UploadInfo(String path, String originalName) {
+            this.path = path;
+            this.originalName = originalName;
         }
     }
 

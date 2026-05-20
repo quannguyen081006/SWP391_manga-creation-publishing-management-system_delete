@@ -16,6 +16,7 @@
     <mvc:annotation-driven />
 
     <mvc:resources mapping="/assets/**" location="/assets/"/>
+    <mvc:resources mapping="/uploads/**" location="/uploads/"/>
 
     <mvc:interceptors>
         <mvc:interceptor>

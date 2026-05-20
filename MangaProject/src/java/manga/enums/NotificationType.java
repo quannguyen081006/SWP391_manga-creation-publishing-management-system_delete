@@ -2,8 +2,6 @@ package manga.enums;
 
 public enum NotificationType {
     PROPOSAL_SUBMITTED,
-    VOTING_OPENED,
-    VOTE_REMINDER,
     PROPOSAL_RESOLVED,
     CHAPTER_DEADLINE_ALERT,
     TASK_DUE_REMINDER,

@@ -13,7 +13,7 @@
 <div class="section-head">
     <div>
         <h2 class="page-title">Proposals</h2>
-        <p class="page-sub">Manage your manga proposals</p>
+        <p class="page-sub">Manage manga proposals and Tantou review</p>
     </div>
     <c:if test="${isMangaka}">
         <a class="btn primary" href="${pageContext.request.contextPath}/main/proposals/create">+ New Proposal</a>
@@ -23,14 +23,14 @@
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
 
 <div class="section-card">
-    <h3 class="section-title">Active Proposals</h3>
+    <h3 class="section-title">Proposals</h3>
     <table class="data-table">
         <thead>
             <tr>
                 <th>Title</th>
                 <th>Genre</th>
+                <th>Approx. Chapter</th>
                 <th>Status</th>
-                <th>Votes</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -39,10 +39,10 @@
                 <tr>
                     <td><strong>${p.title}</strong></td>
                     <td>${p.genre}</td>
+                    <td>${p.approximateChapter}</td>
                     <td>
-                        <span class="status-chip ${p.status=='VOTING' || p.status=='SUBMITTED' ? 'status-voting' : (p.status=='DRAFT' ? 'status-draft' : (p.status=='APPROVED' ? 'status-approved' : 'status-rejected'))}">${p.status}</span>
+                        <span class="status-chip ${p.status=='UNDER_REVIEW' ? 'status-review' : (p.status=='DRAFT' || p.status=='REVISION_REQUESTED' ? 'status-draft' : (p.status=='APPROVED' ? 'status-approved' : 'status-rejected'))}">${p.status}</span>
                     </td>
-                    <td>${p.approveVotes + p.rejectVotes + p.abstainVotes}/3</td>
                     <td><a class="btn small" href="${pageContext.request.contextPath}/main/proposals/${p.id}">View</a></td>
                 </tr>
             </c:forEach>
@@ -53,5 +53,3 @@
 <jsp:include page="../common/footer.jsp" />
 </body>
 </html>
-
-

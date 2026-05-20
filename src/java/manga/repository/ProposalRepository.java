@@ -1,15 +1,15 @@
 package manga.repository;
 
+import manga.model.AuthenticatedUser;
 import manga.model.Proposal;
+import manga.model.ProposalHistory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -20,133 +20,214 @@ public class ProposalRepository {
     @Autowired
     private DataSource dataSource;
 
+    private static final String SELECT_COLUMNS =
+            "p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.sampleFilePath, p.originalFileName, "
+            + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount ";
+
     public List<Proposal> findForMangaka(long mangakaId) {
-        String sql =
-            "SELECT p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId, "
-            + "SUM(CASE WHEN pv.voteType = 'APPROVE' THEN 1 ELSE 0 END) AS approveVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'REJECT' THEN 1 ELSE 0 END) AS rejectVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'ABSTAIN' THEN 1 ELSE 0 END) AS abstainVotes "
-            + "FROM Proposal p "
-            + "LEFT JOIN ProposalVote pv ON pv.proposalId = p.id "
-            + "WHERE p.mangakaId = ? "
-            + "GROUP BY p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId "
-            + "ORDER BY MAX(p.createdAt) DESC";
-        return queryMany(sql, mangakaId);
+        String sql = "SELECT " + SELECT_COLUMNS
+            + "FROM Proposal p WHERE p.mangakaId = ? ORDER BY p.createdAt DESC";
+        return queryMany(sql, Long.valueOf(mangakaId));
     }
 
     public List<Proposal> findForBoardAndEditor() {
-        String sql =
-            "SELECT p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId, "
-            + "SUM(CASE WHEN pv.voteType = 'APPROVE' THEN 1 ELSE 0 END) AS approveVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'REJECT' THEN 1 ELSE 0 END) AS rejectVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'ABSTAIN' THEN 1 ELSE 0 END) AS abstainVotes "
-            + "FROM Proposal p "
-            + "LEFT JOIN ProposalVote pv ON pv.proposalId = p.id "
-            + "WHERE p.status IN ('SUBMITTED','VOTING','APPROVED','REJECTED','DEFERRED') "
-            + "GROUP BY p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId "
-            + "ORDER BY MAX(p.createdAt) DESC";
+        String sql = "SELECT " + SELECT_COLUMNS
+            + "FROM Proposal p WHERE p.status IN ('UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
+            + "ORDER BY p.createdAt DESC";
         return queryMany(sql, null);
     }
 
     public Proposal findById(long id) {
-        String sql =
-            "SELECT p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId, "
-            + "SUM(CASE WHEN pv.voteType = 'APPROVE' THEN 1 ELSE 0 END) AS approveVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'REJECT' THEN 1 ELSE 0 END) AS rejectVotes, "
-            + "SUM(CASE WHEN pv.voteType = 'ABSTAIN' THEN 1 ELSE 0 END) AS abstainVotes "
-            + "FROM Proposal p "
-            + "LEFT JOIN ProposalVote pv ON pv.proposalId = p.id "
-            + "WHERE p.id = ? "
-            + "GROUP BY p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.status, p.submittedAt, p.votingDeadline, p.rejectedAt, p.assignedEditorId";
-        List<Proposal> rows = queryMany(sql, id);
+        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WHERE p.id = ?";
+        List<Proposal> rows = queryMany(sql, Long.valueOf(id));
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public long createDraft(long mangakaId, String title, String genre, String synopsis) {
+    public long createDraft(AuthenticatedUser actor, String title, String genre, String synopsis,
+            String sampleFilePath, String originalFileName, int approximateChapter) {
         String sql =
-            "INSERT INTO Proposal (mangakaId, title, genre, synopsis, status, createdAt, updatedAt) "
-            + "VALUES (?, ?, ?, ?, 'DRAFT', GETDATE(), GETDATE())";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setLong(1, mangakaId);
-            ps.setString(2, title);
-            ps.setString(3, genre);
-            ps.setString(4, synopsis);
-            ps.executeUpdate();
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    return rs.getLong(1);
+            "INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, createdAt, updatedAt) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', GETDATE(), GETDATE())";
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setLong(1, actor.getId());
+                ps.setString(2, title);
+                ps.setString(3, genre);
+                ps.setString(4, synopsis);
+                ps.setString(5, sampleFilePath);
+                ps.setString(6, originalFileName);
+                ps.setInt(7, approximateChapter);
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (!rs.next()) {
+                        throw new IllegalStateException("Cannot get generated proposal id");
+                    }
+                    long id = rs.getLong(1);
+                    insertHistory(conn, id, actor, "CREATED", "Draft proposal created.", 0);
+                    conn.commit();
+                    return id;
                 }
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
             }
-            throw new IllegalStateException("Cannot get generated proposal id");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot create proposal", ex);
         }
     }
 
-    public void updateDraft(long proposalId, long mangakaId, String title, String genre, String synopsis) {
-        String sql = "UPDATE Proposal SET title = ?, genre = ?, synopsis = ?, updatedAt = GETDATE() WHERE id = ? AND mangakaId = ? AND status = 'DRAFT'";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, title);
-            ps.setString(2, genre);
-            ps.setString(3, synopsis);
-            ps.setLong(4, proposalId);
-            ps.setLong(5, mangakaId);
-            if (ps.executeUpdate() == 0) {
-                throw new IllegalArgumentException("Only owner can update DRAFT proposal");
+    public void updateDraft(AuthenticatedUser actor, long proposalId, String title, String genre, String synopsis,
+            String sampleFilePath, String originalFileName, int approximateChapter) {
+        StringBuilder sql = new StringBuilder("UPDATE Proposal SET title = ?, genre = ?, synopsis = ?");
+        if (sampleFilePath != null) {
+            sql.append(", sampleFilePath = ?, originalFileName = ?");
+        }
+        sql.append(", approximateChapter = ?, updatedAt = GETDATE() ")
+           .append("WHERE id = ? AND mangakaId = ? AND status IN ('DRAFT','REVISION_REQUESTED')");
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+                int i = 1;
+                ps.setString(i++, title);
+                ps.setString(i++, genre);
+                ps.setString(i++, synopsis);
+                if (sampleFilePath != null) {
+                    ps.setString(i++, sampleFilePath);
+                    ps.setString(i++, originalFileName);
+                }
+                ps.setInt(i++, approximateChapter);
+                ps.setLong(i++, proposalId);
+                ps.setLong(i++, actor.getId());
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Only editable proposal owner can update proposal");
+                }
+                Proposal p = findById(conn, proposalId);
+                insertHistory(conn, proposalId, actor, "UPDATED", "Proposal content updated.", p.getSubmitAttemptCount());
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update proposal draft", ex);
         }
     }
 
-    public List<Map<String, Object>> listVotes(long proposalId) {
-        String sql = "SELECT id, proposalId, voterId, voteType, reason, votedAt FROM ProposalVote WHERE proposalId = ? ORDER BY votedAt DESC";
-        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, proposalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> row = new HashMap<String, Object>();
-                    row.put("id", rs.getLong("id"));
-                    row.put("proposalId", rs.getLong("proposalId"));
-                    row.put("voterId", rs.getLong("voterId"));
-                    row.put("voteType", rs.getString("voteType"));
-                    row.put("reason", rs.getString("reason"));
-                    row.put("votedAt", rs.getTimestamp("votedAt"));
-                    rows.add(row);
+    public void submitForTantouReview(AuthenticatedUser actor, long proposalId) {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                Proposal p = lockProposal(conn, proposalId);
+                if (p.getMangakaId() != actor.getId() || !isEditableStatus(p.getStatus())) {
+                    throw new IllegalArgumentException("Only editable proposal owner can submit");
                 }
-            }
-        } catch (SQLException ex) {
-            throw new RuntimeException("Cannot list proposal votes", ex);
-        }
-        return rows;
-    }
-
-    public void submitProposal(long proposalId, long mangakaId) {
-        String sql =
-            "UPDATE Proposal SET status = 'SUBMITTED', submittedAt = GETDATE(), updatedAt = GETDATE() "
-            + "WHERE id = ? AND mangakaId = ? AND status = 'DRAFT'";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, proposalId);
-            ps.setLong(2, mangakaId);
-            int updated = ps.executeUpdate();
-            if (updated == 0) {
-                throw new IllegalArgumentException("Only DRAFT proposal owner can submit");
+                if (p.getSubmitAttemptCount() >= 2) {
+                    throw new IllegalArgumentException("Proposal submit attempt limit reached");
+                }
+                long editorId = findLeastAssignedTantouEditor(conn);
+                int nextAttempt = p.getSubmitAttemptCount() + 1;
+                String action = p.getSubmitAttemptCount() == 0 ? "SUBMITTED" : "RESUBMITTED";
+                String sql =
+                    "UPDATE Proposal SET status = 'UNDER_REVIEW', submittedAt = GETDATE(), assignedEditorId = ?, "
+                    + "submitAttemptCount = ?, updatedAt = GETDATE() WHERE id = ?";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setLong(1, editorId);
+                    ps.setInt(2, nextAttempt);
+                    ps.setLong(3, proposalId);
+                    ps.executeUpdate();
+                }
+                insertHistory(conn, proposalId, actor, action, "Submitted to Tantou Editor review.", nextAttempt);
+                insertSystemHistory(conn, proposalId, "ASSIGNED_EDITOR", "Auto-assigned Tantou Editor #" + editorId + ".", nextAttempt);
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot submit proposal", ex);
         }
     }
 
-    public boolean hasActiveProposal(long mangakaId) {
-        String sql = "SELECT COUNT(1) FROM Proposal WHERE mangakaId = ? AND status IN ('SUBMITTED','VOTING')";
+    public void reviewByTantou(AuthenticatedUser actor, long proposalId, String decision, String note) {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                Proposal p = lockProposal(conn, proposalId);
+                if (p.getAssignedEditorId() == null || p.getAssignedEditorId().longValue() != actor.getId()) {
+                    throw new IllegalArgumentException("Only assigned Tantou Editor can review this proposal");
+                }
+                if (!"UNDER_REVIEW".equalsIgnoreCase(p.getStatus())) {
+                    throw new IllegalArgumentException("Proposal is not under Tantou review");
+                }
+                if ("APPROVE".equals(decision)) {
+                    ensureSeriesExistsOnApprove(conn, proposalId);
+                    updateProposalStatus(conn, proposalId, "APPROVED", false);
+                    insertHistory(conn, proposalId, actor, "APPROVED", note, p.getSubmitAttemptCount());
+                } else if ("REJECT".equals(decision)) {
+                    updateProposalStatus(conn, proposalId, "REJECTED", true);
+                    insertHistory(conn, proposalId, actor, "REJECTED", note, p.getSubmitAttemptCount());
+                } else if ("REVISE".equals(decision)) {
+                    updateProposalStatus(conn, proposalId, "REVISION_REQUESTED", false);
+                    insertHistory(conn, proposalId, actor, "REVISE_REQUESTED", note, p.getSubmitAttemptCount());
+                } else {
+                    throw new IllegalArgumentException("Review decision must be APPROVE, REJECT, or REVISE");
+                }
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot review proposal", ex);
+        }
+    }
+
+    public List<ProposalHistory> listHistory(long proposalId) {
+        String sql =
+            "SELECT h.id, h.proposalId, h.actorId, u.fullName AS actorName, h.actorRole, h.actionType, "
+            + "h.note, h.createdAt, h.submitAttemptNumber "
+            + "FROM ProposalHistory h LEFT JOIN [User] u ON u.id = h.actorId "
+            + "WHERE h.proposalId = ? ORDER BY h.createdAt DESC, h.id DESC";
+        List<ProposalHistory> rows = new ArrayList<ProposalHistory>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ProposalHistory h = new ProposalHistory();
+                    h.setId(rs.getLong("id"));
+                    h.setProposalId(rs.getLong("proposalId"));
+                    long actorId = rs.getLong("actorId");
+                    h.setActorId(rs.wasNull() ? null : Long.valueOf(actorId));
+                    h.setActorName(rs.getString("actorName"));
+                    h.setActorRole(rs.getString("actorRole"));
+                    h.setActionType(rs.getString("actionType"));
+                    h.setNote(rs.getString("note"));
+                    h.setCreatedAt(rs.getTimestamp("createdAt"));
+                    h.setSubmitAttemptNumber(rs.getInt("submitAttemptNumber"));
+                    rows.add(h);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list proposal history", ex);
+        }
+        return rows;
+    }
+
+    public boolean hasActiveProposal(long mangakaId, long excludingProposalId) {
+        String sql = "SELECT COUNT(1) FROM Proposal WHERE mangakaId = ? AND id <> ? AND status IN ('UNDER_REVIEW','REVISION_REQUESTED')";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, mangakaId);
+            ps.setLong(2, excludingProposalId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getInt(1) > 0;
@@ -156,124 +237,36 @@ public class ProposalRepository {
         }
     }
 
-    public void castVoteAndResolve(long proposalId, long voterId, String voteType, String reason) {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                Proposal p = lockProposal(conn, proposalId);
-                ensureProposalCanVote(conn, p, voterId);
-                insertVote(conn, proposalId, voterId, voteType, reason);
-                if ("SUBMITTED".equalsIgnoreCase(p.getStatus())) {
-                    updateProposalStatus(conn, proposalId, "VOTING", false);
-                }
-                resolveIfQuorum(conn, proposalId);
-                conn.commit();
-            } catch (Exception ex) {
-                conn.rollback();
-                throw ex;
-            } finally {
-                conn.setAutoCommit(true);
+    private Proposal findById(Connection conn, long id) throws SQLException {
+        String sql =
+            "SELECT id, mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, "
+            + "status, submittedAt, rejectedAt, assignedEditorId, submitAttemptCount FROM Proposal WHERE id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? mapBaseProposal(rs) : null;
             }
-        } catch (SQLException ex) {
-            throw new RuntimeException("Cannot cast vote", ex);
         }
     }
 
     private Proposal lockProposal(Connection conn, long proposalId) throws SQLException {
-        String sql = "SELECT id, mangakaId, title, genre, status, assignedEditorId FROM Proposal WITH (UPDLOCK, ROWLOCK) WHERE id = ?";
+        String sql =
+            "SELECT id, mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, "
+            + "status, submittedAt, rejectedAt, assignedEditorId, submitAttemptCount "
+            + "FROM Proposal WITH (UPDLOCK, ROWLOCK) WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalArgumentException("Proposal not found");
                 }
-                Proposal p = new Proposal();
-                p.setId(rs.getLong("id"));
-                p.setMangakaId(rs.getLong("mangakaId"));
-                p.setTitle(rs.getString("title"));
-                p.setGenre(rs.getString("genre"));
-                p.setStatus(rs.getString("status"));
-                long editorId = rs.getLong("assignedEditorId");
-                p.setAssignedEditorId(rs.wasNull() ? null : editorId);
-                return p;
+                return mapBaseProposal(rs);
             }
         }
     }
 
-    private void ensureProposalCanVote(Connection conn, Proposal p, long voterId) throws SQLException {
-        if (!("SUBMITTED".equalsIgnoreCase(p.getStatus()) || "VOTING".equalsIgnoreCase(p.getStatus()))) {
-            throw new IllegalArgumentException("Proposal is not open for voting");
-        }
-        if (p.getMangakaId() == voterId) {
-            throw new IllegalArgumentException("Mangaka cannot vote on own proposal");
-        }
-        if (p.getAssignedEditorId() != null && p.getAssignedEditorId() == voterId) {
-            throw new IllegalArgumentException("Assigned Tantou Editor cannot vote this proposal");
-        }
-
-        String checkDuplicate = "SELECT COUNT(1) FROM ProposalVote WHERE proposalId = ? AND voterId = ?";
-        try (PreparedStatement ps = conn.prepareStatement(checkDuplicate)) {
-            ps.setLong(1, p.getId());
-            ps.setLong(2, voterId);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                if (rs.getInt(1) > 0) {
-                    throw new IllegalArgumentException("You already voted this proposal");
-                }
-            }
-        }
-    }
-
-    private void insertVote(Connection conn, long proposalId, long voterId, String voteType, String reason) throws SQLException {
-        String sql = "INSERT INTO ProposalVote (proposalId, voterId, voteType, reason, votedAt) VALUES (?, ?, ?, ?, GETDATE())";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, proposalId);
-            ps.setLong(2, voterId);
-            ps.setString(3, voteType);
-            ps.setString(4, reason);
-            ps.executeUpdate();
-        }
-    }
-
-    private void resolveIfQuorum(Connection conn, long proposalId) throws SQLException {
-        String countSql =
-            "SELECT "
-            + "SUM(CASE WHEN voteType='APPROVE' THEN 1 ELSE 0 END) AS approveVotes, "
-            + "SUM(CASE WHEN voteType='REJECT' THEN 1 ELSE 0 END) AS rejectVotes, "
-            + "SUM(CASE WHEN voteType='ABSTAIN' THEN 1 ELSE 0 END) AS abstainVotes, "
-            + "COUNT(1) AS totalVotes "
-            + "FROM ProposalVote WHERE proposalId = ?";
-
-        int approve = 0;
-        int reject = 0;
-        int total = 0;
-        try (PreparedStatement ps = conn.prepareStatement(countSql)) {
-            ps.setLong(1, proposalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    approve = rs.getInt("approveVotes");
-                    reject = rs.getInt("rejectVotes");
-                    total = rs.getInt("totalVotes");
-                }
-            }
-        }
-
-        if (total < 3) {
-            return;
-        }
-
-        if (approve > reject) {
-            ensureSeriesExistsOnApprove(conn, proposalId);
-            updateProposalStatus(conn, proposalId, "APPROVED", false);
-            return;
-        }
-
-        if (reject > 0 && reject >= approve) {
-            updateProposalStatus(conn, proposalId, "REJECTED", true);
-            return;
-        }
-
-        updateProposalStatus(conn, proposalId, "DEFERRED", false);
+    private boolean isEditableStatus(String status) {
+        return "DRAFT".equalsIgnoreCase(status) || "REVISION_REQUESTED".equalsIgnoreCase(status);
     }
 
     private void ensureSeriesExistsOnApprove(Connection conn, long proposalId) throws SQLException {
@@ -287,74 +280,40 @@ public class ProposalRepository {
                 }
             }
         }
-
-        String proposalSql = "SELECT mangakaId, title, genre, assignedEditorId FROM Proposal WHERE id = ?";
-        long mangakaId;
-        long editorId;
-        String title;
-        String genre;
-
-        try (PreparedStatement ps = conn.prepareStatement(proposalSql)) {
-            ps.setLong(1, proposalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    throw new IllegalArgumentException("Proposal not found during approval");
-                }
-                mangakaId = rs.getLong("mangakaId");
-                title = rs.getString("title");
-                genre = rs.getString("genre");
-                long tmp = rs.getLong("assignedEditorId");
-                editorId = rs.wasNull() ? 0L : tmp;
-            }
-        }
-
-        if (editorId == 0L) {
-            editorId = getAnyTantouEditor(conn);
-            String assignSql = "UPDATE Proposal SET assignedEditorId = ?, updatedAt = GETDATE() WHERE id = ?";
-            try (PreparedStatement ps = conn.prepareStatement(assignSql)) {
-                ps.setLong(1, editorId);
-                ps.setLong(2, proposalId);
-                ps.executeUpdate();
-            }
-        }
-
+        Proposal p = findById(conn, proposalId);
+        long editorId = p.getAssignedEditorId() == null ? findLeastAssignedTantouEditor(conn) : p.getAssignedEditorId().longValue();
         String insertSeries =
             "INSERT INTO Series (proposalId, mangakaId, tantouEditorId, title, genre, status, createdAt) "
             + "VALUES (?, ?, ?, ?, ?, 'ACTIVE', GETDATE())";
         try (PreparedStatement ps = conn.prepareStatement(insertSeries)) {
             ps.setLong(1, proposalId);
-            ps.setLong(2, mangakaId);
+            ps.setLong(2, p.getMangakaId());
             ps.setLong(3, editorId);
-            ps.setString(4, title);
-            ps.setString(5, genre);
+            ps.setString(4, p.getTitle());
+            ps.setString(5, p.getGenre());
             ps.executeUpdate();
         }
     }
 
-    private long getAnyTantouEditor(Connection conn) throws SQLException {
+    private long findLeastAssignedTantouEditor(Connection conn) throws SQLException {
         String sql =
             "SELECT TOP 1 u.id "
-            + "FROM [User] u "
-            + "JOIN UserRole ur ON ur.userId = u.id "
-            + "JOIN [Role] r ON r.id = ur.roleId "
+            + "FROM [User] u JOIN UserRole ur ON ur.userId = u.id JOIN [Role] r ON r.id = ur.roleId "
+            + "LEFT JOIN Proposal p ON p.assignedEditorId = u.id AND p.status IN ('UNDER_REVIEW','REVISION_REQUESTED') "
             + "WHERE r.name = 'TANTOU_EDITOR' AND u.status = 'ACTIVE' "
-            + "ORDER BY u.id";
-        try (PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+            + "GROUP BY u.id ORDER BY COUNT(p.id), u.id";
+        try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 return rs.getLong(1);
             }
         }
-        throw new IllegalStateException("No active Tantou Editor available for series assignment");
+        throw new IllegalStateException("No active Tantou Editor available for assignment");
     }
 
     private void updateProposalStatus(Connection conn, long proposalId, String status, boolean setRejectedAt) throws SQLException {
-        String sql;
-        if (setRejectedAt) {
-            sql = "UPDATE Proposal SET status = ?, rejectedAt = GETDATE(), updatedAt = GETDATE() WHERE id = ?";
-        } else {
-            sql = "UPDATE Proposal SET status = ?, updatedAt = GETDATE() WHERE id = ?";
-        }
+        String sql = setRejectedAt
+            ? "UPDATE Proposal SET status = ?, rejectedAt = GETDATE(), updatedAt = GETDATE() WHERE id = ?"
+            : "UPDATE Proposal SET status = ?, updatedAt = GETDATE() WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status);
             ps.setLong(2, proposalId);
@@ -362,35 +321,43 @@ public class ProposalRepository {
         }
     }
 
-    private List<Proposal> queryMany(String sql, Object param) {
+    private void insertHistory(Connection conn, long proposalId, AuthenticatedUser actor, String actionType, String note, int attempt) throws SQLException {
+        String role = actor.getRoles().isEmpty() ? "USER" : actor.getRoles().iterator().next();
+        insertHistory(conn, proposalId, Long.valueOf(actor.getId()), role, actionType, note, attempt);
+    }
+
+    private void insertSystemHistory(Connection conn, long proposalId, String actionType, String note, int attempt) throws SQLException {
+        insertHistory(conn, proposalId, null, "SYSTEM", actionType, note, attempt);
+    }
+
+    private void insertHistory(Connection conn, long proposalId, Long actorId, String actorRole, String actionType, String note, int attempt) throws SQLException {
+        String sql =
+            "INSERT INTO ProposalHistory (proposalId, actorId, actorRole, actionType, note, submitAttemptNumber, createdAt) "
+            + "VALUES (?, ?, ?, ?, ?, ?, GETDATE())";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            if (actorId == null) {
+                ps.setNull(2, java.sql.Types.BIGINT);
+            } else {
+                ps.setLong(2, actorId.longValue());
+            }
+            ps.setString(3, actorRole);
+            ps.setString(4, actionType);
+            ps.setString(5, note);
+            ps.setInt(6, attempt);
+            ps.executeUpdate();
+        }
+    }
+
+    private List<Proposal> queryMany(String sql, Long param) {
         List<Proposal> rows = new ArrayList<Proposal>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             if (param != null) {
-                if (param instanceof Long) {
-                    ps.setLong(1, (Long) param);
-                } else {
-                    ps.setObject(1, param);
-                }
+                ps.setLong(1, param.longValue());
             }
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Proposal p = new Proposal();
-                    p.setId(rs.getLong("id"));
-                    p.setMangakaId(rs.getLong("mangakaId"));
-                    p.setTitle(rs.getString("title"));
-                    p.setGenre(rs.getString("genre"));
-                    p.setSynopsis(rs.getString("synopsis"));
-                    p.setStatus(rs.getString("status"));
-                    p.setSubmittedAt(rs.getTimestamp("submittedAt"));
-                    p.setVotingDeadline(rs.getTimestamp("votingDeadline"));
-                    p.setRejectedAt(rs.getTimestamp("rejectedAt"));
-                    long editorId = rs.getLong("assignedEditorId");
-                    p.setAssignedEditorId(rs.wasNull() ? null : editorId);
-                    p.setApproveVotes(rs.getInt("approveVotes"));
-                    p.setRejectVotes(rs.getInt("rejectVotes"));
-                    p.setAbstainVotes(rs.getInt("abstainVotes"));
-                    rows.add(p);
+                    rows.add(mapBaseProposal(rs));
                 }
             }
         } catch (SQLException ex) {
@@ -398,5 +365,24 @@ public class ProposalRepository {
         }
         return rows;
     }
-}
 
+    private Proposal mapBaseProposal(ResultSet rs) throws SQLException {
+        Proposal p = new Proposal();
+        p.setId(rs.getLong("id"));
+        p.setMangakaId(rs.getLong("mangakaId"));
+        p.setTitle(rs.getString("title"));
+        p.setGenre(rs.getString("genre"));
+        p.setSynopsis(rs.getString("synopsis"));
+        p.setSampleFilePath(rs.getString("sampleFilePath"));
+        p.setOriginalFileName(rs.getString("originalFileName"));
+        int chapters = rs.getInt("approximateChapter");
+        p.setApproximateChapter(rs.wasNull() ? null : Integer.valueOf(chapters));
+        p.setStatus(rs.getString("status"));
+        p.setSubmittedAt(rs.getTimestamp("submittedAt"));
+        p.setRejectedAt(rs.getTimestamp("rejectedAt"));
+        long editorId = rs.getLong("assignedEditorId");
+        p.setAssignedEditorId(rs.wasNull() ? null : Long.valueOf(editorId));
+        p.setSubmitAttemptCount(rs.getInt("submitAttemptCount"));
+        return p;
+    }
+}
