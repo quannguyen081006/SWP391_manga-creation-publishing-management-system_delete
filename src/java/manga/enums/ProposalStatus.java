@@ -1,6 +1,6 @@
 package manga.enums;
 
 public enum ProposalStatus {
-    DRAFT, SUBMITTED, VOTING, APPROVED, REJECTED, DEFERRED
+    DRAFT, UNDER_REVIEW, REVISION_REQUESTED, APPROVED, REJECTED
 }
 

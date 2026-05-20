@@ -1,5 +1,6 @@
 package manga.repository;
 
+import manga.model.AuthenticatedUser;
 import manga.model.ChapterSummary;
 import java.sql.Connection;
 import java.sql.Date;
@@ -25,23 +26,52 @@ public class ChapterRepository {
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                ChapterSummary c = new ChapterSummary();
-                c.setId(rs.getLong("id"));
-                c.setSeriesId(rs.getLong("seriesId"));
-                c.setChapterNumber(rs.getInt("chapterNumber"));
-                c.setTitle(rs.getString("title"));
-                c.setStatus(rs.getString("status"));
-                c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
-                c.setPublicationDate(rs.getDate("publicationDate"));
-                c.setCompletionPct(rs.getDouble("completionPct"));
-                c.setAtRisk(rs.getBoolean("atRisk"));
-                rows.add(c);
+                rows.add(mapChapter(rs));
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot list chapters", ex);
         }
         return rows;
     }
+
+    public List<ChapterSummary> listAll(AuthenticatedUser user) {
+        String sql;
+        List<Object> params = new ArrayList<Object>();
+
+        if (user.hasRole("ADMIN")) {
+            sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
+                + "FROM Chapter ORDER BY createdAt DESC";
+        } else if (user.hasRole("MANGAKA")) {
+            sql = "SELECT c.id, c.seriesId, c.chapterNumber, c.title, c.status, c.submissionDeadline, c.publicationDate, c.completionPct, c.atRisk "
+                + "FROM Chapter c JOIN Series s ON s.id = c.seriesId "
+                + "WHERE s.mangakaId = ? ORDER BY c.createdAt DESC";
+            params.add(user.getId());
+        } else if (user.hasRole("TANTOU_EDITOR")) {
+            sql = "SELECT c.id, c.seriesId, c.chapterNumber, c.title, c.status, c.submissionDeadline, c.publicationDate, c.completionPct, c.atRisk "
+                + "FROM Chapter c JOIN Series s ON s.id = c.seriesId "
+                + "WHERE s.tantouEditorId = ? ORDER BY c.createdAt DESC";
+            params.add(user.getId());
+        } else {
+            return new ArrayList<ChapterSummary>();
+        }
+
+        List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setLong(i + 1, (Long) params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(mapChapter(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list chapters", ex);
+        }
+        return rows;
+    }
+
     public List<ChapterSummary> listBySeries(long seriesId) {
         String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter WHERE seriesId = ? ORDER BY chapterNumber";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
@@ -50,17 +80,7 @@ public class ChapterRepository {
             ps.setLong(1, seriesId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    ChapterSummary c = new ChapterSummary();
-                    c.setId(rs.getLong("id"));
-                    c.setSeriesId(rs.getLong("seriesId"));
-                    c.setChapterNumber(rs.getInt("chapterNumber"));
-                    c.setTitle(rs.getString("title"));
-                    c.setStatus(rs.getString("status"));
-                    c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
-                    c.setPublicationDate(rs.getDate("publicationDate"));
-                    c.setCompletionPct(rs.getDouble("completionPct"));
-                    c.setAtRisk(rs.getBoolean("atRisk"));
-                    rows.add(c);
+                    rows.add(mapChapter(rs));
                 }
             }
         } catch (SQLException ex) {
@@ -78,17 +98,7 @@ public class ChapterRepository {
                 if (!rs.next()) {
                     return null;
                 }
-                ChapterSummary c = new ChapterSummary();
-                c.setId(rs.getLong("id"));
-                c.setSeriesId(rs.getLong("seriesId"));
-                c.setChapterNumber(rs.getInt("chapterNumber"));
-                c.setTitle(rs.getString("title"));
-                c.setStatus(rs.getString("status"));
-                c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
-                c.setPublicationDate(rs.getDate("publicationDate"));
-                c.setCompletionPct(rs.getDouble("completionPct"));
-                c.setAtRisk(rs.getBoolean("atRisk"));
-                return c;
+                return mapChapter(rs);
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load chapter", ex);
@@ -152,6 +162,65 @@ public class ChapterRepository {
         }
     }
 
+    public void deleteChapter(long chapterId, long mangakaId) {
+        long ownerId = findOwnerMangakaByChapter(chapterId);
+        if (ownerId != mangakaId) {
+            throw new IllegalArgumentException("Only series owner can delete chapter");
+        }
+
+        String statusSql = "SELECT status FROM Chapter WHERE id = ?";
+        String taskCountSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ?";
+        String deleteSql = "DELETE FROM Chapter WHERE id = ?";
+
+        try (Connection conn = dataSource.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(statusSql)) {
+                ps.setLong(1, chapterId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new IllegalArgumentException("Chapter not found");
+                    if (!"PLANNING".equalsIgnoreCase(rs.getString("status"))) {
+                        throw new IllegalArgumentException("Only PLANNING chapters can be deleted");
+                    }
+                }
+            }
+            try (PreparedStatement ps = conn.prepareStatement(taskCountSql)) {
+                ps.setLong(1, chapterId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    if (rs.getInt(1) > 0) {
+                        throw new IllegalArgumentException("Cannot delete chapter with existing tasks");
+                    }
+                }
+            }
+            try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                ps.setLong(1, chapterId);
+                if (ps.executeUpdate() == 0) throw new IllegalArgumentException("Chapter not found");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot delete chapter", ex);
+        }
+    }
+
+    public List<ChapterSummary> findChaptersWithDeadlineInDays(int days) {
+        String sql =
+            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
+            + "FROM Chapter "
+            + "WHERE submissionDeadline = CAST(DATEADD(DAY, ?, GETDATE()) AS DATE) "
+            + "  AND status IN ('PLANNING', 'IN_PROGRESS')";
+        List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, days);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(mapChapter(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot query deadline chapters", ex);
+        }
+        return rows;
+    }
+
     public long findSeriesOwnerMangaka(long seriesId) {
         String sql = "SELECT mangakaId FROM Series WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
@@ -198,6 +267,20 @@ public class ChapterRepository {
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load series tantou", ex);
         }
+    }
+
+    private ChapterSummary mapChapter(ResultSet rs) throws SQLException {
+        ChapterSummary c = new ChapterSummary();
+        c.setId(rs.getLong("id"));
+        c.setSeriesId(rs.getLong("seriesId"));
+        c.setChapterNumber(rs.getInt("chapterNumber"));
+        c.setTitle(rs.getString("title"));
+        c.setStatus(rs.getString("status"));
+        c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
+        c.setPublicationDate(rs.getDate("publicationDate"));
+        c.setCompletionPct(rs.getDouble("completionPct"));
+        c.setAtRisk(rs.getBoolean("atRisk"));
+        return c;
     }
 }
 

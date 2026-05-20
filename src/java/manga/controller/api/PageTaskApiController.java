@@ -23,9 +23,12 @@ public class PageTaskApiController {
     private PageTaskRepository pageTaskRepository;
 
     @RequestMapping(value = "/tasks", method = RequestMethod.GET)
-    public ApiResponse<List<TaskSummary>> listVisible(HttpSession session) {
+    public ApiResponse<List<TaskSummary>> listVisible(
+            HttpSession session,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "chapterId", required = false) Long chapterId) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(pageTaskRepository.listVisible(user), "Task list");
+        return ApiResponse.ok(pageTaskRepository.listVisible(user, status, chapterId), "Task list");
     }
     @RequestMapping(value = "/chapters/{chapterId}/tasks", method = RequestMethod.GET)
     public ApiResponse<List<TaskSummary>> list(@PathVariable("chapterId") long chapterId, HttpSession session) {
@@ -144,11 +147,7 @@ public class PageTaskApiController {
     public ApiResponse<Object> approve(@PathVariable("id") long id, HttpSession session) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can approve task");
-        long ownerId = pageTaskRepository.getTaskOwnerMangaka(id);
-        if (ownerId != user.getId()) {
-            throw new IllegalArgumentException("Only task owner Mangaka can approve");
-        }
-        pageTaskRepository.approveByMangaka(id);
+        pageTaskRepository.approveByMangaka(id, user.getId());
         return ApiResponse.ok(null, "Task approved");
     }
 
@@ -156,12 +155,7 @@ public class PageTaskApiController {
     public ApiResponse<Object> reject(@PathVariable("id") long id, HttpSession session) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can reject task");
-        long ownerId = pageTaskRepository.getTaskOwnerMangaka(id);
-        if (ownerId != user.getId()) {
-            throw new IllegalArgumentException("Only task owner Mangaka can reject");
-        }
-
-        pageTaskRepository.rejectByMangaka(id);
+        pageTaskRepository.rejectByMangaka(id, user.getId());
         return ApiResponse.ok(null, "Task rejected");
     }
 }

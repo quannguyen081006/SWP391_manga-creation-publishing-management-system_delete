@@ -74,9 +74,10 @@
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="taskRows">
             <c:forEach items="${tasks}" var="t">
                 <tr>
+                    <td>${t.id}</td>
                     <td><strong>${t.seriesTitle}</strong><br/>Ch. ${t.chapterNumber} - ${t.chapterTitle}</td>
                     <td>${t.pageRangeStart}-${t.pageRangeEnd}</td>
                     <td>${t.taskType}</td>
@@ -112,6 +113,31 @@
         return String(value).replace(/[&<>"]/g, function (ch) {
             return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch];
         });
+    }
+
+    function formatDate(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+        var text = String(value);
+        if (/^\d+$/.test(text)) {
+            var date = new Date(Number(text));
+            if (isNaN(date.getTime())) {
+                return text;
+            }
+            var month = String(date.getMonth() + 1);
+            var day = String(date.getDate());
+            return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+        }
+        if (text.indexOf('T') > -1) {
+            return text.substring(0, 10);
+        }
+        return text;
+    }
+
+    function dateOnly(value) {
+        var formatted = formatDate(value);
+        return formatted ? new Date(formatted + 'T00:00:00') : null;
     }
 
     function hasRole(role) {
@@ -273,8 +299,8 @@
             if (st === 'OVERDUE') {
                 overdue++;
             } else if (t.dueDate && st !== 'APPROVED') {
-                var due = new Date(t.dueDate + 'T00:00:00');
-                if (due < today) { overdue++; }
+                var due = dateOnly(t.dueDate);
+                if (due && due < today) { overdue++; }
             }
         }
 
@@ -312,7 +338,7 @@
             + '<input name="pageRangeEnd" type="number" min="1" value="' + task.pageRangeEnd + '" placeholder="Page End" required />'
             + renderTaskTypeSelect(task.taskType)
             + '<label class="field-label" for="taskUpdateDueDate' + task.id + '">Due Date</label>'
-            + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(task.dueDate || '') + '" aria-label="Due Date" required />'
+            + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '" aria-label="Due Date" required />'
             + '<button class="btn" type="submit">Update</button>'
             + '</form>';
     }
@@ -341,7 +367,7 @@
             + '<span>Type: ' + formatStatus(task.taskType) + '</span>'
             + '<span>Assigned: ' + escapeHtml(task.assistantName) + '</span>'
             + '<span>Status: ' + formatStatus(task.status) + '</span>'
-            + '<span>Due Date: ' + escapeHtml(task.dueDate) + '</span>'
+            + '<span>Due Date: ' + escapeHtml(formatDate(task.dueDate)) + '</span>'
             + '</div>';
     }
 
@@ -380,7 +406,7 @@
                 + '<td>' + formatStatus(task.taskType) + '</td>'
                 + '<td>' + escapeHtml(task.assistantName) + '</td>'
                 + '<td><span class="status-chip ' + statusClass(task.status) + '">' + formatStatus(task.status) + '</span></td>'
-                + '<td>' + escapeHtml(task.dueDate) + '</td>'
+                + '<td>' + escapeHtml(formatDate(task.dueDate)) + '</td>'
                 + '<td><div class="inline-meta" style="gap:6px;margin:0;">' + actionButtons + '</div></td>'
                 + '</tr>'
                 + '<tr id="taskInlineRow' + task.id + '" class="task-inline-row" style="display:none;"><td colspan="8">' + inlinePanes + '</td></tr>';

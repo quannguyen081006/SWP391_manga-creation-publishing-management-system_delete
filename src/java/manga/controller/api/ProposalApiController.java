@@ -6,7 +6,6 @@ import manga.model.AuthenticatedUser;
 import manga.model.Proposal;
 import manga.service.ProposalService;
 import java.util.List;
-import java.util.Map;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +32,12 @@ public class ProposalApiController {
             HttpSession session,
             @RequestParam("title") String title,
             @RequestParam("genre") String genre,
-            @RequestParam("synopsis") String synopsis) {
+            @RequestParam("synopsis") String synopsis,
+            @RequestParam("sampleFilePath") String sampleFilePath,
+            @RequestParam("originalFileName") String originalFileName,
+            @RequestParam("approximateChapter") Integer approximateChapter) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        long id = proposalService.createProposal(user, title, genre, synopsis);
+        long id = proposalService.createProposal(user, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter);
         return ApiResponse.ok(proposalService.getDetail(user, id), "Draft proposal created");
     }
 
@@ -51,9 +53,12 @@ public class ProposalApiController {
             HttpSession session,
             @RequestParam("title") String title,
             @RequestParam("genre") String genre,
-            @RequestParam("synopsis") String synopsis) {
+            @RequestParam("synopsis") String synopsis,
+            @RequestParam(value = "sampleFilePath", required = false) String sampleFilePath,
+            @RequestParam(value = "originalFileName", required = false) String originalFileName,
+            @RequestParam("approximateChapter") Integer approximateChapter) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        proposalService.updateDraft(user, id, title, genre, synopsis);
+        proposalService.updateDraft(user, id, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter);
         return ApiResponse.ok(proposalService.getDetail(user, id), "Draft proposal updated");
     }
 
@@ -61,24 +66,18 @@ public class ProposalApiController {
     public ApiResponse<Object> submit(@PathVariable("id") long id, HttpSession session) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         proposalService.submitProposal(user, id);
-        return ApiResponse.ok(null, "Proposal submitted for voting");
+        return ApiResponse.ok(null, "Proposal submitted for Tantou review");
     }
 
-    @RequestMapping(value = "/{id}/votes", method = RequestMethod.POST)
-    public ApiResponse<Object> vote(
+    @RequestMapping(value = "/{id}/review", method = RequestMethod.POST)
+    public ApiResponse<Object> review(
             @PathVariable("id") long id,
             HttpSession session,
-            @RequestParam("voteType") String voteType,
-            @RequestParam(value = "reason", required = false) String reason) {
+            @RequestParam("decision") String decision,
+            @RequestParam(value = "note", required = false) String note) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        proposalService.castVote(user, id, voteType, reason);
-        return ApiResponse.ok(null, "Vote submitted");
-    }
-
-    @RequestMapping(value = "/{id}/votes", method = RequestMethod.GET)
-    public ApiResponse<List<Map<String, Object>>> listVotes(@PathVariable("id") long id, HttpSession session) {
-        AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(proposalService.listVotes(user, id), "Proposal votes");
+        proposalService.reviewProposal(user, id, decision, note);
+        return ApiResponse.ok(null, "Proposal reviewed");
     }
 }
 

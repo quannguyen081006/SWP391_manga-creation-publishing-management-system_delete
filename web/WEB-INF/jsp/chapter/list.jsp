@@ -67,11 +67,12 @@
                 <th>Status</th>
                 <th>Current Chapter Progress</th>
                 <th>At Risk</th>
+                <th>Deadline</th>
                 <th id="chapterActionHeader" style="display:none;">Actions</th>
             </tr>
         </thead>
         <tbody id="chapterRows">
-            <tr><td colspan="8">Loading chapters...</td></tr>
+            <tr><td colspan="9">Loading chapters...</td></tr>
         </tbody>
     </table>
 </div>
@@ -93,6 +94,31 @@
         return String(value).replace(/[&<>"]/g, function (ch) {
             return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch];
         });
+    }
+
+    function formatDate(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+        var text = String(value);
+        if (/^\d+$/.test(text)) {
+            var date = new Date(Number(text));
+            if (isNaN(date.getTime())) {
+                return text;
+            }
+            var month = String(date.getMonth() + 1);
+            var day = String(date.getDate());
+            return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+        }
+        if (text.indexOf('T') > -1) {
+            return text.substring(0, 10);
+        }
+        return text;
+    }
+
+    function dateOnly(value) {
+        var formatted = formatDate(value);
+        return formatted ? new Date(formatted + 'T00:00:00') : null;
     }
 
     function hasRole(role) {
@@ -133,21 +159,19 @@
         var url = ctx + path;
         if (data) {
             var params = new URLSearchParams(data).toString();
-            if (method === 'GET' || method === 'PUT' || method === 'PATCH') {
+            if (method === 'GET') {
                 url += (url.indexOf('?') === -1 ? '?' : '&') + params;
             } else {
                 opts.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
                 opts.body = params;
             }
         }
-
         var res = await fetch(url, opts);
         var text = await res.text();
         var body = null;
         try { body = text ? JSON.parse(text) : null; } catch (e) {}
-
         if (!res.ok || (body && body.success === false)) {
-            var msg = (body && (body.message || (body.errors && body.errors[0]))) || text || ('Request failed: HTTP ' + res.status);
+            var msg = (body && (body.message || (body.errors && body.errors[0]))) || text || ('HTTP ' + res.status);
             throw new Error(msg);
         }
         return body;
@@ -197,23 +221,34 @@
         var tbody = document.getElementById('chapterRows');
         var showActions = hasRole('MANGAKA');
         if (!chapters.length) {
-            tbody.innerHTML = '<tr><td colspan="8">No chapters found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9">No chapters found.</td></tr>';
             return;
         }
 
         tbody.innerHTML = chapters.map(function (ch) {
             var progress = Math.max(0, Math.min(100, Number(ch.completionPct || 0)));
             var own = isOwnSeries(ch.seriesId);
-            var actionCell = showActions ? '<td>' + (own ? '<button class="btn small" type="button" data-inline-update="chapterUpdateRow' + ch.id + '">Update</button>' : '') + '</td>' : '';
+            var formattedDeadline = formatDate(ch.submissionDeadline);
+            var deadlineDate = dateOnly(ch.submissionDeadline);
+            var today = new Date(); today.setHours(0,0,0,0);
+            var daysLeft = deadlineDate ? Math.ceil((deadlineDate - today) / 86400000) : null;
+            var deadlineStyle = (daysLeft !== null && daysLeft <= 3) ? 'color:var(--danger,#e53e3e);font-weight:600;' : '';
+            var deadlineText = formattedDeadline
+                ? ('<span style="' + deadlineStyle + '">' + escapeHtml(formattedDeadline) + (daysLeft !== null ? ' (' + daysLeft + 'd)' : '') + '</span>')
+                : '-';
+            var deleteBtn = (own && String(ch.status || '').toUpperCase() === 'PLANNING')
+                ? '<button class="btn small" type="button" data-chapter-delete="' + ch.id + '">Delete</button>'
+                : '';
+            var actionCell = showActions ? '<td><div class="inline-meta" style="gap:6px;margin:0;">' + (own ? '<button class="btn small" type="button" data-inline-update="chapterUpdateRow' + ch.id + '">Update</button>' : '') + ' ' + deleteBtn + '</div></td>' : '';
             var updateRow = '';
             if (showActions && own) {
                 updateRow = '<tr id="chapterUpdateRow' + ch.id + '" class="chapter-update-row" style="display:none;">'
-                    + '<td colspan="8"><form class="panel form-grid chapter-inline-update-form" style="max-width:720px;">'
+                    + '<td colspan="9"><form class="panel form-grid chapter-inline-update-form" style="max-width:720px;">'
                     + '<strong>Update Ch.' + ch.chapterNumber + ' - ' + escapeHtml(ch.title) + '</strong>'
                     + '<input name="chapterId" type="hidden" value="' + ch.id + '" />'
                     + '<input name="title" type="text" value="' + escapeHtml(ch.title) + '" placeholder="New Title" required />'
                     + '<label class="field-label" for="chapterUpdatePublicationDate' + ch.id + '">Publication Date</label>'
-                    + '<input id="chapterUpdatePublicationDate' + ch.id + '" name="publicationDate" type="date" value="' + escapeHtml(ch.publicationDate || '') + '" aria-label="Publication Date" required />'
+                    + '<input id="chapterUpdatePublicationDate' + ch.id + '" name="publicationDate" type="date" value="' + escapeHtml(formatDate(ch.publicationDate)) + '" aria-label="Publication Date" required />'
                     + '<button class="btn" type="submit">Update</button>'
                     + '</form></td></tr>';
             }
@@ -226,6 +261,7 @@
                 + '<td>' + formatStatus(ch.status) + '</td>'
                 + '<td style="min-width: 220px;"><div class="inline-meta" style="justify-content:space-between; margin-bottom:6px;"><span>' + progress.toFixed(1) + '%</span></div><div class="progress ' + (progress < 40 ? 'red' : '') + '" style="margin-top:0;"><span style="width:' + progress + '%;"></span></div></td>'
                 + '<td><span class="status-chip ' + (ch.atRisk ? 'status-rejected' : 'status-approved') + '">' + (ch.atRisk ? 'AT RISK' : 'NORMAL') + '</span></td>'
+                + '<td>' + deadlineText + '</td>'
                 + actionCell
                 + '</tr>' + updateRow;
         }).join('');
@@ -248,11 +284,11 @@
             renderChapterActions();
             renderChapters();
         } catch (err) {
-            document.getElementById('chapterRows').innerHTML = '<tr><td colspan="8">' + escapeHtml(err.message) + '</td></tr>';
+            document.getElementById('chapterRows').innerHTML = '<tr><td colspan="9">' + escapeHtml(err.message) + '</td></tr>';
         }
     }
 
-    document.addEventListener('click', function (e) {
+    document.addEventListener('click', async function (e) {
         var paneButton = e.target.closest ? e.target.closest('[data-pane]') : null;
         if (paneButton) {
             togglePane(paneButton.getAttribute('data-pane'));
@@ -270,6 +306,20 @@
             }
             if (shouldShow) {
                 targetRow.style.display = 'table-row';
+            }
+            return;
+        }
+
+        var deleteButton = e.target.closest ? e.target.closest('[data-chapter-delete]') : null;
+        if (deleteButton) {
+            var chId = deleteButton.getAttribute('data-chapter-delete');
+            if (!confirm('Delete chapter #' + chId + '? This cannot be undone.')) return;
+            try {
+                await callApi('DELETE', '/api/v1/chapters/' + chId);
+                showMessage('Chapter deleted.', false);
+                await loadData();
+            } catch (err) {
+                showMessage(err.message, true);
             }
         }
     });

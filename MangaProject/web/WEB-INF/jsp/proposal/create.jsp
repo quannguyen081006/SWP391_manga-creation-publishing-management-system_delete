@@ -17,15 +17,26 @@
         <div class="alert error">${error}</div>
     </c:if>
 
-    <form method="post" action="${pageContext.request.contextPath}/main/proposals/create" class="form-grid">
+    <form method="post" action="${pageContext.request.contextPath}/main/proposals/create" enctype="multipart/form-data" class="form-grid">
         <label>Title</label>
         <input type="text" name="title" value="${title}" required />
 
         <label>Genre</label>
-        <input type="text" name="genre" value="${genre}" required />
+        <select name="genre" required>
+            <option value="">Select genre</option>
+            <c:forEach items="${genres}" var="g">
+                <option value="${g}" ${g == genre ? 'selected' : ''}>${g}</option>
+            </c:forEach>
+        </select>
 
         <label>Synopsis</label>
         <textarea name="synopsis" rows="8" required>${synopsis}</textarea>
+
+        <label>Sample File</label>
+        <input type="file" name="sampleFile" required />
+
+        <label>Approximate Chapter</label>
+        <input type="number" name="approximateChapter" min="1" value="${approximateChapter}" required />
 
         <button type="submit" class="btn primary">Save Draft</button>
     </form>
@@ -34,5 +45,3 @@
 <jsp:include page="../common/footer.jsp" />
 </body>
 </html>
-
-

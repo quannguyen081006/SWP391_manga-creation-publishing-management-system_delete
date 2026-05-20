@@ -16,6 +16,11 @@ GO
 USE MangaEditorialDB;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- ============================================================
 --  MODULE 1: USER & ROLE
 -- ============================================================
@@ -55,7 +60,7 @@ CREATE TABLE UserRole (
 GO
 
 -- ============================================================
---  MODULE 2: PROPOSAL & VOTING
+--  MODULE 2: PROPOSAL & TANTOU REVIEW
 -- ============================================================
 
 CREATE TABLE Proposal (
@@ -64,54 +69,42 @@ CREATE TABLE Proposal (
     title               VARCHAR(255)    NOT NULL,
     genre               VARCHAR(100)    NOT NULL,
     synopsis            NVARCHAR(MAX)   NOT NULL,
+    sampleFilePath      VARCHAR(512)    NOT NULL,
+    originalFileName    NVARCHAR(255)   NOT NULL,
+    approximateChapter  INT             NOT NULL,
     status              VARCHAR(20)     NOT NULL CONSTRAINT DF_Proposal_status DEFAULT 'DRAFT',
     submittedAt         DATETIME            NULL,
-    -- BR-03: votingDeadline = submittedAt + 7 days (computed)
-    votingDeadline      AS (CASE WHEN submittedAt IS NOT NULL
-                                 THEN DATEADD(DAY, 7, submittedAt)
-                                 ELSE NULL END) PERSISTED,
     rejectedAt          DATETIME            NULL,
     assignedEditorId    BIGINT              NULL,
+    submitAttemptCount  INT             NOT NULL CONSTRAINT DF_Proposal_submitAttemptCount DEFAULT 0,
     createdAt           DATETIME        NOT NULL CONSTRAINT DF_Proposal_createdAt DEFAULT GETDATE(),
     updatedAt           DATETIME        NOT NULL CONSTRAINT DF_Proposal_updatedAt DEFAULT GETDATE(),
     CONSTRAINT PK_Proposal              PRIMARY KEY (id),
     CONSTRAINT FK_Proposal_Mangaka      FOREIGN KEY (mangakaId)        REFERENCES [User](id),
     CONSTRAINT FK_Proposal_Editor       FOREIGN KEY (assignedEditorId) REFERENCES [User](id),
     CONSTRAINT CK_Proposal_status       CHECK (status IN (
-        'DRAFT','SUBMITTED','VOTING','APPROVED','REJECTED','DEFERRED'))
+        'DRAFT','UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED')),
+    CONSTRAINT CK_Proposal_approxChapter CHECK (approximateChapter >= 1),
+    CONSTRAINT CK_Proposal_submitAttempts CHECK (submitAttemptCount BETWEEN 0 AND 2)
 );
 GO
 
-CREATE TABLE ProposalVote (
-    id          BIGINT      NOT NULL IDENTITY(1,1),
-    proposalId  BIGINT      NOT NULL,
-    voterId     BIGINT      NOT NULL,
-    voteType    VARCHAR(10) NOT NULL,
-    reason      NVARCHAR(MAX)       NULL,   -- NOT NULL when voteType = 'REJECT' (BR-14), enforced via trigger
-    votedAt     DATETIME    NOT NULL CONSTRAINT DF_ProposalVote_votedAt DEFAULT GETDATE(),
-    CONSTRAINT PK_ProposalVote          PRIMARY KEY (id),
-    CONSTRAINT FK_PV_Proposal           FOREIGN KEY (proposalId) REFERENCES Proposal(id),
-    CONSTRAINT FK_PV_Voter              FOREIGN KEY (voterId)     REFERENCES [User](id),
-    CONSTRAINT CK_PV_voteType           CHECK (voteType IN ('APPROVE','REJECT','ABSTAIN'))
+CREATE TABLE ProposalHistory (
+    id                  BIGINT          NOT NULL IDENTITY(1,1),
+    proposalId          BIGINT          NOT NULL,
+    actorId             BIGINT              NULL,
+    actorRole           VARCHAR(50)     NOT NULL,
+    actionType          VARCHAR(30)     NOT NULL,
+    note                NVARCHAR(MAX)       NULL,
+    submitAttemptNumber INT             NOT NULL CONSTRAINT DF_PH_submitAttemptNumber DEFAULT 0,
+    createdAt           DATETIME        NOT NULL CONSTRAINT DF_PH_createdAt DEFAULT GETDATE(),
+    CONSTRAINT PK_ProposalHistory       PRIMARY KEY (id),
+    CONSTRAINT FK_PH_Proposal           FOREIGN KEY (proposalId) REFERENCES Proposal(id),
+    CONSTRAINT FK_PH_Actor              FOREIGN KEY (actorId) REFERENCES [User](id),
+    CONSTRAINT CK_PH_actionType         CHECK (actionType IN (
+        'CREATED','UPDATED','SUBMITTED','ASSIGNED_EDITOR','APPROVED','REJECTED','REVISE_REQUESTED','RESUBMITTED')),
+    CONSTRAINT CK_PH_submitAttempt      CHECK (submitAttemptNumber BETWEEN 0 AND 2)
 );
-GO
-
--- BR-14: reason must NOT NULL when voteType = REJECT
-CREATE TRIGGER TR_ProposalVote_RejectReason
-ON ProposalVote
-AFTER INSERT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF EXISTS (
-        SELECT 1 FROM inserted
-        WHERE voteType = 'REJECT' AND (reason IS NULL OR LTRIM(RTRIM(reason)) = '')
-    )
-    BEGIN
-        RAISERROR('BR-14: Rejection reason is required when voteType is REJECT.', 16, 1);
-        ROLLBACK TRANSACTION;
-    END
-END;
 GO
 
 -- ============================================================
@@ -406,7 +399,8 @@ GO
 
 CREATE INDEX IX_Proposal_mangakaId        ON Proposal         (mangakaId);
 CREATE INDEX IX_Proposal_status           ON Proposal         (status);
-CREATE INDEX IX_ProposalVote_proposalId   ON ProposalVote     (proposalId);
+CREATE INDEX IX_Proposal_assignedEditor   ON Proposal         (assignedEditorId);
+CREATE INDEX IX_ProposalHistory_proposal  ON ProposalHistory  (proposalId, createdAt);
 CREATE INDEX IX_Series_mangakaId          ON Series           (mangakaId);
 CREATE INDEX IX_Chapter_seriesId          ON Chapter          (seriesId);
 CREATE INDEX IX_Chapter_status            ON Chapter          (status);

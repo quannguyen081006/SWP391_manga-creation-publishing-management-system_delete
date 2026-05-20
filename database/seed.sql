@@ -8,6 +8,11 @@
 USE MangaEditorialDB;
 GO
 
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- ============================================================
 --  ROLES
 -- ============================================================
@@ -51,32 +56,40 @@ GO
 --  PROPOSAL  (APPROVED — will lead to a Series)
 -- ============================================================
 INSERT INTO Proposal
-    (mangakaId, title, genre, synopsis, status, submittedAt, assignedEditorId, createdAt, updatedAt)
+    (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)
 VALUES
     (2,
      'Shadows of Edo',
-     'Historical Action',
+     'Action',
      'A disgraced samurai seeks redemption in Edo-period Japan, uncovering a conspiracy threatening the Shogunate.',
+     '/uploads/proposals/sample-shadows-of-edo.pdf',
+     'sample-shadows-of-edo.pdf',
+     1,
      'APPROVED',
      DATEADD(DAY, -20, GETDATE()),
      5,
+     1,
      DATEADD(DAY, -25, GETDATE()),
      DATEADD(DAY, -20, GETDATE())
     );
 GO
 -- proposal id = 1
 
--- A second proposal in VOTING state for board testing
+-- A second proposal under Tantou review
 INSERT INTO Proposal
-    (mangakaId, title, genre, synopsis, status, submittedAt, assignedEditorId, createdAt, updatedAt)
+    (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)
 VALUES
     (2,
      'Cyber Ronin',
-     'Sci-Fi Action',
+     'Action',
      'In 2157, a cybernetic warrior hunts rogue AIs across neon-lit megacities.',
-     'VOTING',
+     '/uploads/proposals/sample-cyber-ronin.pdf',
+     'sample-cyber-ronin.pdf',
+     1,
+     'UNDER_REVIEW',
      DATEADD(DAY, -3, GETDATE()),
-     NULL,
+     5,
+     1,
      DATEADD(DAY, -5, GETDATE()),
      DATEADD(DAY, -3, GETDATE())
     );
@@ -84,13 +97,18 @@ GO
 -- proposal id = 2
 
 -- ============================================================
---  PROPOSAL VOTES  (on proposal 2 — VOTING state)
+--  PROPOSAL HISTORY
 -- ============================================================
-INSERT INTO ProposalVote (proposalId, voterId, voteType, reason)
+INSERT INTO ProposalHistory
+    (proposalId, actorId, actorRole, actionType, note, submitAttemptNumber, createdAt)
 VALUES
-    (2, 6, 'APPROVE', NULL),
-    (2, 7, 'APPROVE', NULL);
--- board3 (id=8) has not voted yet — ready for testing
+    (1, 2, 'MANGAKA', 'CREATED', 'Seed draft proposal created.', 0, DATEADD(DAY, -25, GETDATE())),
+    (1, 2, 'MANGAKA', 'SUBMITTED', 'Seed proposal submitted for Tantou review.', 1, DATEADD(DAY, -24, GETDATE())),
+    (1, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #5.', 1, DATEADD(DAY, -24, GETDATE())),
+    (1, 5, 'TANTOU_EDITOR', 'APPROVED', 'Seed proposal approved.', 1, DATEADD(DAY, -20, GETDATE())),
+    (2, 2, 'MANGAKA', 'CREATED', 'Seed draft proposal created.', 0, DATEADD(DAY, -5, GETDATE())),
+    (2, 2, 'MANGAKA', 'SUBMITTED', 'Seed proposal submitted for Tantou review.', 1, DATEADD(DAY, -3, GETDATE())),
+    (2, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #5.', 1, DATEADD(DAY, -3, GETDATE()));
 GO
 
 -- ============================================================
@@ -101,7 +119,7 @@ INSERT INTO Series
 VALUES
     (1, 2, 5,
      'Shadows of Edo',
-     'Historical Action',
+     'Action',
      'ACTIVE',
      DATEADD(DAY, 60, GETDATE()),
      GETDATE());
@@ -189,9 +207,7 @@ INSERT INTO Notification
 VALUES
     (2,  'PROPOSAL_RESOLVED',      'Your proposal "Shadows of Edo" was APPROVED!',            1, 'PROPOSAL', 0),
     (5,  'MANUSCRIPT_SUBMITTED',   'New manuscript submitted for Chapter 1 of Shadows of Edo.',1,'MANUSCRIPT', 0),
-    (6,  'VOTING_OPENED',          'Proposal "Cyber Ronin" is now open for voting.',           2, 'PROPOSAL', 0),
-    (7,  'VOTING_OPENED',          'Proposal "Cyber Ronin" is now open for voting.',           2, 'PROPOSAL', 0),
-    (8,  'VOTING_OPENED',          'Proposal "Cyber Ronin" is now open for voting.',           2, 'PROPOSAL', 0),
+    (5,  'PROPOSAL_ASSIGNED',      'Proposal "Cyber Ronin" is ready for Tantou review.',       2, 'PROPOSAL', 0),
     (3,  'TASK_DUE_REMINDER',      'Your sketching task for Chapter 1 is due in 30 days.',    1, 'TASK',     0);
 GO
 

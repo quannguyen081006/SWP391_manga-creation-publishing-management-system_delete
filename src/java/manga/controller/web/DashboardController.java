@@ -43,12 +43,12 @@ public class DashboardController {
         List<ManuscriptSummary> manuscripts = productionRepository.listManuscripts();
         List<ChapterSummary> chapters = productionRepository.listChapters();
 
-        int openVotes = 0;
+        int activeProposalCount = 0;
         int approved = 0;
         Proposal activeProposal = null;
         for (Proposal p : proposals) {
-            if ("SUBMITTED".equalsIgnoreCase(p.getStatus()) || "VOTING".equalsIgnoreCase(p.getStatus())) {
-                openVotes++;
+            if ("UNDER_REVIEW".equalsIgnoreCase(p.getStatus()) || "REVISION_REQUESTED".equalsIgnoreCase(p.getStatus())) {
+                activeProposalCount++;
                 if (activeProposal == null) {
                     activeProposal = p;
                 }
@@ -84,7 +84,7 @@ public class DashboardController {
 
         model.addAttribute("user", user);
         model.addAttribute("proposalCount", proposals.size());
-        model.addAttribute("openVotes", openVotes);
+        model.addAttribute("activeProposalCount", activeProposalCount);
         model.addAttribute("approvedCount", approved);
         model.addAttribute("roles", user.getRoles());
         model.addAttribute("seriesCount", seriesList.size());
