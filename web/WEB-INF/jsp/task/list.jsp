@@ -1,4 +1,5 @@
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
+<%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <!DOCTYPE html>
 <html>
 <head>
@@ -73,9 +74,10 @@
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="taskRows">
             <c:forEach items="${tasks}" var="t">
                 <tr>
+                    <td>${t.id}</td>
                     <td><strong>${t.seriesTitle}</strong><br/>Ch. ${t.chapterNumber} - ${t.chapterTitle}</td>
                     <td>${t.pageRangeStart}-${t.pageRangeEnd}</td>
                     <td>${t.taskType}</td>
