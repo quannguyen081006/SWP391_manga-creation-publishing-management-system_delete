@@ -196,6 +196,10 @@ public class ModuleWebController {
             throw new IllegalArgumentException("Task not found");
         }
         boolean canAssistantUpdate = user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId();
+        boolean canAssistantSubmit = canAssistantUpdate
+                && ("IN_PROGRESS".equalsIgnoreCase(task.getStatus())
+                || "REJECTED".equalsIgnoreCase(task.getStatus())
+                || "OVERDUE".equalsIgnoreCase(task.getStatus()));
         boolean canMangakaReview = user.hasRole("MANGAKA") && pageTaskRepository.getTaskOwnerMangaka(id) == user.getId();
         boolean canTantouView = user.hasRole("TANTOU_EDITOR") && pageTaskRepository.getTaskTantouEditor(id) == user.getId();
         if (!user.hasRole("ADMIN") && !canAssistantUpdate && !canMangakaReview && !canTantouView) {
@@ -203,6 +207,7 @@ public class ModuleWebController {
         }
         model.addAttribute("task", task);
         model.addAttribute("canAssistantUpdate", canAssistantUpdate);
+        model.addAttribute("canAssistantSubmit", canAssistantSubmit);
         model.addAttribute("canMangakaReview", canMangakaReview);
         return "task/detail";
     }

@@ -1485,6 +1485,77 @@ input, textarea, select {
     margin: 0;
 }
 
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, .46);
+    backdrop-filter: blur(4px);
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.modal-card {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: 88vh;
+    overflow: auto;
+    border: 1px solid rgba(226, 232, 240, .95);
+    border-radius: 18px;
+    background: #fff;
+    padding: 24px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .25);
+}
+
+.modal-card-wide {
+    width: min(900px, 100%);
+}
+
+.modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #fff;
+    color: #334155;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.modal-close:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.modal-actions {
+    margin-top: 18px;
+    justify-content: flex-end;
+}
+
+.modal-actions-bottom {
+    padding-top: 14px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.btn.disabled-soft,
+.btn:disabled {
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
 .inline-form {
     display: flex;
     align-items: center;

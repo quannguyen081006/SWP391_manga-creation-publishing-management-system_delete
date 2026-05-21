@@ -23,15 +23,12 @@
     <div><span class="detail-label">Status</span><span class="status-chip ${task.status=='APPROVED' ? 'status-approved' : (task.status=='OVERDUE' ? 'status-overdue' : 'status-progress')}">${task.status}</span></div>
 </div>
 
-<c:if test="${canAssistantUpdate}">
+<c:if test="${canAssistantSubmit}">
     <div class="section-card">
-        <h3 class="section-title compact-title">Assistant Update</h3>
+        <h3 class="section-title compact-title">Assistant Review</h3>
         <form method="post" action="${pageContext.request.contextPath}/main/tasks/${task.id}/assistant-status" class="inline-form">
-            <select name="status">
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="SUBMITTED">SUBMITTED</option>
-            </select>
-            <button class="btn primary" type="submit">Update Status</button>
+            <input name="status" type="hidden" value="SUBMITTED" />
+            <button class="btn small primary" type="submit">Submit for Review</button>
         </form>
     </div>
 </c:if>

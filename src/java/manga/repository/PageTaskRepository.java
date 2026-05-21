@@ -153,7 +153,7 @@ public class PageTaskRepository {
         String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         String enrollmentSql = "SELECT COUNT(1) FROM SeriesAssistant WHERE seriesId = ? AND assistantId = ?";
-        String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, GETDATE(), GETDATE())";
+        String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, GETDATE(), GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
             taskType = normalizeTaskType(taskType);
@@ -185,7 +185,7 @@ public class PageTaskRepository {
 
     public void updateTaskByMangaka(long taskId, long mangakaId, long assistantId, int start, int end, String taskType, Date dueDate) {
         String taskInfoSql = "SELECT t.chapterId, t.status FROM PageTask t WHERE t.id = ?";
-        String updateSql = "UPDATE PageTask SET assistantId = ?, pageRangeStart = ?, pageRangeEnd = ?, taskType = ?, dueDate = ?, status = 'PENDING', rejectionCount = 0, updatedAt = GETDATE(), assignedAt = GETDATE() WHERE id = ?";
+        String updateSql = "UPDATE PageTask SET assistantId = ?, pageRangeStart = ?, pageRangeEnd = ?, taskType = ?, dueDate = ?, status = 'IN_PROGRESS', rejectionCount = 0, updatedAt = GETDATE(), assignedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection()) {
             taskType = normalizeTaskType(taskType);
@@ -345,8 +345,8 @@ public class PageTaskRepository {
 
     public void updateStatusByAssistant(long taskId, long assistantId, String status) {
         String normalized = status == null ? "" : status.trim().toUpperCase();
-        if (!"IN_PROGRESS".equals(normalized) && !"SUBMITTED".equals(normalized)) {
-            throw new IllegalArgumentException("Assistant can update status only to IN_PROGRESS or SUBMITTED (BR-37)");
+        if (!"SUBMITTED".equals(normalized)) {
+            throw new IllegalArgumentException("Assistant can only submit task for review");
         }
 
         String readSql = "SELECT chapterId, assistantId, status FROM PageTask WHERE id = ?";
@@ -371,16 +371,10 @@ public class PageTaskRepository {
                 throw new IllegalArgumentException("Task not assigned to this assistant (BR-42)");
             }
 
-            if ("IN_PROGRESS".equals(normalized)) {
-                if (!("PENDING".equalsIgnoreCase(currentStatus) || "REJECTED".equalsIgnoreCase(currentStatus) || "OVERDUE".equalsIgnoreCase(currentStatus))) {
-                    throw new IllegalArgumentException("Task can move to IN_PROGRESS only from PENDING/REJECTED/OVERDUE (BR-37)");
-                }
-            }
-
-            if ("SUBMITTED".equals(normalized)) {
-                if (!"IN_PROGRESS".equalsIgnoreCase(currentStatus)) {
-                    throw new IllegalArgumentException("Assistant can submit only from IN_PROGRESS state (BR-TSK-01)");
-                }
+            if (!("IN_PROGRESS".equalsIgnoreCase(currentStatus)
+                    || "REJECTED".equalsIgnoreCase(currentStatus)
+                    || "OVERDUE".equalsIgnoreCase(currentStatus))) {
+                throw new IllegalArgumentException("Assistant can submit only from active/rework task state (BR-TSK-01)");
             }
 
             try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
@@ -786,4 +780,3 @@ public class PageTaskRepository {
         return t;
     }
 }
-

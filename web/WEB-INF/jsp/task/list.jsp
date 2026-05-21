@@ -28,15 +28,17 @@
     <div class="section-head">
         <div>
             <h3 class="section-title">Task Actions</h3>
-            <p class="section-desc">Click an action button to open form</p>
+            <p class="section-desc">Create a task in a small popup. New assignments start In Progress.</p>
         </div>
+        <button class="btn primary" type="button" data-modal-open="taskCreateModal">Create Task</button>
     </div>
+</div>
 
-    <div class="inline-meta" style="margin: 0 0 12px 0; gap: 10px;">
-        <button class="btn" type="button" data-task-pane="taskCreatePane">Create Task</button>
-    </div>
-
-    <form id="taskCreateForm" class="panel form-grid task-pane" style="display:none; max-width:640px;" data-task-pane-id="taskCreatePane">
+<div id="taskCreateModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="taskCreateTitle">
+        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+        <h3 id="taskCreateTitle" class="section-title compact-title">Create Task</h3>
+        <form id="taskCreateForm" class="form-grid">
         <strong>Create Task</strong>
         <select id="createTaskChapterId" name="chapterId" required>
             <option value="">Loading chapters...</option>
@@ -56,7 +58,8 @@
         <label class="field-label" for="taskCreateDueDate">Due Date</label>
         <input id="taskCreateDueDate" name="dueDate" type="date" aria-label="Due Date" required />
         <button class="btn primary" type="submit">Create</button>
-    </form>
+        </form>
+    </div>
 </div>
 
 <div class="section-card">
@@ -89,9 +92,26 @@
                     <td><a class="btn small" href="${pageContext.request.contextPath}/main/tasks/${t.id}">View</a></td>
                 </tr>
             </c:forEach>
-            <c:if test="${empty tasks}"><tr><td colspan="7">No tasks found.</td></tr></c:if>
+            <c:if test="${empty tasks}"><tr><td colspan="8">No tasks found.</td></tr></c:if>
         </tbody>
     </table>
+</div>
+
+<div id="taskViewModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="taskViewTitle">
+        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+        <h3 id="taskViewTitle" class="section-title compact-title">Task Detail</h3>
+        <div id="taskViewDetail" class="panel" style="margin-top:12px;">Loading detail...</div>
+        <div id="taskViewOwnerTools" style="margin-top:14px;"></div>
+        <div id="taskViewAssistantActions" class="detail-actions modal-actions modal-actions-bottom"></div>
+        <div class="section-head" style="margin-top:16px;">
+            <div>
+                <strong>Task Images</strong>
+                <p class="section-desc">Page images uploaded for this task</p>
+            </div>
+        </div>
+        <div id="taskViewImages">Loading images...</div>
+    </div>
 </div>
 
 <script>
@@ -104,7 +124,6 @@
     var tasks = [];
     var seriesById = {};
     var chapterById = {};
-    var currentTaskPaneId = '';
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -226,6 +245,22 @@
         return body;
     }
 
+    function openModal(id) {
+        var modal = document.getElementById(id);
+        if (modal) {
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeModals() {
+        var modals = document.querySelectorAll('.modal-backdrop');
+        for (var i = 0; i < modals.length; i++) {
+            modals[i].classList.remove('open');
+            modals[i].setAttribute('aria-hidden', 'true');
+        }
+    }
+
     async function uploadMultipart(path, form) {
         var fd = new FormData(form);
         var file = form.querySelector('input[type="file"]');
@@ -241,26 +276,6 @@
             throw new Error(msg);
         }
         return body;
-    }
-
-    function toggleTaskPane(targetPaneId) {
-        currentTaskPaneId = (currentTaskPaneId === targetPaneId) ? '' : targetPaneId;
-        var panes = document.querySelectorAll('.task-pane');
-        for (var i = 0; i < panes.length; i++) {
-            var pane = panes[i];
-            pane.style.display = (currentTaskPaneId && pane.getAttribute('data-task-pane-id') === currentTaskPaneId) ? 'grid' : 'none';
-        }
-    }
-
-    function hideInlineRows() {
-        var rows = document.querySelectorAll('.task-inline-row');
-        for (var i = 0; i < rows.length; i++) {
-            rows[i].style.display = 'none';
-            var panes = rows[i].querySelectorAll('.task-inline-pane');
-            for (var j = 0; j < panes.length; j++) {
-                panes[j].style.display = 'none';
-            }
-        }
     }
 
     async function fillAssistantSelect(select, seriesId, selectedId) {
@@ -335,19 +350,15 @@
         }
     }
 
-    function canAssistantStart(task) {
-        var st = String(task.status || '').toUpperCase();
-        return isAssignedAssistant(task) && (st === 'PENDING' || st === 'REJECTED' || st === 'OVERDUE');
-    }
-
     function canAssistantSubmit(task) {
-        return isAssignedAssistant(task) && String(task.status || '').toUpperCase() === 'IN_PROGRESS';
+        var st = String(task.status || '').toUpperCase();
+        return isAssignedAssistant(task) && (st === 'IN_PROGRESS' || st === 'REJECTED' || st === 'OVERDUE');
     }
 
     function renderUpdateForm(task) {
         var chapter = chapterById[String(task.chapterId)];
         var seriesId = chapter ? chapter.seriesId : '';
-        return '<form class="panel form-grid task-inline-pane task-inline-update-form" data-task-pane-key="update" style="display:none; max-width:640px;">'
+        return '<form class="panel form-grid task-inline-update-form" style="max-width:640px;">'
             + '<strong>Reassign / Update Task #' + task.id + '</strong>'
             + '<input name="taskId" type="hidden" value="' + task.id + '" />'
             + '<select class="assistant-select" name="assistantId" data-series-id="' + seriesId + '" data-selected-assistant-id="' + task.assistantId + '" required><option value="">Open form to load assistants</option></select>'
@@ -357,22 +368,6 @@
             + '<label class="field-label" for="taskUpdateDueDate' + task.id + '">Due Date</label>'
             + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '" aria-label="Due Date" required />'
             + '<button class="btn" type="submit">Update</button>'
-            + '</form>';
-    }
-
-    function renderStatusForm(task) {
-        var options = '';
-        if (canAssistantStart(task)) {
-            options += '<option value="IN_PROGRESS">In Progress</option>';
-        }
-        if (canAssistantSubmit(task)) {
-            options += '<option value="SUBMITTED">Submitted</option>';
-        }
-        return '<form class="panel form-grid task-inline-pane task-inline-status-form" data-task-pane-key="status" style="display:none; max-width:640px;">'
-            + '<strong>Update Status For Task #' + task.id + '</strong>'
-            + '<input name="taskId" type="hidden" value="' + task.id + '" />'
-            + '<select name="status" required>' + options + '</select>'
-            + '<button class="btn" type="submit">Update Status</button>'
             + '</form>';
     }
 
@@ -392,7 +387,7 @@
         } else if (hasRole('TANTOU_EDITOR')) {
             uploadForm = '<p class="section-desc">Tantou editor has read-only access to task images.</p>';
         }
-        return '<div class="panel task-inline-pane" data-task-pane-key="images" style="display:none;">'
+        return '<div class="panel">'
             + '<div class="section-head"><div><strong>Task Images</strong><p class="section-desc">Uploaded page images for this task</p></div></div>'
             + uploadForm
             + '<div class="task-image-list" data-task-image-list="' + task.id + '">Loading images...</div>'
@@ -483,18 +478,10 @@
         }
 
         tbody.innerHTML = tasks.map(function (task) {
-            var owner = isTaskOwner(task);
-            var canStatus = canAssistantStart(task) || canAssistantSubmit(task);
-            var actionButtons = '<button class="btn small" type="button" data-task-inline="taskInlineRow' + task.id + '" data-task-id="' + task.id + '" data-task-pane-key="view">View</button>';
-
-            var inlinePanes = '<div class="panel task-inline-pane" data-task-pane-key="detail" style="display:none;">Loading detail...</div>';
-            if (owner) {
-                inlinePanes += renderUpdateForm(task);
+            var actionButtons = '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
+            if (canAssistantSubmit(task)) {
+                actionButtons += ' <button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>';
             }
-            if (canStatus) {
-                inlinePanes += renderStatusForm(task);
-            }
-            inlinePanes += renderImageForm(task);
 
             return '<tr>'
                 + '<td>' + task.id + '</td>'
@@ -505,64 +492,32 @@
                 + '<td><span class="status-chip ' + statusClass(task.status) + '">' + formatStatus(task.status) + '</span></td>'
                 + '<td>' + escapeHtml(formatDate(task.dueDate)) + '</td>'
                 + '<td><div class="inline-meta" style="gap:6px;margin:0;">' + actionButtons + '</div></td>'
-                + '</tr>'
-                + '<tr id="taskInlineRow' + task.id + '" class="task-inline-row" style="display:none;"><td colspan="8">' + inlinePanes + '</td></tr>';
+                + '</tr>';
         }).join('');
     }
 
-    async function openTaskInline(rowId, paneKey, taskId) {
-        var row = document.getElementById(rowId);
-        var pane = row ? row.querySelector('[data-task-pane-key="' + paneKey + '"]') : null;
-        var alreadyOpen = row && row.style.display === 'table-row';
-        hideInlineRows();
-        if (alreadyOpen || !row) {
+    async function openTaskView(taskId) {
+        var task = findTask(taskId);
+        if (!task) {
             return;
         }
-
-        row.style.display = 'table-row';
-
-        if (paneKey === 'view') {
-            var task = findTask(taskId);
-            var panes = row.querySelectorAll('.task-inline-pane');
-            for (var i = 0; i < panes.length; i++) {
-                panes[i].style.display = panes[i].tagName === 'FORM' ? 'grid' : 'block';
-            }
-            var detailPane = row.querySelector('[data-task-pane-key="detail"]');
-            if (detailPane && task) {
-                detailPane.innerHTML = renderTaskDetail(task);
-            }
-            var updatePane = row.querySelector('[data-task-pane-key="update"]');
-            if (updatePane) {
-                var updateSelect = updatePane.querySelector('.assistant-select');
-                await fillAssistantSelect(updateSelect, updateSelect.getAttribute('data-series-id'), updateSelect.getAttribute('data-selected-assistant-id'));
-            }
-            await loadTaskImages(taskId);
-            return;
+        document.getElementById('taskViewTitle').textContent = 'Task #' + task.id;
+        document.getElementById('taskViewDetail').innerHTML = renderTaskDetail(task);
+        document.getElementById('taskViewOwnerTools').innerHTML = isTaskOwner(task)
+            ? renderUpdateForm(task)
+            : '';
+        var assistantActions = document.getElementById('taskViewAssistantActions');
+        assistantActions.innerHTML = canAssistantSubmit(task)
+            ? '<button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>'
+            : '';
+        assistantActions.style.display = assistantActions.innerHTML ? 'flex' : 'none';
+        document.getElementById('taskViewImages').innerHTML = renderImageForm(task);
+        openModal('taskViewModal');
+        var updateSelect = document.querySelector('#taskViewOwnerTools .assistant-select');
+        if (updateSelect) {
+            await fillAssistantSelect(updateSelect, updateSelect.getAttribute('data-series-id'), updateSelect.getAttribute('data-selected-assistant-id'));
         }
-
-        if (!pane) {
-            return;
-        }
-        pane.style.display = pane.tagName === 'FORM' ? 'grid' : 'block';
-
-        if (paneKey === 'detail') {
-            try {
-                pane.innerHTML = 'Loading detail...';
-                var res = await callApi('GET', '/api/v1/tasks/' + taskId);
-                pane.innerHTML = renderTaskDetail(res.data);
-            } catch (err) {
-                pane.innerHTML = escapeHtml(err.message);
-            }
-        }
-
-        if (paneKey === 'update') {
-            var select = pane.querySelector('.assistant-select');
-            await fillAssistantSelect(select, select.getAttribute('data-series-id'), select.getAttribute('data-selected-assistant-id'));
-        }
-
-        if (paneKey === 'images') {
-            await loadTaskImages(taskId);
-        }
+        await loadTaskImages(taskId);
     }
 
     async function loadData() {
@@ -594,15 +549,28 @@
     }
 
     document.addEventListener('click', async function (e) {
-        var paneButton = e.target.closest ? e.target.closest('[data-task-pane]') : null;
-        if (paneButton) {
-            toggleTaskPane(paneButton.getAttribute('data-task-pane'));
+        var openButton = e.target.closest ? e.target.closest('[data-modal-open]') : null;
+        if (openButton) { openModal(openButton.getAttribute('data-modal-open')); return; }
+        if (e.target.closest && e.target.closest('[data-modal-close]')) { closeModals(); return; }
+        if (e.target.classList && e.target.classList.contains('modal-backdrop')) { closeModals(); return; }
+
+        var viewButton = e.target.closest ? e.target.closest('[data-task-view]') : null;
+        if (viewButton) {
+            await openTaskView(viewButton.getAttribute('data-task-view'));
             return;
         }
 
-        var inlineButton = e.target.closest ? e.target.closest('[data-task-inline]') : null;
-        if (inlineButton) {
-            await openTaskInline(inlineButton.getAttribute('data-task-inline'), inlineButton.getAttribute('data-task-pane-key'), inlineButton.getAttribute('data-task-id'));
+        var submitReviewButton = e.target.closest ? e.target.closest('[data-task-submit-review]') : null;
+        if (submitReviewButton) {
+            try {
+                var submitTaskId = submitReviewButton.getAttribute('data-task-submit-review');
+                await callApi('PATCH', '/api/v1/tasks/' + submitTaskId + '/status', { status: 'SUBMITTED' });
+                showMessage('Task submitted for Mangaka review.', false);
+                closeModals();
+                await loadData();
+            } catch (err) {
+                showMessage(err.message, true);
+            }
             return;
         }
 
@@ -617,6 +585,7 @@
             } catch (err) {
                 showMessage(err.message, true);
             }
+            return;
         }
 
         var imageDeleteButton = e.target.closest ? e.target.closest('[data-task-image-delete]') : null;
@@ -629,6 +598,7 @@
             } catch (err) {
                 showMessage(err.message, true);
             }
+            return;
         }
     });
 
@@ -659,6 +629,7 @@
                 showMessage('Task created successfully.', false);
                 e.target.reset();
                 document.getElementById('createTaskAssistantId').innerHTML = '<option value="">Select Chapter first</option>';
+                closeModals();
                 await loadData();
             } catch (err) {
                 showMessage(err.message, true);
@@ -677,18 +648,7 @@
                     dueDate: updateData.dueDate
                 });
                 showMessage('Task updated successfully.', false);
-                await loadData();
-            } catch (err) {
-                showMessage(err.message, true);
-            }
-        }
-
-        if (e.target.classList.contains('task-inline-status-form')) {
-            e.preventDefault();
-            try {
-                var statusData = formToObject(e.target);
-                await callApi('PATCH', '/api/v1/tasks/' + statusData.taskId + '/status', { status: statusData.status });
-                showMessage('Task status updated.', false);
+                closeModals();
                 await loadData();
             } catch (err) {
                 showMessage(err.message, true);

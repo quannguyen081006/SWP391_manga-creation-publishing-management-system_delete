@@ -138,9 +138,9 @@ public class PageTaskApiController {
             HttpSession session,
             @RequestParam("status") String status) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
-        SessionUserUtil.requireRole(user, "ASSISTANT", "Only ASSISTANT can update task status");
+        SessionUserUtil.requireRole(user, "ASSISTANT", "Only ASSISTANT can submit task for review");
         pageTaskRepository.updateStatusByAssistant(id, user.getId(), status.toUpperCase());
-        return ApiResponse.ok(null, "Task status updated");
+        return ApiResponse.ok(null, "Task submitted for review");
     }
 
     @RequestMapping(value = "/tasks/{id}/approve", method = RequestMethod.POST)
@@ -159,4 +159,3 @@ public class PageTaskApiController {
         return ApiResponse.ok(null, "Task rejected");
     }
 }
-
