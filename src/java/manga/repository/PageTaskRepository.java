@@ -734,6 +734,24 @@ public class PageTaskRepository {
         }
     }
 
+    public boolean areAllTasksApproved(long chapterId) {
+        String sql = "SELECT CASE WHEN COUNT(1) = 0 THEN 0 ELSE SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) END AS approvedCount, COUNT(1) AS totalCount FROM PageTask WHERE chapterId = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int approvedCount = rs.getInt("approvedCount");
+                    int totalCount = rs.getInt("totalCount");
+                    return totalCount > 0 && approvedCount == totalCount;
+                }
+                return false;
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check chapter task approval status", ex);
+        }
+    }
+
     public boolean createNotificationIfAbsentToday(long userId, String type, String message, long referenceId, String referenceType) {
         String checkSql =
             "SELECT COUNT(1) FROM Notification "

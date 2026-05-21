@@ -19,7 +19,7 @@ public class ManuscriptRepository {
     private DataSource dataSource;
 
     public List<ManuscriptSummary> listByChapter(long chapterId) {
-        String sql = "SELECT id, chapterId, version, status, submittedAt, reviewDeadline, fileUrl, revisionDeadline FROM Manuscript WHERE chapterId = ? ORDER BY version DESC";
+        String sql = "SELECT id, chapterId, version, status, submittedAt, reviewDeadline, fileUrl, revisionDeadline, feedback FROM Manuscript WHERE chapterId = ? ORDER BY version DESC";
         List<ManuscriptSummary> rows = new ArrayList<ManuscriptSummary>();
         try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, chapterId);
@@ -35,7 +35,7 @@ public class ManuscriptRepository {
     }
 
     public ManuscriptSummary findById(long manuscriptId) {
-        String sql = "SELECT id, chapterId, version, status, submittedAt, reviewDeadline, fileUrl, revisionDeadline FROM Manuscript WHERE id = ?";
+        String sql = "SELECT id, chapterId, version, status, submittedAt, reviewDeadline, fileUrl, revisionDeadline, feedback FROM Manuscript WHERE id = ?";
         try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, manuscriptId);
             try ( ResultSet rs = ps.executeQuery()) {
@@ -74,23 +74,28 @@ public class ManuscriptRepository {
         return rows;
     }
 
+    public List<ManuscriptSummary> listManuscriptsNeedingReviewReminder() {
+        String sql = "SELECT id, chapterId, version, status, submittedAt, reviewDeadline, fileUrl, revisionDeadline, feedback "
+                + "FROM Manuscript WHERE status IN ('SUBMITTED', 'UNDER_REVIEW') ORDER BY reviewDeadline ASC";
+        List<ManuscriptSummary> rows = new ArrayList<ManuscriptSummary>();
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+            try ( ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(map(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list manuscripts needing review", ex);
+        }
+        return rows;
+    }
+
     public long submit(long chapterId, String fileUrl) {
-        String checkActive = "SELECT COUNT(1) FROM Manuscript WHERE chapterId = ? AND status IN ('SUBMITTED','UNDER_REVIEW')";
         String versionSql = "SELECT ISNULL(MAX(version),0)+1 FROM Manuscript WHERE chapterId = ?";
         String archive = "UPDATE Manuscript SET status='ARCHIVED' WHERE chapterId = ? AND status IN ('APPROVED','REJECTED')";
         String insert = "INSERT INTO Manuscript (chapterId, version, status, submittedAt, fileUrl) VALUES (?, ?, 'SUBMITTED', GETDATE(), ?)";
 
         try ( Connection conn = dataSource.getConnection()) {
-            try ( PreparedStatement ps = conn.prepareStatement(checkActive)) {
-                ps.setLong(1, chapterId);
-                try ( ResultSet rs = ps.executeQuery()) {
-                    rs.next();
-                    if (rs.getInt(1) > 0) {
-                        throw new IllegalArgumentException("Cannot submit while active review exists (BR-53)");
-                    }
-                }
-            }
-
             int version;
             try ( PreparedStatement ps = conn.prepareStatement(versionSql)) {
                 ps.setLong(1, chapterId);
@@ -142,13 +147,21 @@ public class ManuscriptRepository {
         updateStatus(sql, manuscriptId, "Cannot approve manuscript");
     }
 
-    public void reject(long manuscriptId) {
-        String sql = "UPDATE Manuscript SET status='REJECTED', revisionDeadline=DATEADD(DAY,3,GETDATE()) WHERE id = ? AND status IN ('SUBMITTED','UNDER_REVIEW')";
-        updateStatus(sql, manuscriptId, "Cannot reject manuscript");
+    public void reject(long manuscriptId, String feedback) {
+        String sql = "UPDATE Manuscript SET status='REJECTED', revisionDeadline=DATEADD(DAY,3,GETDATE()), feedback=? WHERE id = ? AND status IN ('SUBMITTED','UNDER_REVIEW')";
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, feedback);
+            ps.setLong(2, manuscriptId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Cannot reject manuscript");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot reject manuscript", ex);
+        }
     }
 
     public void startReview(long manuscriptId) {
-        String sql = "UPDATE Manuscript SET status='UNDER_REVIEW', reviewDeadline=DATEADD(DAY,7,GETDATE()) WHERE id = ? AND status = 'SUBMITTED'";
+        String sql = "UPDATE Manuscript SET status='UNDER_REVIEW' WHERE id = ? AND status = 'SUBMITTED'";
         updateStatus(sql, manuscriptId, "Cannot start review: manuscript must be in SUBMITTED status");
     }
 
@@ -215,6 +228,7 @@ public class ManuscriptRepository {
         m.setReviewDeadline(rs.getTimestamp("reviewDeadline"));
         m.setFileUrl(rs.getString("fileUrl"));
         m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
+        m.setFeedback(rs.getString("feedback"));
         return m;
     }
 

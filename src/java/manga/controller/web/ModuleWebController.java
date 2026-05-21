@@ -28,6 +28,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.Part;
+import static manga.common.util.SessionUserUtil.requireRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -278,9 +279,36 @@ public class ModuleWebController {
             throw new IllegalArgumentException("Manuscript not found");
         }
 
+        long chapterId = manuscript.getChapterId();
+        long mangakaId = manuscriptRepository.getChapterMangaka(chapterId);
+        long tantouId = manuscriptRepository.getManuscriptTantou(id);
+        String status = manuscript.getStatus();
+        boolean isMangakaOwner = user.getId() == mangakaId;
+        boolean isAssignedTantou = user.getId() == tantouId;
+        boolean isUnderReview = "UNDER_REVIEW".equals(status);
+        boolean isRejected = "REJECTED".equals(status);
+        boolean isApproved = "APPROVED".equals(status);
+        boolean isDraft = "DRAFT".equals(status);
+        boolean isSubmitted = "SUBMITTED".equals(status);
+
+        // Permission flags for JSP
         model.addAttribute("manuscript", manuscript);
         model.addAttribute("annotations", manuscriptRepository.listAnnotations(id));
-        model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && manuscriptRepository.getManuscriptTantou(id) == user.getId());
+        model.addAttribute("currentUser", user);
+        model.addAttribute("isMangakaOwner", isMangakaOwner);
+        model.addAttribute("isAssignedTantou", isAssignedTantou);
+        model.addAttribute("isUnderReview", isUnderReview);
+        model.addAttribute("isRejected", isRejected);
+        model.addAttribute("isApproved", isApproved);
+        model.addAttribute("isDraft", isDraft);
+        model.addAttribute("isSubmitted", isSubmitted);
+        
+        // Annotation button: TANTOU_EDITOR assigned + not approved
+        model.addAttribute("canAddAnnotation", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && !isApproved);
+        
+        // Approve/Reject buttons: TANTOU_EDITOR assigned + UNDER_REVIEW
+        model.addAttribute("canApproveReject", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview);
+        
         return "manuscript/detail";
     }
 
@@ -301,13 +329,20 @@ public class ModuleWebController {
     }
 
     @RequestMapping(value = "/manuscripts/{id}/reject", method = RequestMethod.POST)
-    public String manuscriptReject(@PathVariable("id") long id, HttpSession session, Model model) {
+    public String manuscriptReject(
+            @PathVariable("id") long id,
+            @RequestParam("feedback") String feedback,
+            HttpSession session,
+            Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
             if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
                 throw new IllegalArgumentException("Only assigned Tantou can reject");
             }
-            manuscriptRepository.reject(id);
+            if (feedback == null || feedback.trim().isEmpty()) {
+                throw new IllegalArgumentException("Feedback is required for rejection (BR-40)");
+            }
+            manuscriptRepository.reject(id, feedback.trim());
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -334,6 +369,32 @@ public class ModuleWebController {
             manuscriptDetail(id, session, model);
             model.addAttribute("error", ex.getMessage());
             return "manuscript/detail";
+        }
+    }
+
+    @RequestMapping(value = "/manuscripts/create", method = RequestMethod.GET)
+    public String manuscriptCreate(HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
+        model.addAttribute("chapters", chapterRepository.listAll());
+        return "manuscript/create";
+    }
+
+    @RequestMapping(value = "/manuscripts/create", method = RequestMethod.POST)
+    public String manuscriptCreateSubmit(
+            HttpSession session,
+            @RequestParam("chapterId") long chapterId,
+            @RequestParam("fileUrl") String fileUrl,
+            Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
+            manuscriptRepository.submit(chapterId, fileUrl);
+            return "redirect:/main/manuscripts";
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            model.addAttribute("chapters", chapterRepository.listAll());
+            return "manuscript/create";
         }
     }
 

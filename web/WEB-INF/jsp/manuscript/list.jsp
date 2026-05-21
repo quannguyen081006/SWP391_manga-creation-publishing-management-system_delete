@@ -14,6 +14,13 @@
 <h2 class="page-title">Manuscripts</h2>
 <p class="page-sub">Track your manuscript submissions</p>
 
+<c:if test="${isMangaka}">
+<div class="section-head">
+    <div></div>
+    <a class="btn primary" href="${pageContext.request.contextPath}/main/manuscripts/create">+ New Manuscript</a>
+</div>
+</c:if>
+
 <section class="metric-grid">
     <article class="metric-card"><div class="metric-value metric-violet">${pendingReview}</div><div class="metric-label">Pending Review</div></article>
     <article class="metric-card"><div class="metric-value metric-amber">${urgentManuscripts}</div><div class="metric-label">Urgent (&lt; 12h)</div></article>

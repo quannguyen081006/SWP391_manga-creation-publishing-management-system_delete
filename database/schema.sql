@@ -285,6 +285,7 @@ CREATE TABLE Manuscript (
     reviewDeadline      AS DATEADD(HOUR, 48, submittedAt) PERSISTED,
     fileUrl             VARCHAR(512)    NOT NULL,
     revisionDeadline    DATETIME            NULL,   -- rejectedAt + 3 days (BR-27), set by application
+    feedback            NVARCHAR(MAX)       NULL,   -- BR-40: feedback required when rejecting manuscript
     CONSTRAINT PK_Manuscript            PRIMARY KEY (id),
     CONSTRAINT FK_Manuscript_Chapter    FOREIGN KEY (chapterId) REFERENCES Chapter(id),
     CONSTRAINT CK_Manuscript_status     CHECK (status IN (

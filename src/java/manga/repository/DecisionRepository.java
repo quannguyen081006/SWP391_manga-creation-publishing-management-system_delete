@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -265,6 +266,46 @@ public class DecisionRepository {
         try (PreparedStatement ps = conn.prepareStatement(notifySql)) {
             ps.setLong(1, sessionId);
             ps.executeUpdate();
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  createSession — create new OPEN decision session                    //
+    // ------------------------------------------------------------------ //
+    public long createSession(long seriesId, long rankingRecordId) {
+        String sql = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt) VALUES (?, ?, 'OPEN', GETDATE())";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setLong(1, seriesId);
+            ps.setLong(2, rankingRecordId);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+            throw new IllegalStateException("Cannot create decision session");
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot create decision session", ex);
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  finalizeSession — manually finalize session (for ADMIN)           //
+    // ------------------------------------------------------------------ //
+    public void finalizeSession(long sessionId) {
+        // This method is called by DecisionService.finalizeDecision()
+        // The actual finalization logic is in resolveIfQuorum()
+        // This is a placeholder for manual finalization if needed
+        String sql = "UPDATE DecisionSession SET status = 'CLOSED', closedAt = GETDATE() WHERE id = ? AND status = 'OPEN'";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Only OPEN session can be finalized");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot finalize decision session", ex);
         }
     }
 

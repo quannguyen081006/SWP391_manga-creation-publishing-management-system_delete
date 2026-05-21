@@ -210,15 +210,22 @@
 
     function canSubmitChapter(ch) {
         var status = String(ch.status || '').toUpperCase();
-        return isOwnSeries(ch.seriesId) && Number(ch.completionPct || 0) >= 100 && (status === 'IN_PROGRESS' || status === 'COMPLETE');
+        var series = seriesById[String(ch.seriesId)];
+        // ADD MANUSCRIPT button: MANGAKA owner + chapter COMPLETE + no active review cycle + series not CANCELLED
+        return isOwnSeries(ch.seriesId) 
+            && Number(ch.completionPct || 0) >= 100 
+            && status === 'COMPLETE'
+            && series && String(series.status || '').toUpperCase() !== 'CANCELLED';
     }
 
     function submitHint(ch) {
         if (!isOwnSeries(ch.seriesId)) { return 'Only the owner Mangaka can submit this chapter.'; }
         if (Number(ch.completionPct || 0) < 100) { return 'Chapter must be 100% complete before submit review.'; }
         var status = String(ch.status || '').toUpperCase();
-        if (!(status === 'IN_PROGRESS' || status === 'COMPLETE')) { return 'Chapter status must be In Progress or Complete.'; }
-        return 'Ready to submit for editorial review.';
+        if (status !== 'COMPLETE') { return 'Chapter status must be Complete.'; }
+        var series = seriesById[String(ch.seriesId)];
+        if (series && String(series.status || '').toUpperCase() === 'CANCELLED') { return 'Cannot submit manuscript for cancelled series.'; }
+        return 'Ready to submit manuscript for editorial review.';
     }
 
     function renderChapterActions() {

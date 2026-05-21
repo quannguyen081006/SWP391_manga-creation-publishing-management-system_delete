@@ -11,6 +11,7 @@ public class ManuscriptSummary {
     private Timestamp reviewDeadline;
     private String fileUrl;
     private Timestamp revisionDeadline;
+    private String feedback;
     private String seriesTitle;
     private String chapterTitle;
     private Integer chapterNumber;
@@ -31,6 +32,8 @@ public class ManuscriptSummary {
     public void setFileUrl(String fileUrl) { this.fileUrl = fileUrl; }
     public Timestamp getRevisionDeadline() { return revisionDeadline; }
     public void setRevisionDeadline(Timestamp revisionDeadline) { this.revisionDeadline = revisionDeadline; }
+    public String getFeedback() { return feedback; }
+    public void setFeedback(String feedback) { this.feedback = feedback; }
     public String getSeriesTitle() { return seriesTitle; }
     public void setSeriesTitle(String seriesTitle) { this.seriesTitle = seriesTitle; }
     public String getChapterTitle() { return chapterTitle; }

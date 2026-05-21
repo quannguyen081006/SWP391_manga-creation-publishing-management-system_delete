@@ -124,6 +124,7 @@ public class MainController {
 
     @RequestMapping(value = "/manuscripts", method = RequestMethod.GET)
     public String manuscripts(HttpSession session, Model model) {
+        AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
         List<ManuscriptSummary> manuscripts = productionRepository.listManuscripts();
         int pendingReview = 0;
         int urgent = 0;
@@ -148,6 +149,8 @@ public class MainController {
         model.addAttribute("pendingReview", pendingReview);
         model.addAttribute("urgentManuscripts", urgent);
         model.addAttribute("slaBreached", breached);
+        model.addAttribute("currentUser", user);
+        model.addAttribute("isMangaka", user != null && user.hasRole("MANGAKA"));
         return "manuscript/list";
     }
 
