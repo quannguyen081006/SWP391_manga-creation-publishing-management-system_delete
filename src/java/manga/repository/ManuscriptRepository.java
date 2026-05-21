@@ -165,6 +165,43 @@ public class ManuscriptRepository {
         updateStatus(sql, manuscriptId, "Cannot start review: manuscript must be in SUBMITTED status");
     }
 
+    public void submitForReview(long manuscriptId) {
+        String sql = "UPDATE Manuscript SET status='SUBMITTED', submittedAt=GETDATE(), reviewDeadline=DATEADD(HOUR,48,GETDATE()) WHERE id = ? AND status IN ('DRAFT','REJECTED')";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, manuscriptId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Cannot submit manuscript: must be DRAFT or REJECTED");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot submit manuscript for review", ex);
+        }
+    }
+
+    public void updateFileUrl(long manuscriptId, String fileUrl) {
+        String sql = "UPDATE Manuscript SET fileUrl=? WHERE id = ? AND status IN ('DRAFT','REJECTED')";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fileUrl);
+            ps.setLong(2, manuscriptId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Cannot update manuscript: must be DRAFT or REJECTED");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update manuscript", ex);
+        }
+    }
+
+    public void delete(long manuscriptId) {
+        String sql = "DELETE FROM Manuscript WHERE id = ? AND status NOT IN ('APPROVED','UNDER_REVIEW')";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, manuscriptId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Cannot delete APPROVED or UNDER_REVIEW manuscript");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot delete manuscript", ex);
+        }
+    }
+
     public long getChapterMangaka(long chapterId) {
         String sql = "SELECT s.mangakaId FROM Chapter c JOIN Series s ON s.id=c.seriesId WHERE c.id = ?";
         return queryLong(sql, chapterId, "Cannot resolve chapter owner");

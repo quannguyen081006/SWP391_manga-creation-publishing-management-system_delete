@@ -13,6 +13,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class RankingRepository {
@@ -26,9 +27,7 @@ public class RankingRepository {
     public List<Map<String, Object>> listPeriods() {
         String sql = "SELECT id, name, startDate, endDate, status, calculatedAt FROM RankingPeriod ORDER BY id DESC";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql);  ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 rows.add(mapPeriod(rs));
             }
@@ -43,10 +42,9 @@ public class RankingRepository {
     // ------------------------------------------------------------------ //
     public Map<String, Object> findPeriodById(long periodId) {
         String sql = "SELECT id, name, startDate, endDate, status, calculatedAt FROM RankingPeriod WHERE id = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
-            try (ResultSet rs = ps.executeQuery()) {
+            try ( ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalArgumentException("Ranking period not found");
                 }
@@ -62,13 +60,12 @@ public class RankingRepository {
     // ------------------------------------------------------------------ //
     public long createPeriod(String name, Date startDate, Date endDate) {
         String sql = "INSERT INTO RankingPeriod (name, startDate, endDate, status) VALUES (?, ?, ?, 'OPEN')";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
             ps.setDate(2, startDate);
             ps.setDate(3, endDate);
             ps.executeUpdate();
-            try (ResultSet rs = ps.getGeneratedKeys()) {
+            try ( ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
                     return rs.getLong(1);
                 }
@@ -84,8 +81,7 @@ public class RankingRepository {
     // ------------------------------------------------------------------ //
     public void closePeriod(long periodId) {
         String sql = "UPDATE RankingPeriod SET status = 'CLOSED' WHERE id = ? AND status = 'OPEN'";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Only OPEN period can be closed");
@@ -113,16 +109,16 @@ public class RankingRepository {
         }
 
         String periodStatusSql = "SELECT status FROM RankingPeriod WHERE id = ?";
-        String duplicateSql    = "SELECT COUNT(1) FROM VoteEntry WHERE periodId = ? AND seriesId = ? AND boardMemberId = ?";
-        String insertSql       = "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt)"
-                               + " VALUES (?, ?, ?, ?, ?, GETDATE())";
+        String duplicateSql = "SELECT COUNT(1) FROM VoteEntry WHERE periodId = ? AND seriesId = ? AND boardMemberId = ?";
+        String insertSql = "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt)"
+                + " VALUES (?, ?, ?, ?, ?, GETDATE())";
 
-        try (Connection conn = dataSource.getConnection()) {
+        try ( Connection conn = dataSource.getConnection()) {
 
             // Check 1: period phải OPEN (BR-49)
-            try (PreparedStatement ps = conn.prepareStatement(periodStatusSql)) {
+            try ( PreparedStatement ps = conn.prepareStatement(periodStatusSql)) {
                 ps.setLong(1, periodId);
-                try (ResultSet rs = ps.executeQuery()) {
+                try ( ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalArgumentException("Ranking period not found");
                     }
@@ -133,21 +129,21 @@ public class RankingRepository {
             }
 
             // Check 2: không duplicate (BR-54)
-            try (PreparedStatement ps = conn.prepareStatement(duplicateSql)) {
+            try ( PreparedStatement ps = conn.prepareStatement(duplicateSql)) {
                 ps.setLong(1, periodId);
                 ps.setLong(2, seriesId);
                 ps.setLong(3, boardMemberId);
-                try (ResultSet rs = ps.executeQuery()) {
+                try ( ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     if (rs.getInt(1) > 0) {
                         throw new IllegalArgumentException(
-                            "You have already submitted a vote entry for this series in this period (BR-54)");
+                                "You have already submitted a vote entry for this series in this period (BR-54)");
                     }
                 }
             }
 
             // Insert vote entry
-            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            try ( PreparedStatement ps = conn.prepareStatement(insertSql)) {
                 ps.setLong(1, periodId);
                 ps.setLong(2, seriesId);
                 ps.setLong(3, boardMemberId);
@@ -166,21 +162,20 @@ public class RankingRepository {
     // ------------------------------------------------------------------ //
     public List<Map<String, Object>> listEntries(long periodId) {
         String sql = "SELECT id, periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt"
-                   + " FROM VoteEntry WHERE periodId = ? ORDER BY id DESC";
+                + " FROM VoteEntry WHERE periodId = ? ORDER BY id DESC";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
-            try (ResultSet rs = ps.executeQuery()) {
+            try ( ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> row = new HashMap<String, Object>();
-                    row.put("id",            rs.getLong("id"));
-                    row.put("periodId",      rs.getLong("periodId"));
-                    row.put("seriesId",      rs.getLong("seriesId"));
+                    row.put("id", rs.getLong("id"));
+                    row.put("periodId", rs.getLong("periodId"));
+                    row.put("seriesId", rs.getLong("seriesId"));
                     row.put("boardMemberId", rs.getLong("boardMemberId"));
-                    row.put("voteCount",     rs.getInt("voteCount"));
-                    row.put("readerCount",   rs.getInt("readerCount"));
-                    row.put("submittedAt",   rs.getTimestamp("submittedAt"));
+                    row.put("voteCount", rs.getInt("voteCount"));
+                    row.put("readerCount", rs.getInt("readerCount"));
+                    row.put("submittedAt", rs.getTimestamp("submittedAt"));
                     rows.add(row);
                 }
             }
@@ -197,162 +192,203 @@ public class RankingRepository {
     //   3. Gửi notification DECISION_SESSION_OPENED cho Board members     //
     //  Tất cả trong 1 transaction                                         //
     // ------------------------------------------------------------------ //
+    @Transactional
     public void calculatePeriod(long periodId) {
 
-        // Bước 1: Check status
-        String statusSql = "SELECT status FROM RankingPeriod WHERE id = ?";
+// =========================================================
+// STEP 1 — CHECK PERIOD STATUS
+// =========================================================
+        String statusSql
+                = "SELECT status FROM RankingPeriod WHERE id = ?";
 
-        // Bước 2: Xoá ranking record cũ của period này (để recalculate an toàn)
-        String deleteSql = "DELETE FROM RankingRecord WHERE periodId = ?";
+// =========================================================
+// STEP 2 — CALCULATE RANKING
+// =========================================================
+        String insertRankingSql
+                = ";WITH agg AS ("
+                + " SELECT ve.seriesId,"
+                + "   CAST(("
+                + "     SUM(CAST(ve.voteCount AS DECIMAL(18,6)))"
+                + "     / NULLIF(SUM(CAST(ve.readerCount AS DECIMAL(18,6))), 0)"
+                + "   ) * 100 AS DECIMAL(6,2)) AS rankScore"
+                + " FROM VoteEntry ve"
+                + " WHERE ve.periodId = ?"
+                + "   AND ve.voteCount >= 0"
+                + "   AND ve.readerCount > 0"
+                + "   AND ve.voteCount <= ve.readerCount"
+                + " GROUP BY ve.seriesId"
+                + "), ranked AS ("
+                + " SELECT"
+                + "   seriesId,"
+                + "   rankScore,"
+                + "   ROW_NUMBER() OVER (ORDER BY rankScore DESC, seriesId ASC) AS rankPosition,"
+                + "   COUNT(*) OVER () AS totalRows"
+                + " FROM agg"
+                + ")"
+                + " INSERT INTO RankingRecord ("
+                + "   periodId,"
+                + "   seriesId,"
+                + "   rankScore,"
+                + "   rankPosition,"
+                + "   isBottomTwenty,"
+                + "   calculatedAt"
+                + " )"
+                + " SELECT"
+                + "   ?,"
+                + "   r.seriesId,"
+                + "   r.rankScore,"
+                + "   r.rankPosition,"
+                + "   CASE"
+                + "     WHEN r.rankPosition > r.totalRows - CEILING(r.totalRows * 0.2)"
+                + "       THEN 1"
+                + "     ELSE 0"
+                + "   END,"
+                + "   GETDATE()"
+                + " FROM ranked r";
 
-        // Bước 3: Tính score + rank + isBottomTwenty, insert vào RankingRecord
-        // FIX: thêm CASE WHEN totalRows <= 1 THEN 1 để handle edge case 1 series
-        String insertRankingSql =
-            ";WITH agg AS ("
-            + " SELECT ve.seriesId,"
-            + "   CAST((SUM(CAST(ve.voteCount AS DECIMAL(18,6)))"
-            + "     / NULLIF(SUM(CAST(ve.readerCount AS DECIMAL(18,6))), 0)) * 100"
-            + "   AS DECIMAL(6,2)) AS rankScore"
-            + " FROM VoteEntry ve"
-            + " WHERE ve.periodId = ?"
-            + " GROUP BY ve.seriesId"
-            + "), ranked AS ("
-            + " SELECT seriesId, rankScore,"
-            + "   ROW_NUMBER() OVER (ORDER BY rankScore DESC, seriesId ASC) AS rankPosition,"
-            + "   COUNT(*) OVER () AS totalRows"
-            + " FROM agg"
-            + ")"
-            + " INSERT INTO RankingRecord (periodId, seriesId, rankScore, rankPosition, isBottomTwenty, calculatedAt)"
-            + " SELECT ?, r.seriesId, r.rankScore, r.rankPosition,"
-            + "   CASE"
-            + "     WHEN r.totalRows <= 1 THEN 1"                          // edge case: 1 series duy nhất → luôn là bottom
-            + "     WHEN r.rankPosition > CEILING(r.totalRows * 0.8) THEN 1"
-            + "     ELSE 0"
-            + "   END,"
-            + "   GETDATE()"
-            + " FROM ranked r";
+// =========================================================
+// STEP 3 — AUTO CREATE DECISION SESSION
+// =========================================================
+        String createSessionsSql
+                = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt)"
+                + " SELECT rr.seriesId, rr.id, 'OPEN', GETDATE()"
+                + " FROM RankingRecord rr"
+                + " JOIN Series s ON s.id = rr.seriesId"
+                + " WHERE rr.periodId = ?"
+                + "   AND rr.isBottomTwenty = 1"
+                + "   AND s.status != 'CANCELLED'"
+                + "   AND NOT EXISTS ("
+                + "     SELECT 1"
+                + "     FROM DecisionSession ds"
+                + "     WHERE ds.seriesId = rr.seriesId"
+                + "       AND ds.status = 'OPEN'"
+                + "   )";
 
-        // Bước 4: Tự động tạo DecisionSession cho bottom series chưa có session OPEN
-        String createSessionsSql =
-            "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt)"
-            + " SELECT rr.seriesId, rr.id, 'OPEN', GETDATE()"
-            + " FROM RankingRecord rr"
-            + " WHERE rr.periodId = ?"
-            + "   AND rr.isBottomTwenty = 1"
-            + "   AND rr.seriesId NOT IN ("
-            + "     SELECT seriesId FROM DecisionSession WHERE status = 'OPEN'"
-            + "   )";
+// =========================================================
+// STEP 4 — SEND NOTIFICATION
+// =========================================================
+// =========================================================
+// STEP 5 — UPDATE PERIOD STATUS
+// =========================================================
+        String updatePeriodSql
+                = "UPDATE RankingPeriod "
+                + "SET status = 'CALCULATED', "
+                + "    calculatedAt = GETDATE() "
+                + "WHERE id = ?";
 
-        // Bước 5: Gửi notification DECISION_SESSION_OPENED cho tất cả Board members active
-        // JOIN với DecisionSession vừa tạo để lấy đúng sessionId làm referenceId
-        String notifySql =
-            "INSERT INTO Notification (userId, type, message, referenceId, referenceType, isRead, createdAt)"
-            + " SELECT u.id,"
-            + "   'DECISION_SESSION_OPENED',"
-            + "   'A decision session has been opened for a series ranked in the bottom 20%. Please review and vote.',"
-            + "   ds.id,"
-            + "   'DECISION_SESSION',"
-            + "   0,"
-            + "   GETDATE()"
-            + " FROM DecisionSession ds"
-            + " JOIN RankingRecord rr ON rr.id = ds.rankingRecordId"
-            + " CROSS JOIN [User] u"
-            + " JOIN UserRole ur ON ur.userId = u.id"
-            + " JOIN [Role] ro ON ro.id = ur.roleId"
-            + " WHERE rr.periodId = ?"
-            + "   AND rr.isBottomTwenty = 1"
-            + "   AND ro.name = 'EDITORIAL_BOARD'"
-            + "   AND u.status = 'ACTIVE'";
+        try ( Connection conn = dataSource.getConnection()) {
 
-        // Bước 6: Update RankingPeriod status = CALCULATED
-        String updatePeriodSql =
-            "UPDATE RankingPeriod SET status = 'CALCULATED', calculatedAt = GETDATE() WHERE id = ?";
-
-        try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
+
             try {
 
-                // Bước 1: Validate status
-                try (PreparedStatement ps = conn.prepareStatement(statusSql)) {
+                // =====================================================
+                // VALIDATE STATUS
+                // =====================================================
+                try ( PreparedStatement ps = conn.prepareStatement(statusSql)) {
+
                     ps.setLong(1, periodId);
-                    try (ResultSet rs = ps.executeQuery()) {
+
+                    try ( ResultSet rs = ps.executeQuery()) {
+
                         if (!rs.next()) {
-                            throw new IllegalArgumentException("Ranking period not found");
+                            throw new IllegalArgumentException(
+                                    "Ranking period not found"
+                            );
                         }
+
                         String status = rs.getString("status");
+
                         if ("CALCULATED".equalsIgnoreCase(status)) {
-                            throw new IllegalArgumentException("Ranking period already calculated");
+                            throw new IllegalArgumentException(
+                                    "Ranking period already calculated"
+                            );
                         }
+
                         if (!"CLOSED".equalsIgnoreCase(status)) {
-                            throw new IllegalArgumentException("Only CLOSED period can be calculated");
+                            throw new IllegalArgumentException(
+                                    "Only CLOSED period can be calculated"
+                            );
                         }
                     }
                 }
 
-                // Bước 2: Xoá record cũ
-                try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                // =====================================================
+                // INSERT RANKING RECORDS
+                // =====================================================
+                try ( PreparedStatement ps
+                        = conn.prepareStatement(insertRankingSql)) {
+
                     ps.setLong(1, periodId);
+                    ps.setLong(2, periodId);
+
                     ps.executeUpdate();
                 }
 
-                // Bước 3: Insert ranking records mới (với isBottomTwenty đã fix)
-                try (PreparedStatement ps = conn.prepareStatement(insertRankingSql)) {
-                    ps.setLong(1, periodId); // cho CTE agg
-                    ps.setLong(2, periodId); // cho SELECT INSERT
+                // =====================================================
+                // CREATE DECISION SESSION
+                // =====================================================
+                try ( PreparedStatement ps
+                        = conn.prepareStatement(createSessionsSql)) {
+
+                    ps.setLong(1, periodId);
+
                     ps.executeUpdate();
                 }
 
-                // Bước 4: Tạo DecisionSession tự động
-                try (PreparedStatement ps = conn.prepareStatement(createSessionsSql)) {
-                    ps.setLong(1, periodId);
-                    ps.executeUpdate();
-                }
+                // =====================================================
+                // SEND NOTIFICATIONS
+                // =====================================================
+                // =====================================================
+                // UPDATE PERIOD STATUS
+                // =====================================================
+                try ( PreparedStatement ps
+                        = conn.prepareStatement(updatePeriodSql)) {
 
-                // Bước 5: Gửi notification cho Board members
-                try (PreparedStatement ps = conn.prepareStatement(notifySql)) {
                     ps.setLong(1, periodId);
-                    ps.executeUpdate();
-                }
 
-                // Bước 6: Đánh dấu period = CALCULATED
-                try (PreparedStatement ps = conn.prepareStatement(updatePeriodSql)) {
-                    ps.setLong(1, periodId);
                     ps.executeUpdate();
                 }
 
                 conn.commit();
 
             } catch (Exception ex) {
+
                 conn.rollback();
                 throw ex;
+
             } finally {
+
                 conn.setAutoCommit(true);
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot calculate ranking period", ex);
+            throw new RuntimeException(
+                    "Cannot calculate ranking period: " + ex.getMessage(),
+                    ex
+            );
         }
-    }
 
+    }
     // ------------------------------------------------------------------ //
     //  results — không thay đổi                                           //
     // ------------------------------------------------------------------ //
+
     public List<Map<String, Object>> results(long periodId) {
         String sql = "SELECT id, periodId, seriesId, rankScore, rankPosition, isBottomTwenty, calculatedAt"
-                   + " FROM RankingRecord WHERE periodId = ? ORDER BY rankPosition";
+                + " FROM RankingRecord WHERE periodId = ? ORDER BY rankPosition";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
-            try (ResultSet rs = ps.executeQuery()) {
+            try ( ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> row = new HashMap<String, Object>();
-                    row.put("id",             rs.getLong("id"));
-                    row.put("periodId",       rs.getLong("periodId"));
-                    row.put("seriesId",       rs.getLong("seriesId"));
-                    row.put("rankScore",      rs.getBigDecimal("rankScore"));
-                    row.put("rankPosition",   rs.getInt("rankPosition"));
+                    row.put("id", rs.getLong("id"));
+                    row.put("periodId", rs.getLong("periodId"));
+                    row.put("seriesId", rs.getLong("seriesId"));
+                    row.put("rankScore", rs.getBigDecimal("rankScore"));
+                    row.put("rankPosition", rs.getInt("rankPosition"));
                     row.put("isBottomTwenty", rs.getBoolean("isBottomTwenty"));
-                    row.put("calculatedAt",   rs.getTimestamp("calculatedAt"));
+                    row.put("calculatedAt", rs.getTimestamp("calculatedAt"));
                     rows.add(row);
                 }
             }
@@ -367,11 +403,11 @@ public class RankingRepository {
     // ------------------------------------------------------------------ //
     private Map<String, Object> mapPeriod(ResultSet rs) throws SQLException {
         Map<String, Object> row = new HashMap<String, Object>();
-        row.put("id",          rs.getLong("id"));
-        row.put("name",        rs.getString("name"));
-        row.put("startDate",   rs.getDate("startDate"));
-        row.put("endDate",     rs.getDate("endDate"));
-        row.put("status",      rs.getString("status"));
+        row.put("id", rs.getLong("id"));
+        row.put("name", rs.getString("name"));
+        row.put("startDate", rs.getDate("startDate"));
+        row.put("endDate", rs.getDate("endDate"));
+        row.put("status", rs.getString("status"));
         row.put("calculatedAt", rs.getTimestamp("calculatedAt"));
         return row;
     }

@@ -304,6 +304,38 @@ public class ChapterRepository {
         }
     }
 
+    public String getChapterStatus(long chapterId) {
+        String sql = "SELECT status FROM Chapter WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Chapter not found");
+                }
+                return rs.getString("status");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot get chapter status", ex);
+        }
+    }
+
+    public String getSeriesStatus(long chapterId) {
+        String sql = "SELECT s.status FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Chapter not found");
+                }
+                return rs.getString("status");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot get series status", ex);
+        }
+    }
+
     public long findSeriesTantou(long seriesId) {
         String sql = "SELECT tantouEditorId FROM Series WHERE id = ?";
         try (Connection conn = dataSource.getConnection();

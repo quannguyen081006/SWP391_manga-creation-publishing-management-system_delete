@@ -28,27 +28,47 @@
     </c:if>
 </div>
 
-<!-- MANGAKA: Add/Update/Delete buttons - only if owner -->
+<!-- VERSION HISTORY -->
+<div class="section-card">
+    <h3 class="section-title compact-title">Version History</h3>
+    <table class="data-table">
+        <thead><tr><th>Version</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead>
+        <tbody>
+            <c:forEach items="${versionHistory}" var="v">
+                <tr class="${v.id == manuscript.id ? 'row-current' : ''}">
+                    <td>v${v.version}</td>
+                    <td><span class="status-chip ${v.status=='APPROVED' ? 'status-approved' : (v.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${v.status}</span></td>
+                    <td>${v.submittedAt}</td>
+                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${v.id}">View</a></td>
+                </tr>
+            </c:forEach>
+        </tbody>
+    </table>
+</div>
+
+<!-- MANGAKA: Manuscript Actions -->
 <c:if test="${isMangakaOwner}">
     <div class="section-card">
         <h3 class="section-title compact-title">Manuscript Actions</h3>
         <div class="row-actions">
-            <!-- Add Manuscript button - only if chapter COMPLETE + no active review cycle -->
-            <c:if test="${chapterStatus == 'COMPLETE' && noActiveReviewCycle}">
-                <a class="btn small primary" href="${pageContext.request.contextPath}/main/chapters/${manuscript.chapterId}/manuscripts/new">Add</a>
+            <!-- SUBMIT TO EDITOR button -->
+            <c:if test="${canSubmitToEditor}">
+                <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/submit" style="display: inline;">
+                    <button class="btn small primary" type="submit">Submit to Editor</button>
+                </form>
             </c:if>
-            <!-- Update button - only if DRAFT or REJECTED + not APPROVED + not UNDER_REVIEW -->
-            <c:if test="${(isDraft || isRejected) && !isApproved && !isUnderReview}">
+            <!-- EDIT button -->
+            <c:if test="${canEdit}">
                 <a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/edit">Edit</a>
             </c:if>
-            <!-- Delete button - only if not APPROVED + not UNDER_REVIEW -->
-            <c:if test="${!isApproved && !isUnderReview}">
+            <!-- DELETE button -->
+            <c:if test="${canDelete}">
                 <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/delete" style="display: inline;">
                     <button class="btn small danger-soft" type="submit" onclick="return confirm('Delete this manuscript? This cannot be undone.');">Delete</button>
                 </form>
             </c:if>
-            <!-- Resubmit button - only if REJECTED + revisionDeadline not expired -->
-            <c:if test="${isRejected && not empty manuscript.revisionDeadline}">
+            <!-- RESUBMIT button -->
+            <c:if test="${canResubmit}">
                 <form method="post" action="${pageContext.request.contextPath}/main/chapters/${manuscript.chapterId}/manuscripts" style="display: inline;">
                     <input type="hidden" name="fileUrl" value="${manuscript.fileUrl}" />
                     <button class="btn small primary" type="submit">Resubmit</button>
@@ -58,7 +78,19 @@
     </div>
 </c:if>
 
-<!-- TANTOU EDITOR: Approve/Reject buttons - only if assigned editor + UNDER_REVIEW -->
+<!-- TANTOU EDITOR: Start Review button -->
+<c:if test="${canStartReview}">
+    <div class="section-card">
+        <h3 class="section-title compact-title">Start Review</h3>
+        <div class="row-actions">
+            <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/start-review" style="display: inline;">
+                <button class="btn small primary" type="submit">Start Review</button>
+            </form>
+        </div>
+    </div>
+</c:if>
+
+<!-- TANTOU EDITOR: Approve/Reject buttons -->
 <c:if test="${canApproveReject}">
     <div class="section-card">
         <h3 class="section-title compact-title">Tantou Review</h3>
@@ -74,7 +106,7 @@
     </div>
 </c:if>
 
-<!-- TANTOU EDITOR: Add Annotation button - only if assigned editor + UNDER_REVIEW -->
+<!-- TANTOU EDITOR: Add Annotation button -->
 <c:if test="${canAddAnnotation}">
     <div class="section-card">
         <h3 class="section-title compact-title">Add Annotation</h3>
@@ -88,8 +120,9 @@
     </div>
 </c:if>
 
+<!-- Annotations -->
 <div class="section-card">
-    <h3 class="section-title compact-title">Annotations</h3>
+    <h3 class="section-title compact-title">Annotations (v${manuscript.version})</h3>
     <table class="data-table">
         <thead><tr><th>Page</th><th>Content</th><th>Created</th></tr></thead>
         <tbody>

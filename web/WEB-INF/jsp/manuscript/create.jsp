@@ -1,3 +1,4 @@
+tôi muốn chỗ url đổi thành trích dẫn file
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <!DOCTYPE html>
@@ -23,7 +24,7 @@
             <option value="">Select a chapter</option>
             <c:forEach items="${chapters}" var="ch">
                 <option value="${ch.id}">
-                    #${ch.seriesId} - ${ch.seriesTitle} | Ch. ${ch.chapterNumber} - ${ch.chapterTitle}
+                    Series #${ch.seriesId} | Ch. ${ch.chapterNumber} - ${ch.title}
                 </option>
             </c:forEach>
         </select>
