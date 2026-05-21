@@ -1,6 +1,18 @@
 -- ============================================================
---  MANGA EDITORIAL SYSTEM — SQL Server DDL Script
---  Generated from Section 3 Domain Model / Entity Design
+--  MANGA EDITORIAL SYSTEM — SQL Server DDL Script (MERGED)
+--  Sources:
+--    [1] schema.sql                            (base schema)
+--    [2] migration_20260521_proposal_admin.sql (proposal fields, ProposalHistory, admin constraint)
+--    [3] Add_File_For_Chapter_And_Task.sql     (ChapterImage table)
+--
+--  Conflict resolution notes:
+--    • [2] thêm sampleFilePath, originalFileName, approximateChapter, submitAttemptCount,
+--      CK_Proposal_*, ProposalHistory, UX_UserRole_single_admin — tất cả đã có sẵn
+--      trong [1], không cần ALTER nữa → đã gộp trực tiếp vào CREATE TABLE.
+--    • [3] ALTER AuditLog thêm 'IMAGE' vào CK_AuditLog_entityType → đã gộp vào
+--      CREATE TABLE AuditLog bên dưới.
+--    • DELETE cleanup admin (từ [2]) là seed-data, không phải DDL schema → xem ghi chú
+--      ở cuối file.
 -- ============================================================
 
 USE master;
@@ -67,6 +79,10 @@ GO
 
 -- ============================================================
 --  MODULE 2: PROPOSAL & TANTOU REVIEW
+--  [merged from migration_20260521]:
+--    + sampleFilePath, originalFileName, approximateChapter, submitAttemptCount
+--    + CK_Proposal_status  → enum mới: DRAFT/UNDER_REVIEW/REVISION_REQUESTED/APPROVED/REJECTED
+--    + CK_Proposal_approxChapter, CK_Proposal_submitAttempts
 -- ============================================================
 
 CREATE TABLE Proposal (
@@ -75,20 +91,20 @@ CREATE TABLE Proposal (
     title               VARCHAR(255)    NOT NULL,
     genre               VARCHAR(100)    NOT NULL,
     synopsis            NVARCHAR(MAX)   NOT NULL,
-    sampleFilePath      VARCHAR(512)    NOT NULL,
-    originalFileName    NVARCHAR(255)   NOT NULL,
-    approximateChapter  INT             NOT NULL,
-    status              VARCHAR(20)     NOT NULL CONSTRAINT DF_Proposal_status DEFAULT 'DRAFT',
+    sampleFilePath      VARCHAR(512)    NOT NULL    CONSTRAINT DF_Proposal_sampleFilePath   DEFAULT '',
+    originalFileName    NVARCHAR(255)   NOT NULL    CONSTRAINT DF_Proposal_originalFileName DEFAULT '',
+    approximateChapter  INT             NOT NULL    CONSTRAINT DF_Proposal_approxChapter    DEFAULT 1,
+    status              VARCHAR(20)     NOT NULL    CONSTRAINT DF_Proposal_status           DEFAULT 'DRAFT',
     submittedAt         DATETIME            NULL,
     rejectedAt          DATETIME            NULL,
     assignedEditorId    BIGINT              NULL,
-    submitAttemptCount  INT             NOT NULL CONSTRAINT DF_Proposal_submitAttemptCount DEFAULT 0,
-    createdAt           DATETIME        NOT NULL CONSTRAINT DF_Proposal_createdAt DEFAULT GETDATE(),
-    updatedAt           DATETIME        NOT NULL CONSTRAINT DF_Proposal_updatedAt DEFAULT GETDATE(),
-    CONSTRAINT PK_Proposal              PRIMARY KEY (id),
-    CONSTRAINT FK_Proposal_Mangaka      FOREIGN KEY (mangakaId)        REFERENCES [User](id),
-    CONSTRAINT FK_Proposal_Editor       FOREIGN KEY (assignedEditorId) REFERENCES [User](id),
-    CONSTRAINT CK_Proposal_status       CHECK (status IN (
+    submitAttemptCount  INT             NOT NULL    CONSTRAINT DF_Proposal_submitAttemptCount DEFAULT 0,
+    createdAt           DATETIME        NOT NULL    CONSTRAINT DF_Proposal_createdAt         DEFAULT GETDATE(),
+    updatedAt           DATETIME        NOT NULL    CONSTRAINT DF_Proposal_updatedAt         DEFAULT GETDATE(),
+    CONSTRAINT PK_Proposal               PRIMARY KEY (id),
+    CONSTRAINT FK_Proposal_Mangaka       FOREIGN KEY (mangakaId)        REFERENCES [User](id),
+    CONSTRAINT FK_Proposal_Editor        FOREIGN KEY (assignedEditorId) REFERENCES [User](id),
+    CONSTRAINT CK_Proposal_status        CHECK (status IN (
         'DRAFT','UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED')),
     CONSTRAINT CK_Proposal_approxChapter CHECK (approximateChapter >= 1),
     CONSTRAINT CK_Proposal_submitAttempts CHECK (submitAttemptCount BETWEEN 0 AND 2)
@@ -103,10 +119,10 @@ CREATE TABLE ProposalHistory (
     actionType          VARCHAR(30)     NOT NULL,
     note                NVARCHAR(MAX)       NULL,
     submitAttemptNumber INT             NOT NULL CONSTRAINT DF_PH_submitAttemptNumber DEFAULT 0,
-    createdAt           DATETIME        NOT NULL CONSTRAINT DF_PH_createdAt DEFAULT GETDATE(),
+    createdAt           DATETIME        NOT NULL CONSTRAINT DF_PH_createdAt           DEFAULT GETDATE(),
     CONSTRAINT PK_ProposalHistory       PRIMARY KEY (id),
     CONSTRAINT FK_PH_Proposal           FOREIGN KEY (proposalId) REFERENCES Proposal(id),
-    CONSTRAINT FK_PH_Actor              FOREIGN KEY (actorId) REFERENCES [User](id),
+    CONSTRAINT FK_PH_Actor              FOREIGN KEY (actorId)    REFERENCES [User](id),
     CONSTRAINT CK_PH_actionType         CHECK (actionType IN (
         'CREATED','UPDATED','SUBMITTED','ASSIGNED_EDITOR','APPROVED','REJECTED','REVISE_REQUESTED','RESUBMITTED')),
     CONSTRAINT CK_PH_submitAttempt      CHECK (submitAttemptNumber BETWEEN 0 AND 2)
@@ -147,16 +163,16 @@ CREATE TABLE SeriesAssistant (
 GO
 
 CREATE TABLE Chapter (
-    id                  BIGINT              NOT NULL IDENTITY(1,1),
-    seriesId            BIGINT              NOT NULL,
-    chapterNumber       INT                 NOT NULL,
-    title               VARCHAR(255)        NOT NULL,
-    status              VARCHAR(20)         NOT NULL CONSTRAINT DF_Chapter_status DEFAULT 'PLANNING',
-    submissionDeadline  DATE                NOT NULL,   -- pub_date - 14 days (BR-22), enforced via trigger
-    publicationDate     DATE                NOT NULL,
-    completionPct       DECIMAL(5,2)        NOT NULL CONSTRAINT DF_Chapter_completionPct DEFAULT 0.00,
-    atRisk              BIT                 NOT NULL CONSTRAINT DF_Chapter_atRisk DEFAULT 0,
-    createdAt           DATETIME            NOT NULL CONSTRAINT DF_Chapter_createdAt DEFAULT GETDATE(),
+    id                  BIGINT          NOT NULL IDENTITY(1,1),
+    seriesId            BIGINT          NOT NULL,
+    chapterNumber       INT             NOT NULL,
+    title               VARCHAR(255)    NOT NULL,
+    status              VARCHAR(20)     NOT NULL CONSTRAINT DF_Chapter_status       DEFAULT 'PLANNING',
+    submissionDeadline  DATE            NOT NULL,   -- pub_date - 14 days (BR-22), enforced via trigger
+    publicationDate     DATE            NOT NULL,
+    completionPct       DECIMAL(5,2)    NOT NULL CONSTRAINT DF_Chapter_completionPct DEFAULT 0.00,
+    atRisk              BIT             NOT NULL CONSTRAINT DF_Chapter_atRisk        DEFAULT 0,
+    createdAt           DATETIME        NOT NULL CONSTRAINT DF_Chapter_createdAt     DEFAULT GETDATE(),
     CONSTRAINT PK_Chapter               PRIMARY KEY (id),
     CONSTRAINT FK_Chapter_Series        FOREIGN KEY (seriesId) REFERENCES Series(id),
     CONSTRAINT CK_Chapter_status        CHECK (status IN (
@@ -191,10 +207,10 @@ CREATE TABLE PageTask (
     pageRangeEnd    INT             NOT NULL,
     taskType        VARCHAR(100)    NOT NULL,
     dueDate         DATE            NOT NULL,
-    status          VARCHAR(20)     NOT NULL CONSTRAINT DF_PageTask_status DEFAULT 'PENDING',
+    status          VARCHAR(20)     NOT NULL CONSTRAINT DF_PageTask_status         DEFAULT 'PENDING',
     rejectionCount  INT             NOT NULL CONSTRAINT DF_PageTask_rejectionCount DEFAULT 0,
-    assignedAt      DATETIME        NOT NULL CONSTRAINT DF_PageTask_assignedAt DEFAULT GETDATE(),
-    updatedAt       DATETIME        NOT NULL CONSTRAINT DF_PageTask_updatedAt DEFAULT GETDATE(),
+    assignedAt      DATETIME        NOT NULL CONSTRAINT DF_PageTask_assignedAt     DEFAULT GETDATE(),
+    updatedAt       DATETIME        NOT NULL CONSTRAINT DF_PageTask_updatedAt      DEFAULT GETDATE(),
     CONSTRAINT PK_PageTask              PRIMARY KEY (id),
     CONSTRAINT FK_PageTask_Chapter      FOREIGN KEY (chapterId)   REFERENCES Chapter(id),
     CONSTRAINT FK_PageTask_Assistant    FOREIGN KEY (assistantId) REFERENCES [User](id),
@@ -225,14 +241,45 @@ END;
 GO
 
 -- ============================================================
+--  MODULE 3b: CHAPTER IMAGE
+--  [merged from Add_File_For_Chapter_And_Task.sql]
+--  Mỗi row = 1 file ảnh do Assistant upload cho 1 PageTask.
+--  imageType: PAGE | COVER | REFERENCE
+--  isActive:  soft-delete — chỉ version mới nhất = 1 cho cùng (chapterId, pageNumber).
+-- ============================================================
+
+CREATE TABLE ChapterImage (
+    id               BIGINT          NOT NULL IDENTITY(1,1),
+    chapterId        BIGINT          NOT NULL,
+    pageTaskId       BIGINT              NULL,   -- NULL = ảnh cover/ref không thuộc task cụ thể
+    uploadedBy       BIGINT          NOT NULL,
+    imageType        VARCHAR(20)     NOT NULL CONSTRAINT DF_ChapterImage_imageType  DEFAULT 'PAGE',
+    pageNumber       INT                 NULL,   -- NULL nếu imageType != 'PAGE'
+    fileUrl          VARCHAR(512)    NOT NULL,
+    originalFileName NVARCHAR(255)   NOT NULL,
+    fileSizeBytes    BIGINT              NULL,
+    uploadedAt       DATETIME        NOT NULL CONSTRAINT DF_ChapterImage_uploadedAt DEFAULT GETDATE(),
+    isActive         BIT             NOT NULL CONSTRAINT DF_ChapterImage_isActive   DEFAULT 1,
+    note             NVARCHAR(500)       NULL,   -- Mangaka ghi chú khi reject/yêu cầu sửa
+    CONSTRAINT PK_ChapterImage              PRIMARY KEY (id),
+    CONSTRAINT FK_CI_Chapter                FOREIGN KEY (chapterId)  REFERENCES Chapter(id),
+    CONSTRAINT FK_CI_PageTask               FOREIGN KEY (pageTaskId) REFERENCES PageTask(id),
+    CONSTRAINT FK_CI_UploadedBy             FOREIGN KEY (uploadedBy) REFERENCES [User](id),
+    CONSTRAINT CK_CI_imageType              CHECK (imageType IN ('PAGE','COVER','REFERENCE')),
+    CONSTRAINT CK_CI_pageNumber             CHECK (pageNumber IS NULL OR pageNumber >= 1),
+    CONSTRAINT CK_CI_fileSizeBytes          CHECK (fileSizeBytes IS NULL OR fileSizeBytes > 0)
+);
+GO
+
+-- ============================================================
 --  MODULE 4: MANUSCRIPT & ANNOTATION
 -- ============================================================
 
 CREATE TABLE Manuscript (
     id                  BIGINT          NOT NULL IDENTITY(1,1),
     chapterId           BIGINT          NOT NULL,
-    version             INT             NOT NULL CONSTRAINT DF_Manuscript_version DEFAULT 1,
-    status              VARCHAR(20)     NOT NULL CONSTRAINT DF_Manuscript_status DEFAULT 'SUBMITTED',
+    version             INT             NOT NULL CONSTRAINT DF_Manuscript_version   DEFAULT 1,
+    status              VARCHAR(20)     NOT NULL CONSTRAINT DF_Manuscript_status    DEFAULT 'SUBMITTED',
     submittedAt         DATETIME        NOT NULL CONSTRAINT DF_Manuscript_submittedAt DEFAULT GETDATE(),
     -- BR-48: reviewDeadline = submittedAt + 48h (computed)
     reviewDeadline      AS DATEADD(HOUR, 48, submittedAt) PERSISTED,
@@ -247,12 +294,12 @@ CREATE TABLE Manuscript (
 GO
 
 CREATE TABLE Annotation (
-    id              BIGINT      NOT NULL IDENTITY(1,1),
-    manuscriptId    BIGINT      NOT NULL,
-    editorId        BIGINT      NOT NULL,
-    pageNumber      INT         NOT NULL,
+    id              BIGINT          NOT NULL IDENTITY(1,1),
+    manuscriptId    BIGINT          NOT NULL,
+    editorId        BIGINT          NOT NULL,
+    pageNumber      INT             NOT NULL,
     content         NVARCHAR(MAX)   NOT NULL,
-    createdAt       DATETIME    NOT NULL CONSTRAINT DF_Annotation_createdAt DEFAULT GETDATE(),
+    createdAt       DATETIME        NOT NULL CONSTRAINT DF_Annotation_createdAt DEFAULT GETDATE(),
     CONSTRAINT PK_Annotation            PRIMARY KEY (id),
     CONSTRAINT FK_Annotation_Manuscript FOREIGN KEY (manuscriptId) REFERENCES Manuscript(id),
     CONSTRAINT FK_Annotation_Editor     FOREIGN KEY (editorId)     REFERENCES [User](id),
@@ -302,7 +349,7 @@ CREATE TABLE RankingRecord (
     rankScore       DECIMAL(6,2)    NOT NULL,
     rankPosition    INT             NOT NULL,
     isBottomTwenty  BIT             NOT NULL CONSTRAINT DF_RankingRecord_isBottomTwenty DEFAULT 0,
-    calculatedAt    DATETIME        NOT NULL CONSTRAINT DF_RankingRecord_calculatedAt DEFAULT GETDATE(),
+    calculatedAt    DATETIME        NOT NULL CONSTRAINT DF_RankingRecord_calculatedAt   DEFAULT GETDATE(),
     CONSTRAINT PK_RankingRecord         PRIMARY KEY (id),
     CONSTRAINT FK_RR_Period             FOREIGN KEY (periodId)  REFERENCES RankingPeriod(id),
     CONSTRAINT FK_RR_Series             FOREIGN KEY (seriesId)  REFERENCES Series(id),
@@ -319,12 +366,12 @@ CREATE TABLE DecisionSession (
     id                  BIGINT      NOT NULL IDENTITY(1,1),
     seriesId            BIGINT      NOT NULL,
     rankingRecordId     BIGINT      NOT NULL,
-    status              VARCHAR(10) NOT NULL CONSTRAINT DF_DecisionSession_status DEFAULT 'OPEN',
+    status              VARCHAR(10) NOT NULL CONSTRAINT DF_DecisionSession_status  DEFAULT 'OPEN',
     result              VARCHAR(15)     NULL,
     openedAt            DATETIME    NOT NULL CONSTRAINT DF_DecisionSession_openedAt DEFAULT GETDATE(),
     closedAt            DATETIME        NULL,
     CONSTRAINT PK_DecisionSession           PRIMARY KEY (id),
-    CONSTRAINT FK_DS_Series                 FOREIGN KEY (seriesId)       REFERENCES Series(id),
+    CONSTRAINT FK_DS_Series                 FOREIGN KEY (seriesId)        REFERENCES Series(id),
     CONSTRAINT FK_DS_RankingRecord          FOREIGN KEY (rankingRecordId) REFERENCES RankingRecord(id),
     CONSTRAINT CK_DS_status                 CHECK (status IN ('OPEN','CLOSED','DEFERRED')),
     CONSTRAINT CK_DS_result                 CHECK (result IS NULL OR result IN (
@@ -366,6 +413,8 @@ GO
 
 -- ============================================================
 --  MODULE 7: NOTIFICATION & AUDIT
+--  [merged from Add_File_For_Chapter_And_Task.sql]:
+--    + AuditLog.CK_AuditLog_entityType thêm 'IMAGE'
 -- ============================================================
 
 CREATE TABLE Notification (
@@ -375,10 +424,11 @@ CREATE TABLE Notification (
     message         NVARCHAR(MAX)   NOT NULL,
     referenceId     BIGINT              NULL,
     referenceType   VARCHAR(50)         NULL,
-    isRead          BIT             NOT NULL CONSTRAINT DF_Notification_isRead DEFAULT 0,
+    isRead          BIT             NOT NULL CONSTRAINT DF_Notification_isRead  DEFAULT 0,
     createdAt       DATETIME        NOT NULL CONSTRAINT DF_Notification_createdAt DEFAULT GETDATE(),
     CONSTRAINT PK_Notification          PRIMARY KEY (id),
     CONSTRAINT FK_Notification_User     FOREIGN KEY (userId) REFERENCES [User](id),
+    -- Thêm 'IMAGE' ở đây nếu muốn notify khi ảnh bị reject (hiện để comment, uncomment khi cần)
     CONSTRAINT CK_Notification_refType  CHECK (referenceType IS NULL OR referenceType IN (
         'PROPOSAL','CHAPTER','TASK','MANUSCRIPT','DECISION'))
 );
@@ -394,8 +444,9 @@ CREATE TABLE AuditLog (
     performedAt     DATETIME        NOT NULL CONSTRAINT DF_AuditLog_performedAt DEFAULT GETDATE(),
     CONSTRAINT PK_AuditLog              PRIMARY KEY (id),
     CONSTRAINT FK_AuditLog_Actor        FOREIGN KEY (actorId) REFERENCES [User](id),
+    -- 'IMAGE' added by Add_File_For_Chapter_And_Task migration
     CONSTRAINT CK_AuditLog_entityType   CHECK (entityType IN (
-        'PROPOSAL','CHAPTER','TASK','MANUSCRIPT','DECISION','USER'))
+        'PROPOSAL','CHAPTER','TASK','MANUSCRIPT','DECISION','USER','IMAGE'))
 );
 GO
 
@@ -403,6 +454,7 @@ GO
 --  INDEXES (performance)
 -- ============================================================
 
+-- Base indexes
 CREATE INDEX IX_Proposal_mangakaId        ON Proposal         (mangakaId);
 CREATE INDEX IX_Proposal_status           ON Proposal         (status);
 CREATE INDEX IX_Proposal_assignedEditor   ON Proposal         (assignedEditorId);
@@ -422,7 +474,23 @@ CREATE INDEX IX_Notification_userId       ON Notification     (userId);
 CREATE INDEX IX_Notification_isRead       ON Notification     (userId, isRead);
 CREATE INDEX IX_AuditLog_entityType_Id    ON AuditLog         (entityType, entityId);
 CREATE INDEX IX_AuditLog_actorId          ON AuditLog         (actorId);
+
+-- ChapterImage indexes (from Add_File_For_Chapter_And_Task migration)
+CREATE INDEX IX_ChapterImage_chapterId    ON ChapterImage     (chapterId, isActive, pageNumber);
+CREATE INDEX IX_ChapterImage_uploadedBy   ON ChapterImage     (uploadedBy, uploadedAt);
+CREATE INDEX IX_ChapterImage_pageTaskId   ON ChapterImage     (pageTaskId)
+    WHERE pageTaskId IS NOT NULL;
 GO
 
-PRINT 'Schema created successfully.';
+-- ============================================================
+--  SEED DATA NOTE
+--  Câu lệnh sau đây từ migration_20260521 là cleanup dữ liệu,
+--  KHÔNG phải DDL. Chạy riêng sau khi seed user nếu cần:
+--
+--  DELETE FROM UserRole
+--  WHERE roleId = 1
+--    AND userId <> (SELECT MIN(userId) FROM UserRole WHERE roleId = 1);
+-- ============================================================
+
+PRINT 'Schema (merged) created successfully.';
 GO
