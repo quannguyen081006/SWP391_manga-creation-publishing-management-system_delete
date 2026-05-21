@@ -88,16 +88,21 @@ public class UserAdminRepository {
         if (isBlank(fullName) || isBlank(email) || !email.contains("@")) {
             throw new IllegalArgumentException("Full name and valid email are required");
         }
+        String normalizedEmail = email.trim();
         String sql = "UPDATE [User] SET fullName = ?, email = ?, updatedAt = GETDATE() WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (existsByColumnExceptId(conn, "email", normalizedEmail, id)) {
+                throw new IllegalArgumentException("Email already exists");
+            }
             ps.setString(1, fullName.trim());
-            ps.setString(2, email.trim());
+            ps.setString(2, normalizedEmail);
             ps.setLong(3, id);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("User not found");
             }
         } catch (SQLException ex) {
+            throwDuplicateUserMessage(ex);
             throw new RuntimeException("Cannot update user", ex);
         }
     }
@@ -107,6 +112,11 @@ public class UserAdminRepository {
         String sql = "UPDATE [User] SET status = ?, updatedAt = GETDATE() WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            if ("INACTIVE".equals(normalized)
+                    && userHasRole(conn, id, "ADMIN")
+                    && countActiveUsersWithRole(conn, "ADMIN") <= 1) {
+                throw new IllegalArgumentException("The only ADMIN account cannot be deactivated");
+            }
             ps.setString(1, normalized);
             ps.setLong(2, id);
             if (ps.executeUpdate() == 0) {
@@ -124,6 +134,7 @@ public class UserAdminRepository {
         String insertSql = "INSERT INTO UserRole (userId, roleId) VALUES (?, ?)";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement rolePs = conn.prepareStatement(roleSql)) {
+            ensureAdminRoleCanBeAssigned(conn, userId, normalizedRole);
             rolePs.setString(1, normalizedRole);
             long roleId;
             try (ResultSet rs = rolePs.executeQuery()) {
@@ -156,6 +167,11 @@ public class UserAdminRepository {
         String sql = "DELETE ur FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE ur.userId = ? AND r.name = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            if ("ADMIN".equals(normalizedRole)
+                    && userHasRole(conn, userId, "ADMIN")
+                    && countUsersWithRole(conn, "ADMIN") <= 1) {
+                throw new IllegalArgumentException("The only ADMIN role cannot be removed");
+            }
             ps.setLong(1, userId);
             ps.setString(2, normalizedRole);
             ps.executeUpdate();
@@ -172,6 +188,28 @@ public class UserAdminRepository {
         }
     }
 
+    public boolean hasAnyAdmin() {
+        return countUsersWithRole("ADMIN") > 0;
+    }
+
+    public boolean hasRole(long userId, String roleName) {
+        String normalizedRole = normalizeRole(roleName);
+        try (Connection conn = dataSource.getConnection()) {
+            return userHasRole(conn, userId, normalizedRole);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check user role", ex);
+        }
+    }
+
+    public int countUsersWithRole(String roleName) {
+        String normalizedRole = normalizeRole(roleName);
+        try (Connection conn = dataSource.getConnection()) {
+            return countUsersWithRole(conn, normalizedRole);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot count users by role", ex);
+        }
+    }
+
     private List<String> listRoles(Connection conn, long userId) throws SQLException {
         String sql = "SELECT r.name FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE ur.userId = ? ORDER BY r.id";
         List<String> roles = new ArrayList<String>();
@@ -184,6 +222,46 @@ public class UserAdminRepository {
             }
         }
         return roles;
+    }
+
+    private void ensureAdminRoleCanBeAssigned(Connection conn, long userId, String normalizedRole) throws SQLException {
+        if (!"ADMIN".equals(normalizedRole) || userHasRole(conn, userId, "ADMIN")) {
+            return;
+        }
+        if (countUsersWithRole(conn, "ADMIN") > 0) {
+            throw new IllegalArgumentException("Only one ADMIN account is allowed");
+        }
+    }
+
+    private boolean userHasRole(Connection conn, long userId, String roleName) throws SQLException {
+        String sql = "SELECT 1 FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE ur.userId = ? AND r.name = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            ps.setString(2, roleName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private int countUsersWithRole(Connection conn, String roleName) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id WHERE r.name = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, roleName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private int countActiveUsersWithRole(Connection conn, String roleName) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM UserRole ur JOIN [Role] r ON ur.roleId = r.id JOIN [User] u ON ur.userId = u.id WHERE r.name = ? AND u.status = 'ACTIVE'";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, roleName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
     }
 
     private String normalizeStatus(String status) {
@@ -236,6 +314,17 @@ public class UserAdminRepository {
         String sql = "SELECT 1 FROM [User] WHERE " + column + " = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, value);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private boolean existsByColumnExceptId(Connection conn, String column, String value, long excludedId) throws SQLException {
+        String sql = "SELECT 1 FROM [User] WHERE " + column + " = ? AND id <> ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, value);
+            ps.setLong(2, excludedId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }

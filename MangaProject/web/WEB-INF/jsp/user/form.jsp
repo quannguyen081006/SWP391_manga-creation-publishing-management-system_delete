@@ -73,6 +73,9 @@
                     </label>
                 </c:forEach>
             </div>
+            <c:if test="${adminRoleLocked}">
+                <p class="form-note">ADMIN is reserved for the single system administrator.</p>
+            </c:if>
         </div>
 
         <div class="form-actions">

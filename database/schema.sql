@@ -59,6 +59,12 @@ CREATE TABLE UserRole (
 );
 GO
 
+-- BR-USER-ADMIN: Role id 1 is seeded as ADMIN; keep exactly one admin assignment.
+CREATE UNIQUE INDEX UX_UserRole_single_admin
+ON UserRole(roleId)
+WHERE roleId = 1;
+GO
+
 -- ============================================================
 --  MODULE 2: PROPOSAL & TANTOU REVIEW
 -- ============================================================

@@ -15,6 +15,9 @@
 
 <c:if test="${not empty success}"><div class="alert success">${success}</div></c:if>
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
+<c:if test="${adminRoleLocked}">
+    <div class="alert info">ADMIN is locked to the original system account.</div>
+</c:if>
 
 <div class="section-head">
     <div></div>
@@ -42,13 +45,23 @@
                             <c:otherwise>
                                 <div class="role-list">
                                     <c:forEach items="${u.roles}" var="r">
-                                        <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles/remove" class="role-chip-form">
-                                            <input type="hidden" name="role" value="${r}" />
-                                            <span class="role-chip">
-                                                <span>${r}</span>
-                                                <button class="role-remove" type="submit" title="Remove ${r}" onclick="return confirm('Remove role ${r} from ${u.username}?');">x</button>
-                                            </span>
-                                        </form>
+                                        <c:choose>
+                                            <c:when test="${r eq 'ADMIN'}">
+                                                <span class="role-chip locked">
+                                                    <span>${r}</span>
+                                                    <span class="role-lock">Locked</span>
+                                                </span>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles/remove" class="role-chip-form">
+                                                    <input type="hidden" name="role" value="${r}" />
+                                                    <span class="role-chip">
+                                                        <span>${r}</span>
+                                                        <button class="role-remove" type="submit" title="Remove ${r}" onclick="return confirm('Remove role ${r} from ${u.username}?');">x</button>
+                                                    </span>
+                                                </form>
+                                            </c:otherwise>
+                                        </c:choose>
                                     </c:forEach>
                                 </div>
                             </c:otherwise>
@@ -59,11 +72,9 @@
                             <summary class="btn small add-role-summary">Add</summary>
                             <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles" class="role-check-form">
                                 <div class="role-check-grid compact">
-                                    <label class="role-check"><input type="checkbox" name="roles" value="ADMIN" /> ADMIN</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="MANGAKA" /> MANGAKA</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="ASSISTANT" /> ASSISTANT</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="TANTOU_EDITOR" /> TANTOU_EDITOR</label>
-                                    <label class="role-check"><input type="checkbox" name="roles" value="EDITORIAL_BOARD" /> EDITORIAL_BOARD</label>
+                                    <c:forEach items="${availableRoles}" var="r">
+                                        <label class="role-check"><input type="checkbox" name="roles" value="${r}" /> ${r}</label>
+                                    </c:forEach>
                                 </div>
                                 <button class="btn small primary" type="submit">Apply</button>
                             </form>

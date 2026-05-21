@@ -60,10 +60,10 @@
 <div class="app-shell">
     <aside class="side-nav">
         <a class="side-brand" href="${ctx}/main/dashboard" title="Back to Dashboard">
-            <div class="brand-icon">M</div>
+            <div class="brand-icon">MF</div>
             <div>
                 <div class="brand-name">MangaFlow</div>
-                <div class="brand-sub">Publishing Hub</div>
+                <div class="brand-sub">Manga Studio Ops</div>
             </div>
         </a>
 

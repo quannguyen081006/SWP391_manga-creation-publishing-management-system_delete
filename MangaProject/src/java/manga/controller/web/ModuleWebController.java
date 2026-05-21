@@ -468,6 +468,8 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         requireAdmin(user);
         model.addAttribute("users", userAdminRepository.listUsers());
+        model.addAttribute("availableRoles", availableRoles());
+        model.addAttribute("adminRoleLocked", userAdminRepository.hasAnyAdmin());
         if (created != null) {
             model.addAttribute("success", "User " + createdUsername + " created successfully");
             model.addAttribute("createdUserId", created);
@@ -505,6 +507,7 @@ public class ModuleWebController {
         requireAdmin(user);
         model.addAttribute("editing", false);
         model.addAttribute("availableRoles", availableRoles());
+        model.addAttribute("adminRoleLocked", userAdminRepository.hasAnyAdmin());
         model.addAttribute("selectedRolesCsv", "");
         return "user/form";
     }
@@ -520,6 +523,7 @@ public class ModuleWebController {
         model.addAttribute("editing", true);
         model.addAttribute("editUser", row);
         model.addAttribute("availableRoles", availableRoles());
+        model.addAttribute("adminRoleLocked", userAdminRepository.hasAnyAdmin());
         return "user/form";
     }
 
@@ -556,6 +560,7 @@ public class ModuleWebController {
             model.addAttribute("selectedRoles", roles == null ? new String[0] : roles);
             model.addAttribute("selectedRolesCsv", rolesCsv(roles));
             model.addAttribute("availableRoles", availableRoles());
+            model.addAttribute("adminRoleLocked", userAdminRepository.hasAnyAdmin());
             return "user/form";
         }
     }
@@ -577,6 +582,7 @@ public class ModuleWebController {
             model.addAttribute("editing", true);
             model.addAttribute("editUser", userAdminRepository.getUser(id));
             model.addAttribute("availableRoles", availableRoles());
+            model.addAttribute("adminRoleLocked", userAdminRepository.hasAnyAdmin());
             model.addAttribute("error", ex.getMessage());
             return "user/form";
         }
@@ -617,6 +623,7 @@ public class ModuleWebController {
             if (requestedRoles.isEmpty()) {
                 throw new IllegalArgumentException("Select at least one role");
             }
+            validateAssignableRoles(id, requestedRoles);
             List<String> currentRoles = userAdminRepository.listRoles(id);
             for (String normalizedRole : requestedRoles) {
                 userAdminRepository.addRole(id, normalizedRole);
@@ -672,7 +679,7 @@ public class ModuleWebController {
     }
 
     private List<String> availableRoles() {
-        return Arrays.asList("ADMIN", "MANGAKA", "ASSISTANT", "TANTOU_EDITOR", "EDITORIAL_BOARD");
+        return Arrays.asList("MANGAKA", "ASSISTANT", "TANTOU_EDITOR", "EDITORIAL_BOARD");
     }
 
     private String rolesCsv(String[] roles) {
@@ -727,9 +734,32 @@ public class ModuleWebController {
         if (roles == null || roles.length == 0) {
             throw new IllegalArgumentException("Select at least one role");
         }
+        if (containsRole(roles, "ADMIN") && userAdminRepository.hasAnyAdmin()) {
+            throw new IllegalArgumentException("Only one ADMIN account is allowed");
+        }
     }
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private void validateAssignableRoles(long userId, List<String> roles) {
+        if (roles.contains("ADMIN")
+                && !userAdminRepository.hasRole(userId, "ADMIN")
+                && userAdminRepository.hasAnyAdmin()) {
+            throw new IllegalArgumentException("Only one ADMIN account is allowed");
+        }
+    }
+
+    private boolean containsRole(String[] roles, String roleName) {
+        if (roles == null) {
+            return false;
+        }
+        for (String role : roles) {
+            if (roleName.equalsIgnoreCase(role == null ? "" : role.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -13,6 +13,21 @@
 <h2 class="page-title">Dashboard</h2>
 <p class="page-sub">Track your production lifecycle overview</p>
 
+<section class="manga-dashboard-strip" aria-hidden="true">
+    <div class="strip-panel strip-panel-focus">
+        <span class="speed-line speed-line-a"></span>
+        <span class="speed-line speed-line-b"></span>
+        <span class="ink-burst"></span>
+    </div>
+    <div class="strip-panel strip-panel-page">
+        <span class="panel-face"></span>
+        <span class="panel-shadow"></span>
+    </div>
+    <div class="strip-panel strip-panel-tone">
+        <span class="speech-bubble"></span>
+    </div>
+</section>
+
 <section class="metric-grid">
     <article class="metric-card">
         <div class="metric-label">Proposals</div>

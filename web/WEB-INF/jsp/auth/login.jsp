@@ -8,10 +8,27 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css" />
 </head>
 <body class="login-page">
-    <div class="login-orb login-orb-a"></div>
-    <div class="login-orb login-orb-b"></div>
-
     <main class="login-wrap" role="main">
+        <section class="login-art" aria-hidden="true">
+            <div class="manga-page">
+                <div class="manga-panel manga-panel-wide">
+                    <span class="speed-line speed-line-a"></span>
+                    <span class="speed-line speed-line-b"></span>
+                    <span class="speed-line speed-line-c"></span>
+                    <span class="ink-burst"></span>
+                </div>
+                <div class="manga-panel manga-panel-tall">
+                    <span class="panel-face"></span>
+                    <span class="panel-shadow"></span>
+                </div>
+                <div class="manga-panel manga-panel-small">
+                    <span class="speech-bubble"></span>
+                </div>
+                <div class="manga-panel manga-panel-small accent">
+                    <span class="tone-dot-grid"></span>
+                </div>
+            </div>
+        </section>
         <section class="login-panel" aria-label="Sign in form">
             <div class="login-brand">
                 <div class="login-brand-mark">M</div>
