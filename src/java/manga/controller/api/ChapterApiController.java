@@ -37,7 +37,6 @@ public class ChapterApiController {
     public ApiResponse<ChapterSummary> create(
             @PathVariable("seriesId") long seriesId,
             HttpSession session,
-            @RequestParam("chapterNumber") int chapterNumber,
             @RequestParam("title") String title,
             @RequestParam("publicationDate") String publicationDate) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
@@ -48,7 +47,7 @@ public class ChapterApiController {
             throw new IllegalArgumentException("Only series owner can create chapter");
         }
 
-        long id = chapterRepository.create(seriesId, chapterNumber, title, Date.valueOf(publicationDate));
+        long id = chapterRepository.createNext(seriesId, title, Date.valueOf(publicationDate));
         return ApiResponse.ok(chapterRepository.findById(id), "Chapter created");
     }
 
@@ -96,7 +95,6 @@ public class ChapterApiController {
         return ApiResponse.ok(null, "Chapter deleted");
     }
 }
-
 
 
 

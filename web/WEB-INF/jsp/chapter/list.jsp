@@ -32,7 +32,7 @@
         <select id="createSeriesId" name="seriesId" required>
             <option value="">Loading series...</option>
         </select>
-        <input name="chapterNumber" type="number" min="1" placeholder="Chapter Number" required />
+        <p class="section-desc" id="nextChapterHint">Chapter number will be assigned automatically.</p>
         <input name="title" type="text" placeholder="Title" required />
         <label class="field-label" for="chapterCreatePublicationDate">Publication Date</label>
         <input id="chapterCreatePublicationDate" name="publicationDate" type="date" aria-label="Publication Date" required />
@@ -194,20 +194,20 @@
     function renderChapterActions() {
         var actions = document.getElementById('chapterActions');
         var header = document.getElementById('chapterActionHeader');
+        header.style.display = '';
         if (!hasRole('MANGAKA')) {
             actions.style.display = 'none';
-            header.style.display = 'none';
             return;
         }
 
         actions.style.display = 'block';
-        header.style.display = '';
 
         var seriesSelect = document.getElementById('createSeriesId');
         var ownSeries = seriesList.filter(function (s) { return Number(s.mangakaId) === Number(currentUser.id); });
         seriesSelect.innerHTML = '<option value="">Select Series</option>' + ownSeries.map(function (s) {
-            return '<option value="' + s.id + '">#' + s.id + ' - ' + escapeHtml(s.title) + '</option>';
+            return '<option value="' + s.id + '" data-next-chapter="' + nextChapterNumber(s.id) + '">#' + s.id + ' - ' + escapeHtml(s.title) + '</option>';
         }).join('');
+        updateNextChapterHint();
 
         var submitSelect = document.getElementById('submitChapterId');
         var ownChapters = chapters.filter(function (ch) { return isOwnSeries(ch.seriesId); });
@@ -217,9 +217,30 @@
         }).join('');
     }
 
+    function nextChapterNumber(seriesId) {
+        var next = 1;
+        for (var i = 0; i < chapters.length; i++) {
+            if (Number(chapters[i].seriesId) === Number(seriesId)) {
+                next = Math.max(next, Number(chapters[i].chapterNumber || 0) + 1);
+            }
+        }
+        return next;
+    }
+
+    function updateNextChapterHint() {
+        var select = document.getElementById('createSeriesId');
+        var hint = document.getElementById('nextChapterHint');
+        if (!select || !hint) {
+            return;
+        }
+        var selected = select.options[select.selectedIndex];
+        var next = selected ? selected.getAttribute('data-next-chapter') : '';
+        hint.textContent = next ? ('Next chapter will be Ch. ' + next + '.') : 'Chapter number will be assigned automatically.';
+    }
+
     function renderChapters() {
         var tbody = document.getElementById('chapterRows');
-        var showActions = hasRole('MANGAKA');
+        var showActions = true;
         if (!chapters.length) {
             tbody.innerHTML = '<tr><td colspan="9">No chapters found.</td></tr>';
             return;
@@ -236,22 +257,42 @@
             var deadlineText = formattedDeadline
                 ? ('<span style="' + deadlineStyle + '">' + escapeHtml(formattedDeadline) + (daysLeft !== null ? ' (' + daysLeft + 'd)' : '') + '</span>')
                 : '-';
-            var deleteBtn = (own && String(ch.status || '').toUpperCase() === 'PLANNING')
-                ? '<button class="btn small" type="button" data-chapter-delete="' + ch.id + '">Delete</button>'
+            var actionCell = showActions ? '<td><div class="inline-meta" style="gap:6px;margin:0;">'
+                + '<button class="btn small" type="button" data-chapter-view="chapterViewRow' + ch.id + '" data-chapter-id="' + ch.id + '">View</button>'
+                + '</div></td>' : '';
+            var deleteButton = (own && String(ch.status || '').toUpperCase() === 'PLANNING')
+                ? '<button class="btn danger-soft" type="button" data-chapter-delete="' + ch.id + '">Delete Chapter</button>'
                 : '';
-            var actionCell = showActions ? '<td><div class="inline-meta" style="gap:6px;margin:0;">' + (own ? '<button class="btn small" type="button" data-inline-update="chapterUpdateRow' + ch.id + '">Update</button>' : '') + ' ' + deleteBtn + '</div></td>' : '';
-            var updateRow = '';
-            if (showActions && own) {
-                updateRow = '<tr id="chapterUpdateRow' + ch.id + '" class="chapter-update-row" style="display:none;">'
-                    + '<td colspan="9"><form class="panel form-grid chapter-inline-update-form" style="max-width:720px;">'
+            var ownerTools = own
+                ? '<form class="panel form-grid chapter-inline-update-form" style="max-width:720px;">'
                     + '<strong>Update Ch.' + ch.chapterNumber + ' - ' + escapeHtml(ch.title) + '</strong>'
                     + '<input name="chapterId" type="hidden" value="' + ch.id + '" />'
                     + '<input name="title" type="text" value="' + escapeHtml(ch.title) + '" placeholder="New Title" required />'
                     + '<label class="field-label" for="chapterUpdatePublicationDate' + ch.id + '">Publication Date</label>'
                     + '<input id="chapterUpdatePublicationDate' + ch.id + '" name="publicationDate" type="date" value="' + escapeHtml(formatDate(ch.publicationDate)) + '" aria-label="Publication Date" required />'
                     + '<button class="btn" type="submit">Update</button>'
-                    + '</form></td></tr>';
-            }
+                    + '</form>'
+                    + '<form class="panel form-grid chapter-image-upload-form" style="max-width:680px;margin-bottom:12px;" data-chapter-id="' + ch.id + '">'
+                    + '<strong>Upload Cover / Reference</strong>'
+                    + '<select name="imageType" required><option value="COVER">Cover</option><option value="REFERENCE">Reference</option></select>'
+                    + '<input name="file" type="file" accept="image/*" required />'
+                    + '<button class="btn primary" type="submit">Upload Image</button>'
+                    + '</form>'
+                    + deleteButton
+                : '<p class="section-desc">You can view chapter images here. Only the owner Mangaka can update metadata or upload cover/reference images.</p>';
+            var viewRow = '<tr id="chapterViewRow' + ch.id + '" class="chapter-view-row" style="display:none;">'
+                + '<td colspan="9"><div class="panel">'
+                + '<div class="section-head"><div><strong>Chapter Detail</strong><p class="section-desc">Ch. ' + ch.chapterNumber + ' - ' + escapeHtml(ch.title) + '</p></div></div>'
+                + '<div class="inline-meta" style="margin-bottom:12px;gap:14px;">'
+                + '<span>Status: ' + formatStatus(ch.status) + '</span>'
+                + '<span>Progress: ' + progress.toFixed(1) + '%</span>'
+                + '<span>Publication: ' + escapeHtml(formatDate(ch.publicationDate)) + '</span>'
+                + '<span>Deadline: ' + escapeHtml(formattedDeadline) + '</span>'
+                + '</div>'
+                + ownerTools
+                + '<div class="section-head"><div><strong>Chapter Images</strong><p class="section-desc">Cover and reference files for this chapter</p></div></div>'
+                + '<div class="chapter-image-list" data-chapter-image-list="' + ch.id + '">Loading images...</div>'
+                + '</div></td></tr>';
 
             return '<tr>'
                 + '<td>' + ch.id + '</td>'
@@ -263,8 +304,72 @@
                 + '<td><span class="status-chip ' + (ch.atRisk ? 'status-rejected' : 'status-approved') + '">' + (ch.atRisk ? 'AT RISK' : 'NORMAL') + '</span></td>'
                 + '<td>' + deadlineText + '</td>'
                 + actionCell
-                + '</tr>' + updateRow;
+                + '</tr>' + viewRow;
         }).join('');
+    }
+
+    async function uploadMultipart(path, form) {
+        var fd = new FormData(form);
+        var file = form.querySelector('input[type="file"]');
+        if (file && (!file.files || file.files.length === 0)) {
+            fd.delete('file');
+        }
+        var res = await fetch(ctx + path, { method: 'POST', headers: { 'Accept': 'application/json' }, body: fd });
+        var text = await res.text();
+        var body = null;
+        try { body = text ? JSON.parse(text) : null; } catch (e) {}
+        if (!res.ok || (body && body.success === false)) {
+            var msg = (body && (body.message || (body.errors && body.errors[0]))) || text || ('HTTP ' + res.status);
+            throw new Error(msg);
+        }
+        return body;
+    }
+
+    function renderImages(images) {
+        if (!images.length) {
+            return '<p class="section-desc">No images uploaded yet.</p>';
+        }
+        return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">' + images.map(function (img) {
+            var url = imageUrl(img.fileUrl);
+            var deleteButton = canDeleteImage(img)
+                ? '<button class="btn small danger-soft" type="button" data-chapter-image-delete="' + img.id + '" data-chapter-id="' + img.chapterId + '">Delete</button>'
+                : '';
+            return '<div class="panel" style="margin:0;padding:10px;">'
+                + '<a href="' + escapeHtml(url) + '" target="_blank"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || img.imageType) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" /></a>'
+                + '<div style="margin-top:8px;font-weight:700;">' + escapeHtml(img.imageType) + '</div>'
+                + '<div class="section-desc">' + escapeHtml(img.originalFileName || '') + '</div>'
+                + deleteButton
+                + '</div>';
+        }).join('') + '</div>';
+    }
+
+    function canDeleteImage(img) {
+        return currentUser && (Number(img.uploadedBy) === Number(currentUser.id) || hasRole('MANGAKA'));
+    }
+
+    function imageUrl(fileUrl) {
+        var url = String(fileUrl || '');
+        if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) {
+            return url;
+        }
+        if (url.indexOf(ctx + '/') === 0) {
+            return url;
+        }
+        return ctx + url;
+    }
+
+    async function loadChapterImages(chapterId) {
+        var target = document.querySelector('[data-chapter-image-list="' + chapterId + '"]');
+        if (!target) {
+            return;
+        }
+        target.innerHTML = 'Loading images...';
+        try {
+            var res = await callApi('GET', '/api/v1/chapters/' + chapterId + '/images');
+            target.innerHTML = renderImages(res.data || []);
+        } catch (err) {
+            target.innerHTML = '<div class="alert error">' + escapeHtml(err.message) + '</div>';
+        }
     }
 
     async function loadData() {
@@ -295,21 +400,6 @@
             return;
         }
 
-        var updateButton = e.target.closest ? e.target.closest('[data-inline-update]') : null;
-        if (updateButton) {
-            var targetId = updateButton.getAttribute('data-inline-update');
-            var targetRow = document.getElementById(targetId);
-            var shouldShow = targetRow && targetRow.style.display !== 'table-row';
-            var rows = document.querySelectorAll('.chapter-update-row');
-            for (var i = 0; i < rows.length; i++) {
-                rows[i].style.display = 'none';
-            }
-            if (shouldShow) {
-                targetRow.style.display = 'table-row';
-            }
-            return;
-        }
-
         var deleteButton = e.target.closest ? e.target.closest('[data-chapter-delete]') : null;
         if (deleteButton) {
             var chId = deleteButton.getAttribute('data-chapter-delete');
@@ -322,6 +412,39 @@
                 showMessage(err.message, true);
             }
         }
+
+        var viewButton = e.target.closest ? e.target.closest('[data-chapter-view]') : null;
+        if (viewButton) {
+            var viewRowId = viewButton.getAttribute('data-chapter-view');
+            var viewRow = document.getElementById(viewRowId);
+            var shouldShowView = viewRow && viewRow.style.display !== 'table-row';
+            var viewRows = document.querySelectorAll('.chapter-view-row');
+            for (var k = 0; k < viewRows.length; k++) {
+                viewRows[k].style.display = 'none';
+            }
+            if (shouldShowView) {
+                viewRow.style.display = 'table-row';
+                await loadChapterImages(viewButton.getAttribute('data-chapter-id'));
+            }
+        }
+
+        var imageDeleteButton = e.target.closest ? e.target.closest('[data-chapter-image-delete]') : null;
+        if (imageDeleteButton) {
+            if (!confirm('Delete this image?')) return;
+            try {
+                await callApi('DELETE', '/api/v1/images/' + imageDeleteButton.getAttribute('data-chapter-image-delete'));
+                showMessage('Image deleted.', false);
+                await loadChapterImages(imageDeleteButton.getAttribute('data-chapter-id'));
+            } catch (err) {
+                showMessage(err.message, true);
+            }
+        }
+    });
+
+    document.addEventListener('change', function (e) {
+        if (e.target.id === 'createSeriesId') {
+            updateNextChapterHint();
+        }
     });
 
     document.addEventListener('submit', async function (e) {
@@ -330,7 +453,6 @@
             try {
                 var createData = formToObject(e.target);
                 await callApi('POST', '/api/v1/series/' + createData.seriesId + '/chapters', {
-                    chapterNumber: createData.chapterNumber,
                     title: createData.title,
                     publicationDate: createData.publicationDate
                 });
@@ -365,6 +487,19 @@
                 showMessage('Chapter submitted for review.', false);
                 e.target.reset();
                 await loadData();
+            } catch (err) {
+                showMessage(err.message, true);
+            }
+        }
+
+        if (e.target.classList.contains('chapter-image-upload-form')) {
+            e.preventDefault();
+            try {
+                var chapterImageId = e.target.getAttribute('data-chapter-id');
+                await uploadMultipart('/api/v1/chapters/' + chapterImageId + '/images', e.target);
+                showMessage('Chapter image uploaded.', false);
+                e.target.reset();
+                await loadChapterImages(chapterImageId);
             } catch (err) {
                 showMessage(err.message, true);
             }

@@ -127,6 +127,57 @@ public class ChapterRepository {
         }
     }
 
+    public long createNext(long seriesId, String title, Date publicationDate) {
+        Date submissionDeadline = new Date(publicationDate.getTime() - (14L * 24L * 60L * 60L * 1000L));
+        String nextSql = "SELECT ISNULL(MAX(chapterNumber), 0) + 1 FROM Chapter WITH (UPDLOCK, HOLDLOCK) WHERE seriesId = ?";
+        String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, GETDATE())";
+
+        try (Connection conn = dataSource.getConnection()) {
+            boolean oldAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                int nextChapterNumber;
+                try (PreparedStatement ps = conn.prepareStatement(nextSql)) {
+                    ps.setLong(1, seriesId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            throw new IllegalArgumentException("Series not found");
+                        }
+                        nextChapterNumber = rs.getInt(1);
+                    }
+                }
+
+                long newId;
+                try (PreparedStatement ps = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+                    ps.setLong(1, seriesId);
+                    ps.setInt(2, nextChapterNumber);
+                    ps.setString(3, title);
+                    ps.setDate(4, submissionDeadline);
+                    ps.setDate(5, publicationDate);
+                    ps.executeUpdate();
+                    try (ResultSet rs = ps.getGeneratedKeys()) {
+                        if (!rs.next()) {
+                            throw new IllegalStateException("Cannot create chapter");
+                        }
+                        newId = rs.getLong(1);
+                    }
+                }
+                conn.commit();
+                return newId;
+            } catch (RuntimeException ex) {
+                conn.rollback();
+                throw ex;
+            } catch (SQLException ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(oldAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot create chapter", ex);
+        }
+    }
+
     public void updateChapterMetadata(long chapterId, String title, Date publicationDate) {
         Date submissionDeadline = new Date(publicationDate.getTime() - (14L * 24L * 60L * 60L * 1000L));
         String sql = "UPDATE Chapter SET title = ?, publicationDate = ?, submissionDeadline = ? WHERE id = ?";
@@ -283,6 +334,5 @@ public class ChapterRepository {
         return c;
     }
 }
-
 
 

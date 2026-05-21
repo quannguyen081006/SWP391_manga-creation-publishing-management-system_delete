@@ -226,6 +226,23 @@
         return body;
     }
 
+    async function uploadMultipart(path, form) {
+        var fd = new FormData(form);
+        var file = form.querySelector('input[type="file"]');
+        if (file && (!file.files || file.files.length === 0)) {
+            fd.delete('file');
+        }
+        var res = await fetch(ctx + path, { method: 'POST', headers: { 'Accept': 'application/json' }, body: fd });
+        var text = await res.text();
+        var body = null;
+        try { body = text ? JSON.parse(text) : null; } catch (e) {}
+        if (!res.ok || (body && body.success === false)) {
+            var msg = (body && (body.message || (body.errors && body.errors[0]))) || text || ('Request failed: HTTP ' + res.status);
+            throw new Error(msg);
+        }
+        return body;
+    }
+
     function toggleTaskPane(targetPaneId) {
         currentTaskPaneId = (currentTaskPaneId === targetPaneId) ? '' : targetPaneId;
         var panes = document.querySelectorAll('.task-pane');
@@ -359,7 +376,84 @@
             + '</form>';
     }
 
+    function renderImageForm(task) {
+        var uploadForm = '';
+        if (isAssignedAssistant(task)) {
+            uploadForm = '<form class="panel form-grid task-image-upload-form" data-task-id="' + task.id + '" data-chapter-id="' + task.chapterId + '" style="display:grid; max-width:680px;">'
+                + '<strong>Upload Page Image</strong>'
+                + '<input name="imageType" type="hidden" value="PAGE" />'
+                + '<input name="pageTaskId" type="hidden" value="' + task.id + '" />'
+                + '<input name="pageNumber" type="number" min="1" placeholder="Page Number" required />'
+                + '<input name="file" type="file" accept="image/*" required />'
+                + '<button class="btn primary" type="submit">Upload Image</button>'
+                + '</form>';
+        } else if (hasRole('MANGAKA')) {
+            uploadForm = '<p class="section-desc">PAGE images can be uploaded only by the assistant assigned to this task. Use Chapters > Images to upload cover/reference images.</p>';
+        } else if (hasRole('TANTOU_EDITOR')) {
+            uploadForm = '<p class="section-desc">Tantou editor has read-only access to task images.</p>';
+        }
+        return '<div class="panel task-inline-pane" data-task-pane-key="images" style="display:none;">'
+            + '<div class="section-head"><div><strong>Task Images</strong><p class="section-desc">Uploaded page images for this task</p></div></div>'
+            + uploadForm
+            + '<div class="task-image-list" data-task-image-list="' + task.id + '">Loading images...</div>'
+            + '</div>';
+    }
+
+    function renderImages(images) {
+        if (!images.length) {
+            return '<p class="section-desc">No images uploaded yet.</p>';
+        }
+        return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">' + images.map(function (img) {
+            var url = imageUrl(img.fileUrl);
+            var deleteButton = canDeleteImage(img)
+                ? '<button class="btn small danger-soft" type="button" data-task-image-delete="' + img.id + '" data-task-id="' + img.pageTaskId + '">Delete</button>'
+                : '';
+            return '<div class="panel" style="margin:0;padding:10px;">'
+                + '<a href="' + escapeHtml(url) + '" target="_blank"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || ('Page ' + img.pageNumber)) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" /></a>'
+                + '<div style="margin-top:8px;font-weight:700;">Page ' + escapeHtml(img.pageNumber || '') + '</div>'
+                + '<div class="section-desc">' + escapeHtml(img.originalFileName || '') + '</div>'
+                + deleteButton
+                + '</div>';
+        }).join('') + '</div>';
+    }
+
+    function canDeleteImage(img) {
+        return currentUser && (Number(img.uploadedBy) === Number(currentUser.id) || hasRole('MANGAKA'));
+    }
+
+    function imageUrl(fileUrl) {
+        var url = String(fileUrl || '');
+        if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) {
+            return url;
+        }
+        if (url.indexOf(ctx + '/') === 0) {
+            return url;
+        }
+        return ctx + url;
+    }
+
+    async function loadTaskImages(taskId) {
+        var target = document.querySelector('[data-task-image-list="' + taskId + '"]');
+        if (!target) {
+            return;
+        }
+        target.innerHTML = 'Loading images...';
+        try {
+            var res = await callApi('GET', '/api/v1/tasks/' + taskId + '/images');
+            target.innerHTML = renderImages(res.data || []);
+        } catch (err) {
+            target.innerHTML = '<div class="alert error">' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
     function renderTaskDetail(task) {
+        var ownerActions = '';
+        if (isTaskOwner(task)) {
+            ownerActions = '<div class="inline-meta" style="margin-top:12px;gap:8px;">'
+                + '<button class="btn success-soft" type="button" data-task-decision="approve" data-task-id="' + task.id + '">Approve</button>'
+                + '<button class="btn danger-soft" type="button" data-task-decision="reject" data-task-id="' + task.id + '">Reject</button>'
+                + '</div>';
+        }
         return '<strong>Task #' + task.id + ' Detail</strong>'
             + '<p class="section-desc" style="margin:8px 0 0;">' + escapeHtml(task.seriesTitle) + ' - Ch. ' + escapeHtml(task.chapterNumber) + ' - ' + escapeHtml(task.chapterTitle) + '</p>'
             + '<div class="inline-meta" style="margin-top:10px;gap:14px;">'
@@ -368,7 +462,17 @@
             + '<span>Assigned: ' + escapeHtml(task.assistantName) + '</span>'
             + '<span>Status: ' + formatStatus(task.status) + '</span>'
             + '<span>Due Date: ' + escapeHtml(formatDate(task.dueDate)) + '</span>'
-            + '</div>';
+            + '</div>'
+            + ownerActions;
+    }
+
+    function findTask(taskId) {
+        for (var i = 0; i < tasks.length; i++) {
+            if (Number(tasks[i].id) === Number(taskId)) {
+                return tasks[i];
+            }
+        }
+        return null;
     }
 
     function renderTasks() {
@@ -381,15 +485,7 @@
         tbody.innerHTML = tasks.map(function (task) {
             var owner = isTaskOwner(task);
             var canStatus = canAssistantStart(task) || canAssistantSubmit(task);
-            var actionButtons = '<button class="btn small" type="button" data-task-inline="taskInlineRow' + task.id + '" data-task-id="' + task.id + '" data-task-pane-key="detail">Detail</button>';
-            if (owner) {
-                actionButtons += ' <button class="btn small" type="button" data-task-inline="taskInlineRow' + task.id + '" data-task-id="' + task.id + '" data-task-pane-key="update">Update</button>';
-                actionButtons += ' <button class="btn small" type="button" data-task-decision="approve" data-task-id="' + task.id + '">Approve</button>';
-                actionButtons += ' <button class="btn small" type="button" data-task-decision="reject" data-task-id="' + task.id + '">Reject</button>';
-            }
-            if (canStatus) {
-                actionButtons += ' <button class="btn small" type="button" data-task-inline="taskInlineRow' + task.id + '" data-task-id="' + task.id + '" data-task-pane-key="status">Status</button>';
-            }
+            var actionButtons = '<button class="btn small" type="button" data-task-inline="taskInlineRow' + task.id + '" data-task-id="' + task.id + '" data-task-pane-key="view">View</button>';
 
             var inlinePanes = '<div class="panel task-inline-pane" data-task-pane-key="detail" style="display:none;">Loading detail...</div>';
             if (owner) {
@@ -398,6 +494,7 @@
             if (canStatus) {
                 inlinePanes += renderStatusForm(task);
             }
+            inlinePanes += renderImageForm(task);
 
             return '<tr>'
                 + '<td>' + task.id + '</td>'
@@ -416,13 +513,36 @@
     async function openTaskInline(rowId, paneKey, taskId) {
         var row = document.getElementById(rowId);
         var pane = row ? row.querySelector('[data-task-pane-key="' + paneKey + '"]') : null;
-        var alreadyOpen = row && row.style.display === 'table-row' && pane && pane.style.display !== 'none';
+        var alreadyOpen = row && row.style.display === 'table-row';
         hideInlineRows();
-        if (alreadyOpen || !row || !pane) {
+        if (alreadyOpen || !row) {
             return;
         }
 
         row.style.display = 'table-row';
+
+        if (paneKey === 'view') {
+            var task = findTask(taskId);
+            var panes = row.querySelectorAll('.task-inline-pane');
+            for (var i = 0; i < panes.length; i++) {
+                panes[i].style.display = panes[i].tagName === 'FORM' ? 'grid' : 'block';
+            }
+            var detailPane = row.querySelector('[data-task-pane-key="detail"]');
+            if (detailPane && task) {
+                detailPane.innerHTML = renderTaskDetail(task);
+            }
+            var updatePane = row.querySelector('[data-task-pane-key="update"]');
+            if (updatePane) {
+                var updateSelect = updatePane.querySelector('.assistant-select');
+                await fillAssistantSelect(updateSelect, updateSelect.getAttribute('data-series-id'), updateSelect.getAttribute('data-selected-assistant-id'));
+            }
+            await loadTaskImages(taskId);
+            return;
+        }
+
+        if (!pane) {
+            return;
+        }
         pane.style.display = pane.tagName === 'FORM' ? 'grid' : 'block';
 
         if (paneKey === 'detail') {
@@ -438,6 +558,10 @@
         if (paneKey === 'update') {
             var select = pane.querySelector('.assistant-select');
             await fillAssistantSelect(select, select.getAttribute('data-series-id'), select.getAttribute('data-selected-assistant-id'));
+        }
+
+        if (paneKey === 'images') {
+            await loadTaskImages(taskId);
         }
     }
 
@@ -490,6 +614,18 @@
                 await callApi('POST', '/api/v1/tasks/' + taskId + '/' + action);
                 showMessage(action === 'approve' ? 'Task approved.' : 'Task rejected.', false);
                 await loadData();
+            } catch (err) {
+                showMessage(err.message, true);
+            }
+        }
+
+        var imageDeleteButton = e.target.closest ? e.target.closest('[data-task-image-delete]') : null;
+        if (imageDeleteButton) {
+            if (!confirm('Delete this image?')) return;
+            try {
+                await callApi('DELETE', '/api/v1/images/' + imageDeleteButton.getAttribute('data-task-image-delete'));
+                showMessage('Image deleted.', false);
+                await loadTaskImages(imageDeleteButton.getAttribute('data-task-id'));
             } catch (err) {
                 showMessage(err.message, true);
             }
@@ -554,6 +690,20 @@
                 await callApi('PATCH', '/api/v1/tasks/' + statusData.taskId + '/status', { status: statusData.status });
                 showMessage('Task status updated.', false);
                 await loadData();
+            } catch (err) {
+                showMessage(err.message, true);
+            }
+        }
+
+        if (e.target.classList.contains('task-image-upload-form')) {
+            e.preventDefault();
+            try {
+                var imageTaskId = e.target.getAttribute('data-task-id');
+                var imageChapterId = e.target.getAttribute('data-chapter-id');
+                await uploadMultipart('/api/v1/chapters/' + imageChapterId + '/images', e.target);
+                showMessage('Task image uploaded.', false);
+                e.target.reset();
+                await loadTaskImages(imageTaskId);
             } catch (err) {
                 showMessage(err.message, true);
             }
