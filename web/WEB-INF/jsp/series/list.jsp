@@ -12,6 +12,7 @@
 
 <h2 class="page-title">Series</h2>
 <p class="page-sub">Manage your manga series and chapters</p>
+<div id="seriesMessage" class="alert" style="display:none;"></div>
 
 <div class="list-cards">
     <c:forEach items="${seriesList}" var="s">
@@ -26,10 +27,24 @@
                 <span>${s.inProgressChapters} in progress</span>
             </div>
 
-            <div class="metric-label" style="margin:12px 0 6px;">Current chapter progress</div>
+            <div class="metric-label series-progress-label">Current chapter progress</div>
             <div class="progress ${s.progressPct < 40 ? 'red' : ''}"><span style="width:${s.progressPct}%"></span></div>
 
-            <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+            <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('TANTOU_EDITOR') && sessionScope.AUTH_USER.id == s.tantouEditorId}">
+                <form class="series-deadline-form" data-series-id="${s.id}">
+                    <label for="deadline-${s.id}">Series deadline</label>
+                    <input id="deadline-${s.id}" type="date" name="publicationDate" value="${s.publicationDate}" required />
+                    <button class="btn small" type="submit">Update</button>
+                </form>
+            </c:if>
+            <c:if test="${sessionScope.AUTH_USER == null || !sessionScope.AUTH_USER.hasRole('TANTOU_EDITOR') || sessionScope.AUTH_USER.id != s.tantouEditorId}">
+                <div class="series-deadline-readonly">
+                    <span>Series deadline</span>
+                    <strong>${empty s.publicationDate ? 'Not set' : s.publicationDate}</strong>
+                </div>
+            </c:if>
+
+            <div class="series-card-actions">
                 <span class="status-chip ${s.status == 'CANCELLED' ? 'status-rejected' : 'status-approved'}">${s.status}</span>
                 <a class="btn small" href="${pageContext.request.contextPath}/main/chapters">View</a>
             </div>
@@ -37,6 +52,47 @@
     </c:forEach>
     <c:if test="${empty seriesList}"><div>No series found.</div></c:if>
 </div>
+
+<script>
+    (function () {
+        var ctx = '${pageContext.request.contextPath}';
+        var message = document.getElementById('seriesMessage');
+
+        function showMessage(text, isError) {
+            if (!message) { return; }
+            message.textContent = text;
+            message.style.display = 'block';
+            message.className = 'alert ' + (isError ? 'error' : 'success');
+        }
+
+        document.addEventListener('submit', async function (e) {
+            if (!e.target.classList || !e.target.classList.contains('series-deadline-form')) {
+                return;
+            }
+            e.preventDefault();
+
+            var form = e.target;
+            var seriesId = form.getAttribute('data-series-id');
+            var publicationDate = form.querySelector('[name="publicationDate"]').value;
+            try {
+                var res = await fetch(ctx + '/api/v1/series/' + seriesId + '/deadline?publicationDate=' + encodeURIComponent(publicationDate), {
+                    method: 'PUT',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                var body = await res.json();
+                if (!res.ok || body.success === false) {
+                    throw new Error(body.message || 'Cannot update deadline');
+                }
+                showMessage('Series deadline updated.', false);
+                window.location.reload();
+            } catch (err) {
+                showMessage(err.message, true);
+            }
+        });
+    })();
+</script>
 
 <jsp:include page="../common/footer.jsp" />
 </body>

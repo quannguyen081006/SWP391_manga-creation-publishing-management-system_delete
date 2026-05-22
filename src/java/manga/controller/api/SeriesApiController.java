@@ -5,6 +5,7 @@ import manga.common.util.SessionUserUtil;
 import manga.model.AuthenticatedUser;
 import manga.model.SeriesSummary;
 import manga.repository.ProductionRepository;
+import java.sql.Date;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpSession;
@@ -52,8 +53,20 @@ public class SeriesApiController {
                 throw new IllegalArgumentException("Only series owner/assigned Tantou/Admin can view assistants");
             }
         }
-        return ApiResponse.ok(productionRepository.listSeriesAssistants(id), "Series assistants");
+        return ApiResponse.ok(productionRepository.listMangakaAssistantsBySeries(id), "Mangaka assistants");
     }
+
+    @RequestMapping(value = "/{id}/deadline", method = RequestMethod.PUT)
+    public ApiResponse<SeriesSummary> updateDeadline(
+            @PathVariable("id") long id,
+            @RequestParam("publicationDate") String publicationDate,
+            HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can update series deadline");
+        productionRepository.updateSeriesDeadline(id, user.getId(), Date.valueOf(publicationDate));
+        return detail(id, session);
+    }
+
     @RequestMapping(value = "/{id}/assistants", method = RequestMethod.POST)
     public ApiResponse<Object> enrollAssistant(
             @PathVariable("id") long id,
@@ -65,7 +78,7 @@ public class SeriesApiController {
             throw new IllegalArgumentException("Only series owner can enroll assistant");
         }
         productionRepository.enrollAssistant(id, assistantId);
-        return ApiResponse.ok(null, "Assistant enrolled");
+        return ApiResponse.ok(null, "Assistant assigned");
     }
 
     @RequestMapping(value = "/{id}/assistants/{assistantId}", method = RequestMethod.DELETE)

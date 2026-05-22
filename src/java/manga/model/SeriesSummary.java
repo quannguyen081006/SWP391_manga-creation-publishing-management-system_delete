@@ -1,5 +1,7 @@
 package manga.model;
 
+import java.sql.Date;
+
 public class SeriesSummary {
     private long id;
     private String title;
@@ -7,6 +9,7 @@ public class SeriesSummary {
     private String status;
     private long mangakaId;
     private long tantouEditorId;
+    private Date publicationDate;
     private int chapterCount;
     private int inProgressChapters;
     private double progressPct;
@@ -23,6 +26,8 @@ public class SeriesSummary {
     public void setMangakaId(long mangakaId) { this.mangakaId = mangakaId; }
     public long getTantouEditorId() { return tantouEditorId; }
     public void setTantouEditorId(long tantouEditorId) { this.tantouEditorId = tantouEditorId; }
+    public Date getPublicationDate() { return publicationDate; }
+    public void setPublicationDate(Date publicationDate) { this.publicationDate = publicationDate; }
     public int getChapterCount() { return chapterCount; }
     public void setChapterCount(int chapterCount) { this.chapterCount = chapterCount; }
     public int getInProgressChapters() { return inProgressChapters; }

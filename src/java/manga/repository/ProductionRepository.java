@@ -5,6 +5,7 @@ import manga.model.ManuscriptSummary;
 import manga.model.SeriesSummary;
 import manga.model.TaskSummary;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,13 +25,13 @@ public class ProductionRepository {
 
     public List<SeriesSummary> listSeries() {
         String sql =
-            "SELECT s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId, "
+            "SELECT s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId, s.publicationDate, "
             + "COUNT(c.id) AS chapterCount, "
             + "SUM(CASE WHEN c.status IN ('PLANNING','IN_PROGRESS','EDITORIAL_REVIEW') THEN 1 ELSE 0 END) AS inProgressChapters, "
             + "AVG(CASE WHEN c.id IS NULL THEN NULL ELSE c.completionPct END) AS progressPct "
             + "FROM Series s "
             + "LEFT JOIN Chapter c ON c.seriesId = s.id "
-            + "GROUP BY s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId "
+            + "GROUP BY s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId, s.publicationDate "
             + "ORDER BY MAX(s.createdAt) DESC";
 
         List<SeriesSummary> rows = new ArrayList<SeriesSummary>();
@@ -45,6 +46,7 @@ public class ProductionRepository {
                 s.setStatus(rs.getString("status"));
                 s.setMangakaId(rs.getLong("mangakaId"));
                 s.setTantouEditorId(rs.getLong("tantouEditorId"));
+                s.setPublicationDate(rs.getDate("publicationDate"));
                 s.setChapterCount(rs.getInt("chapterCount"));
                 s.setInProgressChapters(rs.getInt("inProgressChapters"));
                 double pct = rs.getDouble("progressPct");
@@ -55,6 +57,56 @@ public class ProductionRepository {
             throw new RuntimeException("Cannot load series", ex);
         }
         return rows;
+    }
+
+    public void updateSeriesDeadline(long seriesId, long tantouEditorId, Date publicationDate) {
+        if (publicationDate == null) {
+            throw new IllegalArgumentException("publicationDate is required");
+        }
+
+        String readSql = "SELECT mangakaId, tantouEditorId, title FROM Series WHERE id = ?";
+        String updateSql = "UPDATE Series SET publicationDate = ? WHERE id = ?";
+        String notifySql =
+            "INSERT INTO Notification (userId, type, message, referenceId, referenceType, isRead, createdAt) "
+            + "VALUES (?, ?, ?, ?, ?, 0, GETDATE())";
+
+        try (Connection conn = dataSource.getConnection()) {
+            long mangakaId;
+            long assignedTantouId;
+            String title;
+            try (PreparedStatement read = conn.prepareStatement(readSql)) {
+                read.setLong(1, seriesId);
+                try (ResultSet rs = read.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalArgumentException("Series not found");
+                    }
+                    mangakaId = rs.getLong("mangakaId");
+                    assignedTantouId = rs.getLong("tantouEditorId");
+                    title = rs.getString("title");
+                }
+            }
+
+            if (assignedTantouId != tantouEditorId) {
+                throw new IllegalArgumentException("Only assigned Tantou can update series deadline");
+            }
+
+            try (PreparedStatement update = conn.prepareStatement(updateSql)) {
+                update.setDate(1, publicationDate);
+                update.setLong(2, seriesId);
+                update.executeUpdate();
+            }
+
+            try (PreparedStatement notify = conn.prepareStatement(notifySql)) {
+                notify.setLong(1, mangakaId);
+                notify.setString(2, "SERIES_DEADLINE_UPDATED");
+                notify.setString(3, "Deadline for series \"" + title + "\" was updated to " + publicationDate + ".");
+                notify.setLong(4, seriesId);
+                notify.setString(5, null);
+                notify.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update series deadline", ex);
+        }
     }
 
     public long findSeriesOwnerMangaka(long seriesId) {
@@ -79,9 +131,11 @@ public class ProductionRepository {
             + "JOIN UserRole ur ON ur.userId = u.id "
             + "JOIN [Role] r ON r.id = ur.roleId "
             + "WHERE u.id = ? AND u.status = 'ACTIVE' AND r.name = 'ASSISTANT'";
-        String insertSql = "INSERT INTO SeriesAssistant (seriesId, assistantId, enrolledAt) VALUES (?, ?, GETDATE())";
+        String countSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ?";
+        String insertSql = "INSERT INTO MangakaAssistant (mangakaId, assistantId, enrolledAt) VALUES (?, ?, GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
+            long mangakaId = findSeriesOwnerMangaka(seriesId);
             try (PreparedStatement check = conn.prepareStatement(checkAssistantSql)) {
                 check.setLong(1, assistantId);
                 try (ResultSet rs = check.executeQuery()) {
@@ -92,8 +146,18 @@ public class ProductionRepository {
                 }
             }
 
+            try (PreparedStatement count = conn.prepareStatement(countSql)) {
+                count.setLong(1, mangakaId);
+                try (ResultSet rs = count.executeQuery()) {
+                    rs.next();
+                    if (rs.getInt(1) >= 4) {
+                        throw new IllegalArgumentException("Mangaka already has 4 assistants");
+                    }
+                }
+            }
+
             try (PreparedStatement insert = conn.prepareStatement(insertSql)) {
-                insert.setLong(1, seriesId);
+                insert.setLong(1, mangakaId);
                 insert.setLong(2, assistantId);
                 insert.executeUpdate();
             }
@@ -103,13 +167,25 @@ public class ProductionRepository {
     }
 
     public void removeAssistant(long seriesId, long assistantId) {
-        String sql = "DELETE FROM SeriesAssistant WHERE seriesId = ? AND assistantId = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, seriesId);
-            ps.setLong(2, assistantId);
-            if (ps.executeUpdate() == 0) {
-                throw new IllegalArgumentException("Assistant enrollment not found");
+        String countSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ?";
+        String sql = "DELETE FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
+        try (Connection conn = dataSource.getConnection()) {
+            long mangakaId = findSeriesOwnerMangaka(seriesId);
+            try (PreparedStatement count = conn.prepareStatement(countSql)) {
+                count.setLong(1, mangakaId);
+                try (ResultSet rs = count.executeQuery()) {
+                    rs.next();
+                    if (rs.getInt(1) <= 4) {
+                        throw new IllegalArgumentException("Mangaka must have 4 assistants");
+                    }
+                }
+            }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, mangakaId);
+                ps.setLong(2, assistantId);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Mangaka assistant not found");
+                }
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot remove assistant", ex);
@@ -132,12 +208,13 @@ public class ProductionRepository {
         }
     }
 
-    public List<Map<String, Object>> listSeriesAssistants(long seriesId) {
+    public List<Map<String, Object>> listMangakaAssistantsBySeries(long seriesId) {
         String sql =
             "SELECT u.id, u.username, u.fullName, u.email "
-            + "FROM SeriesAssistant sa "
-            + "JOIN [User] u ON u.id = sa.assistantId "
-            + "WHERE sa.seriesId = ? AND u.status = 'ACTIVE' "
+            + "FROM Series s "
+            + "JOIN MangakaAssistant ma ON ma.mangakaId = s.mangakaId "
+            + "JOIN [User] u ON u.id = ma.assistantId "
+            + "WHERE s.id = ? AND u.status = 'ACTIVE' "
             + "ORDER BY u.fullName";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         try (Connection conn = dataSource.getConnection();
@@ -154,7 +231,7 @@ public class ProductionRepository {
                 }
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot load series assistants", ex);
+            throw new RuntimeException("Cannot load mangaka assistants", ex);
         }
         return rows;
     }

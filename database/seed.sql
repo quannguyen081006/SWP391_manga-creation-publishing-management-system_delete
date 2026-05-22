@@ -32,10 +32,12 @@ INSERT INTO [User] (username, passwordHash, fullName, email, status) VALUES
     ('mangaka1',    '12345', 'Yuki Tanaka',          'mangaka1@mangaflow.local','ACTIVE'),  -- id 2
     ('assistant1',  '12345', 'Aiko Mori',            'asst1@mangaflow.local',   'ACTIVE'),  -- id 3
     ('assistant2',  '12345', 'Riku Hayashi',         'asst2@mangaflow.local',   'ACTIVE'),  -- id 4
-    ('tantou1',     '12345', 'Hiroshi Yamamoto',     'tantou1@mangaflow.local', 'ACTIVE'),  -- id 5
-    ('board1',      '12345', 'Board Member Keiko',   'board1@mangaflow.local',  'ACTIVE'),  -- id 6
-    ('board2',      '12345', 'Board Member Sato',    'board2@mangaflow.local',  'ACTIVE'),  -- id 7
-    ('board3',      '12345', 'Board Member Natsuki', 'board3@mangaflow.local',  'ACTIVE');  -- id 8
+    ('assistant3',  '12345', 'Mika Saito',           'asst3@mangaflow.local',   'ACTIVE'),  -- id 5
+    ('assistant4',  '12345', 'Ren Fujimoto',         'asst4@mangaflow.local',   'ACTIVE'),  -- id 6
+    ('tantou1',     '12345', 'Hiroshi Yamamoto',     'tantou1@mangaflow.local', 'ACTIVE'),  -- id 7
+    ('board1',      '12345', 'Board Member Keiko',   'board1@mangaflow.local',  'ACTIVE'),  -- id 8
+    ('board2',      '12345', 'Board Member Sato',    'board2@mangaflow.local',  'ACTIVE'),  -- id 9
+    ('board3',      '12345', 'Board Member Natsuki', 'board3@mangaflow.local',  'ACTIVE');  -- id 10
 GO
 
 -- ============================================================
@@ -46,10 +48,12 @@ INSERT INTO UserRole (userId, roleId) VALUES
     (2, 2),  -- mangaka1     → MANGAKA
     (3, 3),  -- assistant1   → ASSISTANT
     (4, 3),  -- assistant2   → ASSISTANT
-    (5, 4),  -- tantou1      → TANTOU_EDITOR
-    (6, 5),  -- board1       → EDITORIAL_BOARD
-    (7, 5),  -- board2       → EDITORIAL_BOARD
-    (8, 5);  -- board3       → EDITORIAL_BOARD
+    (5, 3),  -- assistant3   -> ASSISTANT
+    (6, 3),  -- assistant4   -> ASSISTANT
+    (7, 4),  -- tantou1      -> TANTOU_EDITOR
+    (8, 5),  -- board1       -> EDITORIAL_BOARD
+    (9, 5),  -- board2       -> EDITORIAL_BOARD
+    (10, 5); -- board3       -> EDITORIAL_BOARD
 GO
 
 -- ============================================================
@@ -67,7 +71,7 @@ VALUES
      1,
      'APPROVED',
      DATEADD(DAY, -20, GETDATE()),
-     5,
+     7,
      1,
      DATEADD(DAY, -25, GETDATE()),
      DATEADD(DAY, -20, GETDATE())
@@ -88,7 +92,7 @@ VALUES
      1,
      'UNDER_REVIEW',
      DATEADD(DAY, -3, GETDATE()),
-     5,
+     7,
      1,
      DATEADD(DAY, -5, GETDATE()),
      DATEADD(DAY, -3, GETDATE())
@@ -104,11 +108,11 @@ INSERT INTO ProposalHistory
 VALUES
     (1, 2, 'MANGAKA', 'CREATED', 'Seed draft proposal created.', 0, DATEADD(DAY, -25, GETDATE())),
     (1, 2, 'MANGAKA', 'SUBMITTED', 'Seed proposal submitted for Tantou review.', 1, DATEADD(DAY, -24, GETDATE())),
-    (1, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #5.', 1, DATEADD(DAY, -24, GETDATE())),
-    (1, 5, 'TANTOU_EDITOR', 'APPROVED', 'Seed proposal approved.', 1, DATEADD(DAY, -20, GETDATE())),
+    (1, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #7.', 1, DATEADD(DAY, -24, GETDATE())),
+    (1, 7, 'TANTOU_EDITOR', 'APPROVED', 'Seed proposal approved.', 1, DATEADD(DAY, -20, GETDATE())),
     (2, 2, 'MANGAKA', 'CREATED', 'Seed draft proposal created.', 0, DATEADD(DAY, -5, GETDATE())),
     (2, 2, 'MANGAKA', 'SUBMITTED', 'Seed proposal submitted for Tantou review.', 1, DATEADD(DAY, -3, GETDATE())),
-    (2, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #5.', 1, DATEADD(DAY, -3, GETDATE()));
+    (2, NULL, 'SYSTEM', 'ASSIGNED_EDITOR', 'Seed proposal assigned to Tantou Editor #7.', 1, DATEADD(DAY, -3, GETDATE()));
 GO
 
 -- ============================================================
@@ -117,7 +121,7 @@ GO
 INSERT INTO Series
     (proposalId, mangakaId, tantouEditorId, title, genre, status, publicationDate, createdAt)
 VALUES
-    (1, 2, 5,
+    (1, 2, 7,
      'Shadows of Edo',
      'Action',
      'ACTIVE',
@@ -127,12 +131,78 @@ GO
 -- series id = 1
 
 -- ============================================================
---  SERIES ASSISTANTS
+--  MANGAKA ASSISTANTS
 -- ============================================================
-INSERT INTO SeriesAssistant (seriesId, assistantId)
+INSERT INTO MangakaAssistant (mangakaId, assistantId)
 VALUES
-    (1, 3),  -- assistant1 enrolled in series 1
-    (1, 4);  -- assistant2 enrolled in series 1
+    (2, 3),  -- assistant1 assigned to mangaka1
+    (2, 4),  -- assistant2 assigned to mangaka1
+    (2, 5),  -- assistant3 assigned to mangaka1
+    (2, 6);  -- assistant4 assigned to mangaka1
+GO
+
+-- Ensure every active Mangaka has exactly 4 Assistants.
+DECLARE @assistantRoleId BIGINT;
+SELECT @assistantRoleId = id FROM [Role] WHERE name = 'ASSISTANT';
+
+DECLARE @mangakaId BIGINT;
+DECLARE mangaka_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT u.id
+    FROM [User] u
+    JOIN UserRole ur ON ur.userId = u.id
+    JOIN [Role] r ON r.id = ur.roleId
+    WHERE r.name = 'MANGAKA'
+      AND u.status = 'ACTIVE';
+
+OPEN mangaka_cursor;
+FETCH NEXT FROM mangaka_cursor INTO @mangakaId;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    DECLARE @assistantCount INT;
+    DECLARE @nextNo INT;
+    SELECT @assistantCount = COUNT(1)
+    FROM MangakaAssistant
+    WHERE mangakaId = @mangakaId;
+
+    SET @nextNo = 1;
+
+    WHILE @assistantCount < 4
+    BEGIN
+        DECLARE @username VARCHAR(100);
+        DECLARE @fullName VARCHAR(255);
+        DECLARE @email VARCHAR(255);
+        DECLARE @newAssistantId BIGINT;
+
+        SET @username = 'assistant_m' + CAST(@mangakaId AS VARCHAR(20)) + '_' + CAST(@nextNo AS VARCHAR(20));
+        SET @email = @username + '@mangaflow.local';
+
+        IF NOT EXISTS (SELECT 1 FROM [User] WHERE username = @username OR email = @email)
+        BEGIN
+            SET @fullName = 'Assistant ' + CAST(@mangakaId AS VARCHAR(20)) + '-' + CAST(@nextNo AS VARCHAR(20));
+
+            INSERT INTO [User] (username, passwordHash, fullName, email, status)
+            VALUES (@username, '12345', @fullName, @email, 'ACTIVE');
+
+            SET @newAssistantId = SCOPE_IDENTITY();
+
+            INSERT INTO UserRole (userId, roleId)
+            VALUES (@newAssistantId, @assistantRoleId);
+
+            INSERT INTO MangakaAssistant (mangakaId, assistantId)
+            VALUES (@mangakaId, @newAssistantId);
+
+            SET @assistantCount = @assistantCount + 1;
+        END
+
+        SET @nextNo = @nextNo + 1;
+    END
+
+    FETCH NEXT FROM mangaka_cursor INTO @mangakaId;
+END
+
+CLOSE mangaka_cursor;
+DEALLOCATE mangaka_cursor;
 GO
 
 -- ============================================================
@@ -183,7 +253,7 @@ GO
 INSERT INTO Annotation
     (manuscriptId, editorId, pageNumber, content)
 VALUES
-    (1, 5, 3, 'The sword perspective needs correction — blade appears too short at this angle.');
+    (1, 7, 3, 'The sword perspective needs correction — blade appears too short at this angle.');
 GO
 
 -- ============================================================
@@ -206,8 +276,8 @@ INSERT INTO Notification
     (userId, type, message, referenceId, referenceType, isRead)
 VALUES
     (2,  'PROPOSAL_RESOLVED',      'Your proposal "Shadows of Edo" was APPROVED!',            1, 'PROPOSAL', 0),
-    (5,  'MANUSCRIPT_SUBMITTED',   'New manuscript submitted for Chapter 1 of Shadows of Edo.',1,'MANUSCRIPT', 0),
-    (5,  'PROPOSAL_ASSIGNED',      'Proposal "Cyber Ronin" is ready for Tantou review.',       2, 'PROPOSAL', 0),
+    (7,  'MANUSCRIPT_SUBMITTED',   'New manuscript submitted for Chapter 1 of Shadows of Edo.',1,'MANUSCRIPT', 0),
+    (7,  'PROPOSAL_ASSIGNED',      'Proposal "Cyber Ronin" is ready for Tantou review.',       2, 'PROPOSAL', 0),
     (3,  'TASK_DUE_REMINDER',      'Your sketching task for Chapter 1 is due in 30 days.',    1, 'TASK',     0);
 GO
 
@@ -220,7 +290,7 @@ VALUES
     (1, 'PROPOSAL_APPROVED',  'PROPOSAL', 1, '{"status":"APPROVED"}'),
     (2, 'SERIES_CREATED',     'PROPOSAL', 1, '{"seriesId":1}'),
     (2, 'MANUSCRIPT_SUBMITTED','MANUSCRIPT',1,'{"version":1,"chapterId":1}'),
-    (5, 'MANUSCRIPT_REVIEW_STARTED','MANUSCRIPT',1,'{"status":"UNDER_REVIEW"}');
+    (7, 'MANUSCRIPT_REVIEW_STARTED','MANUSCRIPT',1,'{"status":"UNDER_REVIEW"}');
 GO
 
 PRINT 'Seed data inserted successfully.';
@@ -228,7 +298,7 @@ PRINT '';
 PRINT 'Test accounts (all passwords: 12345):';
 PRINT '  admin     — ADMIN';
 PRINT '  mangaka1  — MANGAKA';
-PRINT '  assistant1 / assistant2 — ASSISTANT';
+PRINT '  assistant1 / assistant2 / assistant3 / assistant4 - ASSISTANT';
 PRINT '  tantou1   — TANTOU_EDITOR';
 PRINT '  board1 / board2 / board3 — EDITORIAL_BOARD';
 GO

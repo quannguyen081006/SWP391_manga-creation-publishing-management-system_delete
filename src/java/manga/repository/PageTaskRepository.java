@@ -152,7 +152,7 @@ public class PageTaskRepository {
     public long create(long chapterId, long assistantId, int start, int end, String taskType, Date dueDate) {
         String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
-        String enrollmentSql = "SELECT COUNT(1) FROM SeriesAssistant WHERE seriesId = ? AND assistantId = ?";
+        String enrollmentSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
         String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, GETDATE(), GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
@@ -222,7 +222,7 @@ public class PageTaskRepository {
                     dueDate,
                     "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND id <> ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)",
                     "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?",
-                    "SELECT COUNT(1) FROM SeriesAssistant WHERE seriesId = ? AND assistantId = ?");
+                    "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?");
 
             try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
                 ps.setLong(1, assistantId);
@@ -308,7 +308,6 @@ public class PageTaskRepository {
             }
         }
 
-        long seriesId;
         long mangakaId;
         Date submissionDeadline;
         try (PreparedStatement chapter = conn.prepareStatement(chapterSql)) {
@@ -318,7 +317,6 @@ public class PageTaskRepository {
                     throw new IllegalArgumentException("Chapter not found");
                 }
                 submissionDeadline = rs.getDate("submissionDeadline");
-                seriesId = rs.getLong("seriesId");
                 mangakaId = rs.getLong("mangakaId");
             }
         }
@@ -332,12 +330,12 @@ public class PageTaskRepository {
         }
 
         try (PreparedStatement enrollment = conn.prepareStatement(enrollmentSql)) {
-            enrollment.setLong(1, seriesId);
+            enrollment.setLong(1, mangakaId);
             enrollment.setLong(2, assistantId);
             try (ResultSet rs = enrollment.executeQuery()) {
                 rs.next();
                 if (rs.getInt(1) == 0) {
-                    throw new IllegalArgumentException("Assistant must be enrolled in series (BR-36)");
+                    throw new IllegalArgumentException("Assistant must be assigned to mangaka (BR-36)");
                 }
             }
         }
