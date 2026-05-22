@@ -85,6 +85,7 @@
         <c:if test="${isAdmin || isBoard}">
             <a class="nav-item ${fn:contains(uri, '/main/decisions') ? 'active' : ''}" href="${ctx}/main/decisions">Decisions</a>
             <a class="nav-item ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods">Ranking</a>
+            <a class="nav-item ${fn:contains(uri, '/main/analytics') ? 'active' : ''}" href="${ctx}/main/analytics">Performance Analytics</a>
         </c:if>
 
         <c:if test="${isAdmin}">
