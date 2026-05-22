@@ -104,6 +104,37 @@
         <p>Period: #${currentPeriodId}</p>
         <p>Calculated: ${result.calculatedAt}</p>
     </div>
+
+    <div class="section-card">
+        <h3 class="section-title compact-title">Editorial Comments</h3>
+        <c:if test="${not empty editorialComments}">
+            <div style="margin: 16px 0;">
+                <c:forEach items="${editorialComments}" var="comment">
+                    <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <strong>${comment.boardMemberName}</strong>
+                            <small style="color: #666;">${comment.createdAt}</small>
+                        </div>
+                        <p style="margin: 0;">${comment.comment}</p>
+                    </div>
+                </c:forEach>
+            </div>
+        </c:if>
+        <c:if test="${empty editorialComments}">
+            <p class="muted">No editorial comments yet.</p>
+        </c:if>
+        
+        <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD') && not empty result}">
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0;">
+                <form method="post" action="${pageContext.request.contextPath}/main/analytics/comments/${currentPeriodId}" class="form-grid">
+                    <label>Add Your Comment</label>
+                    <textarea name="comment" rows="3" required placeholder="Share your review or recommendations..."></textarea>
+                    <input type="hidden" name="mangakaId" value="${mangakaId}" />
+                    <button class="btn primary" type="submit">Submit Comment</button>
+                </form>
+            </div>
+        </c:if>
+    </div>
 </c:if>
 
 <c:if test="${empty result}">

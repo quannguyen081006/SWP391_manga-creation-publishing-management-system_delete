@@ -60,7 +60,7 @@
 <c:if test="${not empty periods}">
     <div class="section-card">
         <h3 class="section-title compact-title">Available Periods</h3>
-        <p class="muted" style="margin-bottom: 16px;">Select a period to view detailed analytics</p>
+        <p class="muted" style="margin-bottom: 16px;">CSV-based performance analytics workflow</p>
         <table class="data-table">
             <thead><tr><th>ID</th><th>Name</th><th>Window</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
@@ -72,15 +72,13 @@
                         <td>${p.status}</td>
                         <td>
                             <a class="btn small" href="${pageContext.request.contextPath}/main/analytics/period/${p.id}">View Details</a>
-                            <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD') && p.status == 'OPEN'}">
-                                <a class="btn small" href="${pageContext.request.contextPath}/main/analytics/vote/${p.id}">Vote</a>
-                            </c:if>
                             <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN') && p.status == 'OPEN'}">
-                                <form method="post" action="${pageContext.request.contextPath}/main/analytics/periods/${p.id}/close" style="display:inline-block;">
-                                    <button class="btn small" type="submit">Close</button>
+                                <form method="post" action="${pageContext.request.contextPath}/main/analytics/periods/${p.id}/upload" enctype="multipart/form-data" style="display:inline-block;">
+                                    <input type="file" name="csvFile" accept=".csv" required style="display:inline-block; margin-right:4px;" />
+                                    <button class="btn small" type="submit">Upload CSV</button>
                                 </form>
                             </c:if>
-                            <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN') && p.status == 'CLOSED'}">
+                            <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN') && p.status == 'IMPORTED'}">
                                 <form method="post" action="${pageContext.request.contextPath}/main/analytics/periods/${p.id}/calculate" style="display:inline-block;">
                                     <button class="btn small" type="submit">Calculate Performance</button>
                                 </form>
@@ -94,7 +92,26 @@
 
 <c:if test="${empty periods}">
     <div class="section-card">
-        <p class="muted">No performance data available. Calculate performance for a ranking period to see analytics.</p>
+        <p class="muted">No performance periods available. Create a period and upload CSV data to begin analytics.</p>
+    </div>
+</c:if>
+
+<c:if test="${not empty error}">
+    <div class="section-card" style="background: #fff3cd; border: 1px solid #ffc107;">
+        <p style="color: #856404; margin: 0;"><strong>Error:</strong> ${error}</p>
+        <c:if test="${not empty errors}">
+            <ul style="color: #856404; margin: 8px 0 0 20px;">
+                <c:forEach items="${errors}" var="err">
+                    <li>${err}</li>
+                </c:forEach>
+            </ul>
+        </c:if>
+    </div>
+</c:if>
+
+<c:if test="${not empty success}">
+    <div class="section-card" style="background: #d4edda; border: 1px solid #28a745;">
+        <p style="color: #155724; margin: 0;"><strong>Success:</strong> ${success}</p>
     </div>
 </c:if>
 

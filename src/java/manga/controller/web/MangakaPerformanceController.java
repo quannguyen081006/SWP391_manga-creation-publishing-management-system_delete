@@ -1,9 +1,12 @@
 package manga.controller.web;
 
 import manga.model.AuthenticatedUser;
+import manga.repository.EditorialCommentRepository;
+import manga.repository.MangakaPerformanceRepository;
+import manga.repository.PerformanceImportRecordRepository;
 import manga.repository.PerformancePeriodRepository;
-import manga.repository.PerformanceVoteRepository;
 import manga.repository.PerformanceResultRepository;
+import manga.service.CsvImportService;
 import manga.service.MangakaPerformanceCalculationService;
 import manga.common.util.SessionUserUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import javax.servlet.http.HttpSession;
 import java.sql.Date;
 import java.util.HashMap;
@@ -29,13 +33,22 @@ public class MangakaPerformanceController {
     private PerformancePeriodRepository periodRepository;
 
     @Autowired
-    private PerformanceVoteRepository voteRepository;
+    private PerformanceImportRecordRepository importRecordRepository;
 
     @Autowired
     private PerformanceResultRepository resultRepository;
 
     @Autowired
     private MangakaPerformanceCalculationService calculationService;
+
+    @Autowired
+    private CsvImportService csvImportService;
+
+    @Autowired
+    private EditorialCommentRepository editorialCommentRepository;
+
+    @Autowired
+    private MangakaPerformanceRepository mangakaPerformanceRepository;
 
     private void requireAdminOrEditorialBoard(AuthenticatedUser user) {
         if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
@@ -55,7 +68,7 @@ public class MangakaPerformanceController {
         requireAdminOrEditorialBoard(user);
         
         List<Map<String, Object>> periods = periodRepository.listPeriods();
-        List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
+        List<Map<String, Object>> mangakaList = mangakaPerformanceRepository.listMangakaUsers();
         model.addAttribute("periods", periods);
         model.addAttribute("mangakaList", mangakaList);
         model.addAttribute("currentUser", user);
@@ -76,7 +89,7 @@ public class MangakaPerformanceController {
             return "redirect:/main/analytics";
         } catch (RuntimeException ex) {
             List<Map<String, Object>> periods = periodRepository.listPeriods();
-            List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
+            List<Map<String, Object>> mangakaList = mangakaPerformanceRepository.listMangakaUsers();
             model.addAttribute("periods", periods);
             model.addAttribute("mangakaList", mangakaList);
             model.addAttribute("error", ex.getMessage());
@@ -84,17 +97,43 @@ public class MangakaPerformanceController {
         }
     }
 
-    @RequestMapping(value = "/periods/{periodId}/close", method = RequestMethod.POST)
-    public String closePeriod(@PathVariable("periodId") long periodId, HttpSession session, Model model) {
+    @RequestMapping(value = "/periods/{periodId}/upload", method = RequestMethod.POST)
+    public String uploadCsv(@PathVariable("periodId") long periodId,
+                            @RequestParam("csvFile") MultipartFile csvFile,
+                            HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
         requireAdmin(user);
         
         try {
-            periodRepository.closePeriod(periodId);
-            return "redirect:/main/analytics";
+            Map<String, Object> period = periodRepository.findPeriodById(periodId);
+            if (!"OPEN".equalsIgnoreCase((String) period.get("status"))) {
+                throw new IllegalArgumentException("CSV upload is only allowed for OPEN periods");
+            }
+
+            List<Map<String, Object>> mangakaList = mangakaPerformanceRepository.listMangakaUsers();
+            Map<String, Long> mangakaNameToIdMap = csvImportService.buildMangakaNameToIdMap(mangakaList);
+            
+            CsvImportService.ImportResult result = csvImportService.parseAndValidateCsv(csvFile, mangakaNameToIdMap);
+            
+            if (result.failureCount > 0) {
+                model.addAttribute("error", "CSV validation failed with " + result.failureCount + " errors");
+                model.addAttribute("errors", result.errors);
+            } else {
+                importRecordRepository.deleteImportRecordsByPeriod(periodId);
+                csvImportService.importValidRows(periodId, result.validRows, mangakaNameToIdMap);
+                periodRepository.markAsImported(periodId);
+                model.addAttribute("success", "CSV imported successfully. " + result.successCount + " records imported.");
+            }
+            
+            List<Map<String, Object>> periods = periodRepository.listPeriods();
+            model.addAttribute("periods", periods);
+            model.addAttribute("mangakaList", mangakaList);
+            model.addAttribute("currentUser", user);
+            
+            return "analytics/index";
         } catch (RuntimeException ex) {
             List<Map<String, Object>> periods = periodRepository.listPeriods();
-            List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
+            List<Map<String, Object>> mangakaList = mangakaPerformanceRepository.listMangakaUsers();
             model.addAttribute("periods", periods);
             model.addAttribute("mangakaList", mangakaList);
             model.addAttribute("error", ex.getMessage());
@@ -112,33 +151,7 @@ public class MangakaPerformanceController {
             return "redirect:/main/analytics/period/" + periodId;
         } catch (Exception ex) {
             List<Map<String, Object>> periods = periodRepository.listPeriods();
-            List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
-            model.addAttribute("periods", periods);
-            model.addAttribute("mangakaList", mangakaList);
-            model.addAttribute("error", ex.getMessage());
-            return analyticsIndex(session, model);
-        }
-    }
-
-    @RequestMapping(value = "/periods/{periodId}/vote", method = RequestMethod.POST)
-    public String submitMangakaVote(@PathVariable("periodId") long periodId,
-                                     @RequestParam("mangakaId") long mangakaId,
-                                     @RequestParam("popularityScore") int popularityScore,
-                                     @RequestParam("reliabilityScore") int reliabilityScore,
-                                     @RequestParam("qualityScore") int qualityScore,
-                                     @RequestParam(value = "comment", required = false) String comment,
-                                     HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        if (!user.hasRole("EDITORIAL_BOARD")) {
-            throw new IllegalArgumentException("Only EDITORIAL_BOARD can submit mangaka votes");
-        }
-        
-        try {
-            voteRepository.submitVote(periodId, mangakaId, user.getId(), popularityScore, reliabilityScore, qualityScore, comment);
-            return "redirect:/main/analytics/vote/" + periodId;
-        } catch (RuntimeException ex) {
-            List<Map<String, Object>> periods = periodRepository.listPeriods();
-            List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
+            List<Map<String, Object>> mangakaList = mangakaPerformanceRepository.listMangakaUsers();
             model.addAttribute("periods", periods);
             model.addAttribute("mangakaList", mangakaList);
             model.addAttribute("error", ex.getMessage());
@@ -158,7 +171,7 @@ public class MangakaPerformanceController {
         Map<Long, String> mangakaNames = new HashMap<>();
         for (Map<String, Object> result : results) {
             long mangakaId = (Long) result.get("mangakaId");
-            mangakaNames.put(mangakaId, voteRepository.getMangakaName(mangakaId));
+            mangakaNames.put(mangakaId, mangakaPerformanceRepository.getMangakaName(mangakaId));
         }
         
         model.addAttribute("period", period);
@@ -170,33 +183,23 @@ public class MangakaPerformanceController {
         return "analytics/period";
     }
 
-    @RequestMapping(value = "/vote/{periodId}", method = RequestMethod.GET)
-    public String votePage(@PathVariable("periodId") long periodId, HttpSession session, Model model) {
+    @RequestMapping(value = "/comments/{periodId}", method = RequestMethod.POST)
+    public String submitEditorialComment(@PathVariable("periodId") long periodId,
+                                         @RequestParam("mangakaId") long mangakaId,
+                                         @RequestParam("comment") String comment,
+                                         HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
         if (!user.hasRole("EDITORIAL_BOARD")) {
-            throw new IllegalArgumentException("Only EDITORIAL_BOARD can access voting page");
+            throw new IllegalArgumentException("Only EDITORIAL_BOARD can submit editorial comments");
         }
         
-        Map<String, Object> period = periodRepository.findPeriodById(periodId);
-        if (!"OPEN".equalsIgnoreCase((String) period.get("status"))) {
-            throw new IllegalArgumentException("Voting is only allowed for OPEN periods");
+        try {
+            editorialCommentRepository.saveComment(periodId, mangakaId, user.getId(), comment);
+            return "redirect:/main/analytics/mangaka/" + mangakaId + "?periodId=" + periodId;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return mangakaDetail(mangakaId, periodId, session, model);
         }
-        
-        List<Map<String, Object>> mangakaList = voteRepository.getMangakaList();
-        List<Map<String, Object>> votes = voteRepository.getVotesByPeriod(periodId);
-        
-        Map<Long, Map<String, Object>> votesByMangaka = new HashMap<>();
-        for (Map<String, Object> vote : votes) {
-            long mangakaId = (Long) vote.get("mangakaId");
-            votesByMangaka.put(mangakaId, vote);
-        }
-        
-        model.addAttribute("period", period);
-        model.addAttribute("mangakaList", mangakaList);
-        model.addAttribute("votesByMangaka", votesByMangaka);
-        model.addAttribute("currentUser", user);
-        
-        return "analytics/vote";
     }
 
     @RequestMapping(value = "/popular", method = RequestMethod.GET)
@@ -226,7 +229,7 @@ public class MangakaPerformanceController {
                 }
                 for (Map<String, Object> result : results) {
                     long mangakaId = (Long) result.get("mangakaId");
-                    mangakaNames.put(mangakaId, voteRepository.getMangakaName(mangakaId));
+                    mangakaNames.put(mangakaId, mangakaPerformanceRepository.getMangakaName(mangakaId));
                 }
             }
         }
@@ -268,7 +271,7 @@ public class MangakaPerformanceController {
                 }
                 for (Map<String, Object> result : results) {
                     long mangakaId = (Long) result.get("mangakaId");
-                    mangakaNames.put(mangakaId, voteRepository.getMangakaName(mangakaId));
+                    mangakaNames.put(mangakaId, mangakaPerformanceRepository.getMangakaName(mangakaId));
                 }
             }
         }
@@ -310,7 +313,7 @@ public class MangakaPerformanceController {
                 }
                 for (Map<String, Object> result : results) {
                     long mangakaId = (Long) result.get("mangakaId");
-                    mangakaNames.put(mangakaId, voteRepository.getMangakaName(mangakaId));
+                    mangakaNames.put(mangakaId, mangakaPerformanceRepository.getMangakaName(mangakaId));
                 }
             }
         }
@@ -339,12 +342,14 @@ public class MangakaPerformanceController {
         }
         
         Map<String, Object> result = null;
-        String mangakaName = voteRepository.getMangakaName(mangakaId);
+        String mangakaName = mangakaPerformanceRepository.getMangakaName(mangakaId);
+        List<Map<String, Object>> editorialComments = null;
         
         if (periodId != null) {
             Map<String, Object> period = periodRepository.findPeriodById(periodId);
             if ("CALCULATED".equalsIgnoreCase((String) period.get("status"))) {
                 result = resultRepository.getResultByMangaka(periodId, mangakaId);
+                editorialComments = editorialCommentRepository.getCommentsByPeriodAndMangaka(periodId, mangakaId);
             }
         }
         
@@ -354,6 +359,7 @@ public class MangakaPerformanceController {
         model.addAttribute("currentUser", user);
         model.addAttribute("mangakaName", mangakaName);
         model.addAttribute("mangakaId", mangakaId);
+        model.addAttribute("editorialComments", editorialComments);
         
         return "analytics/detail";
     }

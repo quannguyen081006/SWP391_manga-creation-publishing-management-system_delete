@@ -1,7 +1,7 @@
 package manga.service;
 
+import manga.repository.PerformanceImportRecordRepository;
 import manga.repository.PerformancePeriodRepository;
-import manga.repository.PerformanceVoteRepository;
 import manga.repository.PerformanceResultRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,7 +20,7 @@ public class MangakaPerformanceCalculationService {
     private PerformancePeriodRepository periodRepository;
 
     @Autowired
-    private PerformanceVoteRepository voteRepository;
+    private PerformanceImportRecordRepository importRecordRepository;
 
     @Autowired
     private PerformanceResultRepository resultRepository;
@@ -34,8 +34,8 @@ public class MangakaPerformanceCalculationService {
     public void calculatePeriod(long periodId) {
         // Validate period status
         Map<String, Object> period = periodRepository.findPeriodById(periodId);
-        if (!"CLOSED".equalsIgnoreCase((String) period.get("status"))) {
-            throw new IllegalArgumentException("Only CLOSED periods can be calculated");
+        if (!"IMPORTED".equalsIgnoreCase((String) period.get("status"))) {
+            throw new IllegalArgumentException("Only IMPORTED periods can be calculated");
         }
 
         // Delete existing results if any (recalculation protection)
@@ -43,35 +43,26 @@ public class MangakaPerformanceCalculationService {
             throw new IllegalArgumentException("Period has already been calculated. Results are immutable.");
         }
 
-        // Get all votes for the period
-        List<Map<String, Object>> votes = voteRepository.getVotesByPeriod(periodId);
-        if (votes.isEmpty()) {
-            throw new IllegalArgumentException("No votes found for this period");
+        // Get all import records for the period
+        List<Map<String, Object>> importRecords = importRecordRepository.getImportRecordsByPeriod(periodId);
+        if (importRecords.isEmpty()) {
+            throw new IllegalArgumentException("No import records found for this period");
         }
 
-        // Aggregate votes by mangaka
-        Map<Long, List<Map<String, Object>>> votesByMangaka = new HashMap<>();
-        for (Map<String, Object> vote : votes) {
-            long mangakaId = (Long) vote.get("mangakaId");
-            votesByMangaka.computeIfAbsent(mangakaId, k -> new ArrayList<>()).add(vote);
-        }
-
-        // Calculate averages for each mangaka
+        // Calculate scores for each mangaka (CSV data is already aggregated per mangaka)
         List<MangakaScore> mangakaScores = new ArrayList<>();
-        for (Map.Entry<Long, List<Map<String, Object>>> entry : votesByMangaka.entrySet()) {
-            long mangakaId = entry.getKey();
-            List<Map<String, Object>> mangakaVotes = entry.getValue();
-
-            double avgPopularity = calculateAverage(mangakaVotes, "popularityScore");
-            double avgReliability = calculateAverage(mangakaVotes, "reliabilityScore");
-            double avgQuality = calculateAverage(mangakaVotes, "qualityScore");
+        for (Map<String, Object> record : importRecords) {
+            long mangakaId = (Long) record.get("mangakaId");
+            double popularityScore = (Double) record.get("popularityScore");
+            double reliabilityScore = (Double) record.get("reliabilityScore");
+            double qualityScore = (Double) record.get("qualityScore");
 
             // Calculate weighted overall score
-            double overallScore = (POPULARITY_WEIGHT * avgPopularity) + 
-                                  (RELIABILITY_WEIGHT * avgReliability) + 
-                                  (QUALITY_WEIGHT * avgQuality);
+            double overallScore = (POPULARITY_WEIGHT * popularityScore) + 
+                                  (RELIABILITY_WEIGHT * reliabilityScore) + 
+                                  (QUALITY_WEIGHT * qualityScore);
 
-            mangakaScores.add(new MangakaScore(mangakaId, overallScore, avgPopularity, avgReliability, avgQuality));
+            mangakaScores.add(new MangakaScore(mangakaId, overallScore, popularityScore, reliabilityScore, qualityScore));
         }
 
         // Generate rankings
@@ -111,14 +102,6 @@ public class MangakaPerformanceCalculationService {
 
         // Mark period as calculated
         periodRepository.markAsCalculated(periodId);
-    }
-
-    private double calculateAverage(List<Map<String, Object>> votes, String scoreField) {
-        double sum = 0;
-        for (Map<String, Object> vote : votes) {
-            sum += (Integer) vote.get(scoreField);
-        }
-        return sum / votes.size();
     }
 
     private Map<Long, Integer> createRankMap(List<MangakaScore> ranking) {

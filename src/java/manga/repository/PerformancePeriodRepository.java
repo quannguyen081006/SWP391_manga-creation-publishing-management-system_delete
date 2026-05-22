@@ -39,7 +39,7 @@ public class PerformancePeriodRepository {
     }
 
     public List<Map<String, Object>> listPeriods() {
-        String sql = "SELECT id, name, startDate, endDate, status, createdAt, calculatedAt FROM PerformancePeriod ORDER BY id DESC";
+        String sql = "SELECT id, name, startDate, endDate, status, createdAt, importedAt, calculatedAt FROM PerformancePeriod ORDER BY id DESC";
         List<Map<String, Object>> rows = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -54,7 +54,7 @@ public class PerformancePeriodRepository {
     }
 
     public Map<String, Object> findPeriodById(long periodId) {
-        String sql = "SELECT id, name, startDate, endDate, status, createdAt, calculatedAt FROM PerformancePeriod WHERE id = ?";
+        String sql = "SELECT id, name, startDate, endDate, status, createdAt, importedAt, calculatedAt FROM PerformancePeriod WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
@@ -69,26 +69,26 @@ public class PerformancePeriodRepository {
         }
     }
 
-    public void closePeriod(long periodId) {
-        String sql = "UPDATE PerformancePeriod SET status = 'CLOSED' WHERE id = ? AND status = 'OPEN'";
+    public void markAsImported(long periodId) {
+        String sql = "UPDATE PerformancePeriod SET status = 'IMPORTED', importedAt = GETDATE() WHERE id = ? AND status = 'OPEN'";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
             if (ps.executeUpdate() == 0) {
-                throw new IllegalArgumentException("Only OPEN period can be closed");
+                throw new IllegalArgumentException("Only OPEN period can be marked as imported");
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot close performance period", ex);
+            throw new RuntimeException("Cannot mark performance period as imported", ex);
         }
     }
 
     public void markAsCalculated(long periodId) {
-        String sql = "UPDATE PerformancePeriod SET status = 'CALCULATED', calculatedAt = GETDATE() WHERE id = ? AND status = 'CLOSED'";
+        String sql = "UPDATE PerformancePeriod SET status = 'CALCULATED', calculatedAt = GETDATE() WHERE id = ? AND status = 'IMPORTED'";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, periodId);
             if (ps.executeUpdate() == 0) {
-                throw new IllegalArgumentException("Only CLOSED period can be marked as calculated");
+                throw new IllegalArgumentException("Only IMPORTED period can be marked as calculated");
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot mark performance period as calculated", ex);
@@ -103,6 +103,7 @@ public class PerformancePeriodRepository {
         row.put("endDate", rs.getDate("endDate"));
         row.put("status", rs.getString("status"));
         row.put("createdAt", rs.getTimestamp("createdAt"));
+        row.put("importedAt", rs.getTimestamp("importedAt"));
         row.put("calculatedAt", rs.getTimestamp("calculatedAt"));
         return row;
     }

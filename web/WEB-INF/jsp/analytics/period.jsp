@@ -36,6 +36,9 @@
         <tr><th>End Date</th><td>${period.endDate}</td></tr>
         <tr><th>Status</th><td class="status-${period.status.toLowerCase()}">${period.status}</td></tr>
         <tr><th>Created At</th><td>${period.createdAt}</td></tr>
+        <c:if test="${not empty period.importedAt}">
+            <tr><th>Imported At</th><td>${period.importedAt}</td></tr>
+        </c:if>
         <c:if test="${not empty period.calculatedAt}">
             <tr><th>Calculated At</th><td>${period.calculatedAt}</td></tr>
         </c:if>
@@ -45,16 +48,15 @@
 <c:if test="${period.status == 'OPEN'}">
     <div class="section-card" style="background: #fff3cd; border: 1px solid #ffc107;">
         <p style="color: #856404; margin: 0;">
-            <strong>Period is OPEN:</strong> Editorial board members can vote for mangaka performance. 
-            <a href="${pageContext.request.contextPath}/main/analytics/vote/${period.id}" class="btn small">Go to Voting Page</a>
+            <strong>Period is OPEN:</strong> Admin can upload CSV performance data.
         </p>
     </div>
 </c:if>
 
-<c:if test="${period.status == 'CLOSED'}">
+<c:if test="${period.status == 'IMPORTED'}">
     <div class="section-card" style="background: #fff3cd; border: 1px solid #ffc107;">
         <p style="color: #856404; margin: 0;">
-            <strong>Period is CLOSED:</strong> Voting is disabled. Admin can calculate performance to generate results.
+            <strong>Period is IMPORTED:</strong> CSV data has been imported. Admin can calculate performance to generate results.
         </p>
     </div>
 </c:if>
