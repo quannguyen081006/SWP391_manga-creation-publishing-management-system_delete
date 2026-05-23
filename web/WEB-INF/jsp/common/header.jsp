@@ -67,30 +67,68 @@
             </div>
         </a>
 
+        <button class="sidebar-pin" type="button" title="Collapse sidebar" aria-label="Collapse sidebar" aria-pressed="false">
+            <span class="pin-icon" aria-hidden="true"></span>
+            <span class="pin-label">Collapse</span>
+        </button>
+
         <div class="side-title">Navigation</div>
-        <a class="nav-item ${fn:contains(uri, '/main/dashboard') ? 'active' : ''}" href="${ctx}/main/dashboard">Dashboard</a>
+        <a class="nav-item nav-dashboard ${fn:contains(uri, '/main/dashboard') ? 'active' : ''}" href="${ctx}/main/dashboard" title="Dashboard">
+            <span class="nav-icon" aria-hidden="true"></span>
+            <span class="nav-label">Dashboard</span>
+        </a>
         <c:if test="${isAdmin || isMangaka || isTantou || isBoard}">
-            <a class="nav-item ${fn:contains(uri, '/main/proposals') ? 'active' : ''}" href="${ctx}/main/proposals">Proposals</a>
+            <a class="nav-item nav-proposals ${fn:contains(uri, '/main/proposals') ? 'active' : ''}" href="${ctx}/main/proposals" title="Proposals">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Proposals</span>
+            </a>
         </c:if>
         <c:if test="${isAdmin || isMangaka || isTantou}">
-            <a class="nav-item ${fn:contains(uri, '/main/series') ? 'active' : ''}" href="${ctx}/main/series">Series</a>
-            <a class="nav-item ${fn:contains(uri, '/main/chapters') ? 'active' : ''}" href="${ctx}/main/chapters">Chapters</a>
+            <a class="nav-item nav-series ${fn:contains(uri, '/main/series') ? 'active' : ''}" href="${ctx}/main/series" title="Series">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Series</span>
+            </a>
+            <a class="nav-item nav-chapters ${fn:contains(uri, '/main/chapters') ? 'active' : ''}" href="${ctx}/main/chapters" title="Chapters">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Chapters</span>
+            </a>
         </c:if>
         <c:if test="${isAdmin || isMangaka || isAssistant || isTantou}">
-            <a class="nav-item ${fn:contains(uri, '/main/tasks') ? 'active' : ''}" href="${ctx}/main/tasks">Tasks</a>
+            <a class="nav-item nav-tasks ${fn:contains(uri, '/main/tasks') ? 'active' : ''}" href="${ctx}/main/tasks" title="Tasks">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Tasks</span>
+            </a>
         </c:if>
         <c:if test="${isAdmin || isMangaka || isTantou}">
-            <a class="nav-item ${fn:contains(uri, '/main/manuscripts') ? 'active' : ''}" href="${ctx}/main/manuscripts">Manuscripts</a>
+            <a class="nav-item nav-manuscripts ${fn:contains(uri, '/main/manuscripts') ? 'active' : ''}" href="${ctx}/main/manuscripts" title="Manuscripts">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Manuscripts</span>
+            </a>
         </c:if>
         <c:if test="${isAdmin || isBoard}">
-            <a class="nav-item ${fn:contains(uri, '/main/decisions') ? 'active' : ''}" href="${ctx}/main/decisions">Decisions</a>
-            <a class="nav-item ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods">Ranking</a>
-            <a class="nav-item ${fn:contains(uri, '/main/analytics') ? 'active' : ''}" href="${ctx}/main/analytics">Performance Analytics</a>
+            <a class="nav-item nav-decisions ${fn:contains(uri, '/main/decisions') ? 'active' : ''}" href="${ctx}/main/decisions" title="Decisions">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Decisions</span>
+            </a>
+            <a class="nav-item nav-ranking ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods" title="Ranking">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Ranking</span>
+            </a>
+            <a class="nav-item nav-analytics ${fn:contains(uri, '/main/analytics') ? 'active' : ''}" href="${ctx}/main/analytics" title="Performance Analytics">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Performance Analytics</span>
+            </a>
         </c:if>
 
         <c:if test="${isAdmin}">
-            <a class="nav-item ${fn:contains(uri, '/main/users') ? 'active' : ''}" href="${ctx}/main/users">Users</a>
-            <a class="nav-item ${fn:contains(uri, '/main/audit-logs') ? 'active' : ''}" href="${ctx}/main/audit-logs">Audit Logs</a>
+            <a class="nav-item nav-users ${fn:contains(uri, '/main/users') ? 'active' : ''}" href="${ctx}/main/users" title="Users">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Users</span>
+            </a>
+            <a class="nav-item nav-audit ${fn:contains(uri, '/main/audit-logs') ? 'active' : ''}" href="${ctx}/main/audit-logs" title="Audit Logs">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Audit Logs</span>
+            </a>
         </c:if>
 
     </aside>
@@ -164,6 +202,40 @@
             </div>
         </header>
         <main class="page-wrap">
+            <script>
+                (function () {
+                    var shell = document.querySelector('.app-shell');
+                    var sidebar = document.querySelector('.side-nav');
+                    var pinButton = document.querySelector('.sidebar-pin');
+                    if (!shell || !pinButton) {
+                        return;
+                    }
+
+                    function setPinned(isPinned) {
+                        var wasPinned = shell.classList.contains('sidebar-pinned');
+                        shell.classList.toggle('sidebar-pinned', isPinned);
+                        shell.classList.toggle('sidebar-hover-suspended', wasPinned && !isPinned);
+                        pinButton.setAttribute('aria-pressed', isPinned ? 'true' : 'false');
+                        pinButton.setAttribute('title', 'Collapse sidebar');
+                        var label = pinButton.querySelector('.pin-label');
+                        if (label) {
+                            label.textContent = 'Collapse';
+                        }
+                        localStorage.setItem('mangaflow.sidebarPinned', isPinned ? 'true' : 'false');
+                        pinButton.blur();
+                    }
+
+                    setPinned(localStorage.getItem('mangaflow.sidebarPinned') === 'true');
+                    pinButton.addEventListener('click', function () {
+                        setPinned(!shell.classList.contains('sidebar-pinned'));
+                    });
+                    if (sidebar) {
+                        sidebar.addEventListener('mouseleave', function () {
+                            shell.classList.remove('sidebar-hover-suspended');
+                        });
+                    }
+                }());
+            </script>
 
 
 
