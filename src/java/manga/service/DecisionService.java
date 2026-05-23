@@ -91,15 +91,6 @@ public class DecisionService {
         auditLogService.append(user, "DECISION_SESSION_OPENED", "DECISION_SESSION", sessionId, 
             "Opened decision session for series " + request.getSeriesId());
 
-        // Notify Editorial Board (BR-65)
-        notificationService.notifyUser(
-            user.getId(), // In real implementation, would notify all Editorial Board members
-            "DECISION_SESSION_OPENED",
-            "A decision session has been opened for series review. Please vote.",
-            sessionId,
-            "DECISION_SESSION"
-        );
-
         return sessionId;
     }
 

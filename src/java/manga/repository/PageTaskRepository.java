@@ -571,8 +571,11 @@ public class PageTaskRepository {
 
     public int markOverdueTasks() {
         String selectSql =
-            "SELECT id, chapterId, assistantId FROM PageTask "
-            + "WHERE dueDate < CAST(GETDATE() AS DATE) AND status NOT IN ('APPROVED','OVERDUE')";
+            "SELECT t.id, t.chapterId, s.mangakaId "
+            + "FROM PageTask t "
+            + "JOIN Chapter c ON c.id = t.chapterId "
+            + "JOIN Series s ON s.id = c.seriesId "
+            + "WHERE t.dueDate < CAST(GETDATE() AS DATE) AND t.status NOT IN ('APPROVED','OVERDUE')";
         String updateSql = "UPDATE PageTask SET status = 'OVERDUE', updatedAt = GETDATE() WHERE id = ?";
 
         int changed = 0;
@@ -583,7 +586,7 @@ public class PageTaskRepository {
 
             List<long[]> rows = new ArrayList<long[]>();
             while (rs.next()) {
-                rows.add(new long[] { rs.getLong("id"), rs.getLong("chapterId"), rs.getLong("assistantId") });
+                rows.add(new long[] { rs.getLong("id"), rs.getLong("chapterId"), rs.getLong("mangakaId") });
             }
 
             for (long[] row : rows) {
@@ -735,14 +738,16 @@ public class PageTaskRepository {
     }
 
     public void createNotification(long userId, String type, String message, long referenceId, String referenceType) {
-        String sql = "INSERT INTO Notification (userId, type, message, referenceId, referenceType, isRead, createdAt) VALUES (?, ?, ?, ?, ?, 0, GETDATE())";
+        String sql = "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, 0, GETDATE())";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, userId);
             ps.setString(2, type);
-            ps.setString(3, message);
-            ps.setLong(4, referenceId);
-            ps.setString(5, referenceType);
+            ps.setString(3, notificationTitle(type));
+            ps.setString(4, message);
+            ps.setString(5, notificationViewUrl(type, referenceId, referenceType));
+            ps.setLong(6, referenceId);
+            ps.setString(7, referenceType);
             ps.executeUpdate();
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot create notification", ex);
@@ -789,6 +794,74 @@ public class PageTaskRepository {
 
         createNotification(userId, type, message, referenceId, referenceType);
         return true;
+    }
+
+    private String notificationTitle(String type) {
+        if (type == null) {
+            return "Notification";
+        }
+        String normalized = type.trim().toUpperCase(Locale.ENGLISH);
+        if ("TASK_ASSIGNED".equals(normalized)) {
+            return "New page task assigned";
+        }
+        if ("TASK_DUE_SOON".equals(normalized)) {
+            return "Task due in 24 hours";
+        }
+        if ("TASK_DELAYED".equals(normalized)) {
+            return "Task delayed";
+        }
+        if ("TASK_OVERDUE".equals(normalized)) {
+            return "Task overdue";
+        }
+        if ("TASK_ESCALATED".equals(normalized)) {
+            return "Task escalated";
+        }
+        if ("CHAPTER_AT_RISK".equals(normalized)) {
+            return "Chapter at risk";
+        }
+        if (normalized.startsWith("MANUSCRIPT")) {
+            return "Manuscript update";
+        }
+        if (normalized.startsWith("CHAPTER")) {
+            return "Chapter update";
+        }
+        return "Notification";
+    }
+
+    private String notificationViewUrl(String type, long referenceId, String referenceType) {
+        if (referenceId <= 0 || referenceType == null) {
+            return null;
+        }
+        String normalizedType = type == null ? "" : type.trim().toUpperCase(Locale.ENGLISH);
+        String normalizedRef = referenceType.trim().toUpperCase(Locale.ENGLISH);
+        if ("TASK".equals(normalizedRef) || "PAGETASK".equals(normalizedRef)) {
+            if ("TASK_ESCALATED".equals(normalizedType)) {
+                return "/main/tasks/" + referenceId + "?tab=history";
+            }
+            return "/main/tasks/" + referenceId;
+        }
+        if ("CHAPTER".equals(normalizedRef)) {
+            return "/main/chapters/" + referenceId;
+        }
+        if ("MANUSCRIPT".equals(normalizedRef)) {
+            if ("MANUSCRIPT_REVIEW_REMINDER".equals(normalizedType)) {
+                return "/main/manuscripts/" + referenceId + "/review";
+            }
+            if ("MANUSCRIPT_REJECTED".equals(normalizedType)) {
+                return "/main/manuscripts/" + referenceId + "?tab=feedback";
+            }
+            return "/main/manuscripts/" + referenceId;
+        }
+        if ("DECISION".equals(normalizedRef) || "DECISION_SESSION".equals(normalizedRef)) {
+            return "/main/decisions/" + referenceId;
+        }
+        if ("PROPOSAL".equals(normalizedRef)) {
+            return "/main/proposals/" + referenceId;
+        }
+        if ("SERIES".equals(normalizedRef)) {
+            return "/main/series/" + referenceId;
+        }
+        return null;
     }
 
     private TaskSummary mapDetailed(ResultSet rs) throws SQLException {

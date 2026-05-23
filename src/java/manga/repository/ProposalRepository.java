@@ -167,9 +167,10 @@ public class ProposalRepository {
                     throw new IllegalArgumentException("Proposal is not under Tantou review");
                 }
                 if ("APPROVE".equals(decision)) {
-                    ensureSeriesExistsOnApprove(conn, proposalId);
+                    long seriesId = ensureSeriesExistsOnApprove(conn, proposalId);
                     updateProposalStatus(conn, proposalId, "APPROVED", false);
                     insertHistory(conn, proposalId, actor, "APPROVED", note, p.getSubmitAttemptCount());
+                    notifyProposalApproved(conn, p, seriesId);
                 } else if ("REJECT".equals(decision)) {
                     updateProposalStatus(conn, proposalId, "REJECTED", true);
                     insertHistory(conn, proposalId, actor, "REJECTED", note, p.getSubmitAttemptCount());
@@ -269,14 +270,14 @@ public class ProposalRepository {
         return "DRAFT".equalsIgnoreCase(status) || "REVISION_REQUESTED".equalsIgnoreCase(status);
     }
 
-    private void ensureSeriesExistsOnApprove(Connection conn, long proposalId) throws SQLException {
+    private long ensureSeriesExistsOnApprove(Connection conn, long proposalId) throws SQLException {
         String checkSeries = "SELECT COUNT(1) FROM Series WHERE proposalId = ?";
         try (PreparedStatement ps = conn.prepareStatement(checkSeries)) {
             ps.setLong(1, proposalId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 if (rs.getInt(1) > 0) {
-                    return;
+                    return findSeriesIdByProposal(conn, proposalId);
                 }
             }
         }
@@ -285,13 +286,54 @@ public class ProposalRepository {
         String insertSeries =
             "INSERT INTO Series (proposalId, mangakaId, tantouEditorId, title, genre, status, createdAt) "
             + "VALUES (?, ?, ?, ?, ?, 'ACTIVE', GETDATE())";
-        try (PreparedStatement ps = conn.prepareStatement(insertSeries)) {
+        try (PreparedStatement ps = conn.prepareStatement(insertSeries, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong(1, proposalId);
             ps.setLong(2, p.getMangakaId());
             ps.setLong(3, editorId);
             ps.setString(4, p.getTitle());
             ps.setString(5, p.getGenre());
             ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return findSeriesIdByProposal(conn, proposalId);
+    }
+
+    private long findSeriesIdByProposal(Connection conn, long proposalId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT id FROM Series WHERE proposalId = ?")) {
+            ps.setLong(1, proposalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("id");
+                }
+            }
+        }
+        throw new IllegalStateException("Cannot resolve approved series");
+    }
+
+    private void notifyProposalApproved(Connection conn, Proposal proposal, long seriesId) throws SQLException {
+        String sql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "VALUES (?, 'PROPOSAL_APPROVED_SERIES_CREATED', 'Series created', ?, ?, ?, 'SERIES', 0, GETDATE())";
+        String message = "Proposal \"" + proposal.getTitle() + "\" was approved and series #" + seriesId + " was created.";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposal.getMangakaId());
+            ps.setString(2, message);
+            ps.setString(3, "/main/series/" + seriesId);
+            ps.setLong(4, seriesId);
+            ps.executeUpdate();
+        }
+        if (proposal.getAssignedEditorId() != null) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, proposal.getAssignedEditorId().longValue());
+                ps.setString(2, message);
+                ps.setString(3, "/main/series/" + seriesId);
+                ps.setLong(4, seriesId);
+                ps.executeUpdate();
+            }
         }
     }
 

@@ -250,12 +250,14 @@ public class DecisionRepository {
 
         // Gửi DECISION_RESOLVED notification cho tất cả Board members active (BR-65)
         String notifySql =
-            "INSERT INTO Notification (userId, type, message, referenceId, referenceType, isRead, createdAt)"
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt)"
             + " SELECT u.id,"
             + "   'DECISION_RESOLVED',"
+            + "   'Decision finalized',"
             + "   'A decision session has been finalized with result: " + result + ".',"
+            + "   '/main/decisions/' + CAST(? AS VARCHAR(30)),"
             + "   ?,"
-            + "   'DECISION_SESSION',"
+            + "   'DECISION',"
             + "   0,"
             + "   GETDATE()"
             + " FROM [User] u"
@@ -265,6 +267,7 @@ public class DecisionRepository {
             + "   AND ro.name = 'EDITORIAL_BOARD'";
         try (PreparedStatement ps = conn.prepareStatement(notifySql)) {
             ps.setLong(1, sessionId);
+            ps.setLong(2, sessionId);
             ps.executeUpdate();
         }
     }
@@ -274,19 +277,51 @@ public class DecisionRepository {
     // ------------------------------------------------------------------ //
     public long createSession(long seriesId, long rankingRecordId) {
         String sql = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt) VALUES (?, ?, 'OPEN', GETDATE())";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setLong(1, seriesId);
-            ps.setLong(2, rankingRecordId);
-            ps.executeUpdate();
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    return rs.getLong(1);
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setLong(1, seriesId);
+                ps.setLong(2, rankingRecordId);
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        long sessionId = rs.getLong(1);
+                        notifyEligibleBoardMembers(conn, sessionId, seriesId);
+                        conn.commit();
+                        return sessionId;
+                    }
                 }
+                throw new IllegalStateException("Cannot create decision session");
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
             }
-            throw new IllegalStateException("Cannot create decision session");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot create decision session", ex);
+        }
+    }
+
+    private void notifyEligibleBoardMembers(Connection conn, long sessionId, long seriesId) throws SQLException {
+        String sql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "SELECT u.id, 'DECISION_SESSION_OPENED', 'Decision session opened', "
+            + "'A new decision session is open for series #' + CAST(? AS VARCHAR(30)) + '.', "
+            + "'/main/decisions/' + CAST(? AS VARCHAR(30)), ?, 'DECISION', 0, GETDATE() "
+            + "FROM [User] u "
+            + "JOIN UserRole ur ON ur.userId = u.id "
+            + "JOIN [Role] r ON r.id = ur.roleId "
+            + "JOIN Series s ON s.id = ? "
+            + "WHERE u.status = 'ACTIVE' "
+            + "AND r.name = 'EDITORIAL_BOARD' "
+            + "AND u.id <> s.tantouEditorId";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, seriesId);
+            ps.setLong(2, sessionId);
+            ps.setLong(3, sessionId);
+            ps.setLong(4, seriesId);
+            ps.executeUpdate();
         }
     }
 

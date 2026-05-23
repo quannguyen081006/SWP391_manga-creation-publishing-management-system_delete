@@ -2298,8 +2298,8 @@ select,
 .nav-manuscripts .nav-icon::before { content: "\2630"; }
 .nav-decisions .nav-icon::before { content: "\2696"; }
 .nav-ranking .nav-icon::before { content: "\2605"; }
-.nav-analytics .nav-icon::before { content: "\25B2"; }
-.nav-users .nav-icon::before { content: "\25C9"; }
+.nav-analytics .nav-icon::before { content: "\25A5"; }
+.nav-users .nav-icon::before { content: "\1F464"; }
 .nav-audit .nav-icon::before { content: "\25CE"; }
 
 .top-user {

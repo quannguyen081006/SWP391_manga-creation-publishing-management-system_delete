@@ -225,6 +225,11 @@ public class MainController {
         return "proposal/detail";
     }
 
+    @RequestMapping(value = "/proposals/{id}/vote", method = RequestMethod.GET)
+    public String proposalVoteDeepLink(@PathVariable("id") long id, HttpSession session, Model model) {
+        return proposalDetail(id, session, model);
+    }
+
     @RequestMapping(value = "/proposals/{id}/file", method = RequestMethod.GET)
     public void proposalFile(@PathVariable("id") long id, HttpSession session,
             HttpServletRequest request, HttpServletResponse response) throws IOException {

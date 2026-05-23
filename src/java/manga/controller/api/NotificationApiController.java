@@ -60,10 +60,16 @@ public class NotificationApiController {
         builder.append("{");
         builder.append("\"id\":").append(item.getId()).append(",");
         builder.append("\"userId\":").append(item.getUserId()).append(",");
+        builder.append("\"recipientId\":").append(json(String.valueOf(item.getUserId()))).append(",");
         builder.append("\"type\":").append(json(item.getType())).append(",");
+        builder.append("\"title\":").append(json(item.getTitle())).append(",");
         builder.append("\"message\":").append(json(item.getMessage())).append(",");
+        builder.append("\"body\":").append(json(item.getMessage())).append(",");
+        builder.append("\"viewUrl\":").append(json(item.getViewUrl())).append(",");
         builder.append("\"referenceId\":").append(item.getReferenceId() == null ? "null" : item.getReferenceId()).append(",");
         builder.append("\"referenceType\":").append(json(item.getReferenceType())).append(",");
+        builder.append("\"relatedEntityId\":").append(item.getReferenceId() == null ? "null" : json(String.valueOf(item.getReferenceId()))).append(",");
+        builder.append("\"relatedEntityType\":").append(json(item.getReferenceType())).append(",");
         builder.append("\"read\":").append(item.isRead()).append(",");
         builder.append("\"createdAt\":").append(json(item.getCreatedAt() == null ? null : item.getCreatedAt().toString()));
         builder.append("}");

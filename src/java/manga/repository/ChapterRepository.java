@@ -272,6 +272,25 @@ public class ChapterRepository {
         return rows;
     }
 
+    public List<ChapterSummary> findMissedSubmissionDeadlineChapters() {
+        String sql =
+            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
+            + "FROM Chapter "
+            + "WHERE submissionDeadline < CAST(GETDATE() AS DATE) "
+            + "  AND status NOT IN ('EDITORIAL_REVIEW', 'COMPLETE')";
+        List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                rows.add(mapChapter(rs));
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot query missed deadline chapters", ex);
+        }
+        return rows;
+    }
+
     public long findSeriesOwnerMangaka(long seriesId) {
         String sql = "SELECT mangakaId FROM Series WHERE id = ?";
         try (Connection conn = dataSource.getConnection();

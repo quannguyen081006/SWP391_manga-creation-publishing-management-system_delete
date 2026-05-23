@@ -44,5 +44,17 @@ public class ChapterDeadlineScheduler {
                 "CHAPTER"
             );
         }
+
+        for (ChapterSummary ch : chapterRepository.findMissedSubmissionDeadlineChapters()) {
+            long tantouId = chapterRepository.findSeriesTantou(ch.getSeriesId());
+            pageTaskRepository.createNotificationIfAbsentToday(
+                tantouId,
+                "CHAPTER_SUBMISSION_MISSED",
+                "Chapter #" + ch.getId() + " (Ch." + ch.getChapterNumber() + " - " + ch.getTitle()
+                    + ") missed its submission deadline (" + ch.getSubmissionDeadline() + ").",
+                ch.getId(),
+                "CHAPTER"
+            );
+        }
     }
 }

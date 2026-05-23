@@ -162,8 +162,11 @@
                             <c:otherwise>
                                 <c:forEach items="${headerNotifications}" var="n">
                                     <div class="notify-item ${n.read ? 'is-read' : 'is-unread'}">
-                                        <div class="notify-type">${n.type}</div>
+                                        <div class="notify-type">${empty n.title ? n.type : n.title}</div>
                                         <div class="notify-message">${n.message}</div>
+                                        <c:if test="${not empty n.viewUrl}">
+                                            <a class="btn small notify-view" href="${ctx}${n.viewUrl}">View</a>
+                                        </c:if>
                                         <c:if test="${!n.read}">
                                             <form method="post" action="${ctx}/main/notifications/${n.id}/read" class="notify-read-form">
                                                 <button type="submit">Mark read</button>

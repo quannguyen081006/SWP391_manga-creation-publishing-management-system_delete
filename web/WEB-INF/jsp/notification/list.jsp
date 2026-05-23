@@ -32,7 +32,7 @@
                 <article class="notification-row ${n.read ? 'is-read' : 'is-unread'}">
                     <div class="notification-main">
                         <div class="notification-row-head">
-                            <span class="audit-action">${n.type}</span>
+                            <span class="audit-action">${empty n.title ? n.type : n.title}</span>
                             <span class="audit-time">${n.createdAt}</span>
                         </div>
                         <p>${n.message}</p>
@@ -41,6 +41,9 @@
                         </c:if>
                     </div>
                     <div class="notification-actions">
+                        <c:if test="${not empty n.viewUrl}">
+                            <a class="btn small primary" href="${pageContext.request.contextPath}${n.viewUrl}">View</a>
+                        </c:if>
                         <c:choose>
                             <c:when test="${n.read}">
                                 <span class="status-badge status-active">READ</span>

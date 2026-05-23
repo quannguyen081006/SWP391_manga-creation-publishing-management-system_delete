@@ -264,6 +264,28 @@ public class RankingRepository {
                 + "       AND ds.status = 'OPEN'"
                 + "   )";
 
+        String notifyDecisionSessionsSql
+                = "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+                + "SELECT u.id, 'DECISION_SESSION_OPENED', 'Decision session opened', "
+                + "'A new decision session is open for series #' + CAST(ds.seriesId AS VARCHAR(30)) + '.', "
+                + "'/main/decisions/' + CAST(ds.id AS VARCHAR(30)), ds.id, 'DECISION', 0, GETDATE() "
+                + "FROM DecisionSession ds "
+                + "JOIN RankingRecord rr ON rr.id = ds.rankingRecordId "
+                + "JOIN Series s ON s.id = ds.seriesId "
+                + "JOIN [User] u ON u.status = 'ACTIVE' "
+                + "JOIN UserRole ur ON ur.userId = u.id "
+                + "JOIN [Role] r ON r.id = ur.roleId "
+                + "WHERE rr.periodId = ? "
+                + "AND ds.status = 'OPEN' "
+                + "AND r.name = 'EDITORIAL_BOARD' "
+                + "AND u.id <> s.tantouEditorId "
+                + "AND NOT EXISTS ( "
+                + "  SELECT 1 FROM Notification n "
+                + "  WHERE n.userId = u.id "
+                + "  AND n.type = 'DECISION_SESSION_OPENED' "
+                + "  AND n.referenceId = ds.id "
+                + ")";
+
 // =========================================================
 // STEP 4 — SEND NOTIFICATION
 // =========================================================
@@ -339,6 +361,14 @@ public class RankingRepository {
                 // =====================================================
                 // SEND NOTIFICATIONS
                 // =====================================================
+                try ( PreparedStatement ps
+                        = conn.prepareStatement(notifyDecisionSessionsSql)) {
+
+                    ps.setLong(1, periodId);
+
+                    ps.executeUpdate();
+                }
+
                 // =====================================================
                 // UPDATE PERIOD STATUS
                 // =====================================================

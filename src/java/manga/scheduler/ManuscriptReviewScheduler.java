@@ -24,41 +24,32 @@ public class ManuscriptReviewScheduler {
     @Scheduled(cron = "0 0 * * * *")
     public void checkReviewDeadlines() {
         Timestamp now = new Timestamp(System.currentTimeMillis());
-        Calendar cal = Calendar.getInstance();
-        
-        // Check for manuscripts due in 6 hours (reminder)
-        cal.add(Calendar.HOUR, 6);
-        Timestamp sixHoursFromNow = new Timestamp(cal.getTimeInMillis());
-        
-        // Check for overdue manuscripts (past deadline)
-        cal = Calendar.getInstance();
-        cal.add(Calendar.HOUR, -1);
-        Timestamp oneHourAgo = new Timestamp(cal.getTimeInMillis());
-        
         // Get all manuscripts that need checking
         List<ManuscriptSummary> manuscripts = manuscriptRepository.listManuscriptsNeedingReviewReminder();
         
         for (ManuscriptSummary manuscript : manuscripts) {
-            if (manuscript.getReviewDeadline() == null) {
+            if (manuscript.getSubmittedAt() == null) {
                 continue;
             }
             
             long tantouId = manuscriptRepository.getManuscriptTantou(manuscript.getId());
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(manuscript.getSubmittedAt().getTime());
+            cal.add(Calendar.HOUR, 36);
+            Timestamp reminderAt = new Timestamp(cal.getTimeInMillis());
             
-            // Reminder before 48h SLA expires (send at 6 hours remaining)
-            if (manuscript.getReviewDeadline().after(now) && 
-                manuscript.getReviewDeadline().before(sixHoursFromNow)) {
+            if (!now.before(reminderAt)) {
                 pageTaskRepository.createNotificationIfAbsentToday(
                     tantouId,
                     "MANUSCRIPT_REVIEW_REMINDER",
-                    "Reminder: Manuscript #" + manuscript.getId() + " review deadline in 6 hours. Please complete review by " + manuscript.getReviewDeadline(),
+                    "Reminder: Manuscript #" + manuscript.getId() + " has been waiting for review for 36 hours.",
                     manuscript.getId(),
                     "MANUSCRIPT"
                 );
             }
             
             // Detect overdue reviews
-            if (manuscript.getReviewDeadline().before(now)) {
+            if (manuscript.getReviewDeadline() != null && manuscript.getReviewDeadline().before(now)) {
                 pageTaskRepository.createNotificationIfAbsentToday(
                     tantouId,
                     "MANUSCRIPT_REVIEW_OVERDUE",

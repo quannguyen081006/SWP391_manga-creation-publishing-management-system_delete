@@ -67,8 +67,8 @@ public class ProductionRepository {
         String readSql = "SELECT mangakaId, tantouEditorId, title FROM Series WHERE id = ?";
         String updateSql = "UPDATE Series SET publicationDate = ? WHERE id = ?";
         String notifySql =
-            "INSERT INTO Notification (userId, type, message, referenceId, referenceType, isRead, createdAt) "
-            + "VALUES (?, ?, ?, ?, ?, 0, GETDATE())";
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, 0, GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
             long mangakaId;
@@ -99,9 +99,11 @@ public class ProductionRepository {
             try (PreparedStatement notify = conn.prepareStatement(notifySql)) {
                 notify.setLong(1, mangakaId);
                 notify.setString(2, "SERIES_DEADLINE_UPDATED");
-                notify.setString(3, "Deadline for series \"" + title + "\" was updated to " + publicationDate + ".");
-                notify.setLong(4, seriesId);
-                notify.setString(5, null);
+                notify.setString(3, "Series deadline updated");
+                notify.setString(4, "Deadline for series \"" + title + "\" was updated to " + publicationDate + ".");
+                notify.setString(5, "/main/series/" + seriesId);
+                notify.setLong(6, seriesId);
+                notify.setString(7, "SERIES");
                 notify.executeUpdate();
             }
         } catch (SQLException ex) {

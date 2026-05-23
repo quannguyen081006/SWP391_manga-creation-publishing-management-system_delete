@@ -15,10 +15,6 @@
 
 <c:if test="${not empty success}"><div class="alert success">${success}</div></c:if>
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
-<c:if test="${adminRoleLocked}">
-    <div class="alert info">ADMIN is locked to the original system account.</div>
-</c:if>
-
 <div class="section-head">
     <div></div>
     <a class="btn primary" href="${pageContext.request.contextPath}/main/users/new">+ New User</a>
@@ -83,10 +79,12 @@
                     <td>
                         <div class="row-actions">
                             <a class="btn small" href="${pageContext.request.contextPath}/main/users/${u.id}/edit">Edit</a>
-                            <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/status">
-                                <input type="hidden" name="status" value="${u.status == 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}" />
-                                <button class="btn small ${u.status == 'ACTIVE' ? 'danger-soft' : 'success-soft'}" type="submit" onclick="return confirm('${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'} ${u.username}?');">${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
-                            </form>
+                            <c:if test="${u.username ne 'admin'}">
+                                <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/status">
+                                    <input type="hidden" name="status" value="${u.status == 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}" />
+                                    <button class="btn small ${u.status == 'ACTIVE' ? 'danger-soft' : 'success-soft'}" type="submit" onclick="return confirm('${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'} ${u.username}?');">${u.status == 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
+                                </form>
+                            </c:if>
                         </div>
                     </td>
                 </tr>

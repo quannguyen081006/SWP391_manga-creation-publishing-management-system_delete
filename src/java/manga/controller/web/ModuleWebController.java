@@ -336,6 +336,11 @@ public class ModuleWebController {
         return "manuscript/detail";
     }
 
+    @RequestMapping(value = "/manuscripts/{id}/review", method = RequestMethod.GET)
+    public String manuscriptReviewDeepLink(@PathVariable("id") long id, HttpSession session, Model model) {
+        return manuscriptDetail(id, session, model);
+    }
+
     @RequestMapping(value = "/manuscripts/{id}/approve", method = RequestMethod.POST)
     public String manuscriptApprove(@PathVariable("id") long id, HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
@@ -366,7 +371,17 @@ public class ModuleWebController {
             if (feedback == null || feedback.trim().isEmpty()) {
                 throw new IllegalArgumentException("Feedback is required for rejection (BR-40)");
             }
+            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
             manuscriptRepository.reject(id, feedback.trim());
+            if (manuscript != null) {
+                long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+                notificationService.notifyUser(
+                        mangakaId,
+                        "MANUSCRIPT_REJECTED",
+                        "Manuscript rejected for chapter #" + manuscript.getChapterId() + ". Feedback: " + feedback.trim(),
+                        id,
+                        "MANUSCRIPT");
+            }
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
