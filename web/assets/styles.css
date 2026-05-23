@@ -2300,6 +2300,7 @@ select,
 .nav-ranking .nav-icon::before { content: "\2605"; }
 .nav-analytics .nav-icon::before { content: "\25A5"; }
 .nav-users .nav-icon::before { content: "\1F464"; }
+.nav-users .nav-icon { color: #38bdf8; }
 .nav-audit .nav-icon::before { content: "\25CE"; }
 
 .top-user {
