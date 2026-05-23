@@ -1,5 +1,6 @@
 package manga.repository;
 
+import manga.model.AuthenticatedUser;
 import manga.model.ChapterSummary;
 import manga.model.ManuscriptSummary;
 import manga.model.SeriesSummary;
@@ -9,6 +10,7 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +26,17 @@ public class ProductionRepository {
     private DataSource dataSource;
 
     public List<SeriesSummary> listSeries() {
+        return listSeriesByMangaka(null);
+    }
+
+    public List<SeriesSummary> listSeries(AuthenticatedUser user) {
+        if (user != null && user.hasRole("MANGAKA") && !user.hasRole("ADMIN")) {
+            return listSeriesByMangaka(Long.valueOf(user.getId()));
+        }
+        return listSeries();
+    }
+
+    private List<SeriesSummary> listSeriesByMangaka(Long mangakaId) {
         String sql =
             "SELECT s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId, s.publicationDate, "
             + "COUNT(c.id) AS chapterCount, "
@@ -31,27 +44,32 @@ public class ProductionRepository {
             + "AVG(CASE WHEN c.id IS NULL THEN NULL ELSE c.completionPct END) AS progressPct "
             + "FROM Series s "
             + "LEFT JOIN Chapter c ON c.seriesId = s.id "
+            + (mangakaId == null ? "" : "WHERE s.mangakaId = ? ")
             + "GROUP BY s.id, s.title, s.genre, s.status, s.mangakaId, s.tantouEditorId, s.publicationDate "
             + "ORDER BY MAX(s.createdAt) DESC";
 
         List<SeriesSummary> rows = new ArrayList<SeriesSummary>();
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                SeriesSummary s = new SeriesSummary();
-                s.setId(rs.getLong("id"));
-                s.setTitle(rs.getString("title"));
-                s.setGenre(rs.getString("genre"));
-                s.setStatus(rs.getString("status"));
-                s.setMangakaId(rs.getLong("mangakaId"));
-                s.setTantouEditorId(rs.getLong("tantouEditorId"));
-                s.setPublicationDate(rs.getDate("publicationDate"));
-                s.setChapterCount(rs.getInt("chapterCount"));
-                s.setInProgressChapters(rs.getInt("inProgressChapters"));
-                double pct = rs.getDouble("progressPct");
-                s.setProgressPct(rs.wasNull() ? 0.0 : pct);
-                rows.add(s);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (mangakaId != null) {
+                ps.setLong(1, mangakaId.longValue());
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    SeriesSummary s = new SeriesSummary();
+                    s.setId(rs.getLong("id"));
+                    s.setTitle(rs.getString("title"));
+                    s.setGenre(rs.getString("genre"));
+                    s.setStatus(rs.getString("status"));
+                    s.setMangakaId(rs.getLong("mangakaId"));
+                    s.setTantouEditorId(rs.getLong("tantouEditorId"));
+                    s.setPublicationDate(rs.getDate("publicationDate"));
+                    s.setChapterCount(rs.getInt("chapterCount"));
+                    s.setInProgressChapters(rs.getInt("inProgressChapters"));
+                    double pct = rs.getDouble("progressPct");
+                    s.setProgressPct(rs.wasNull() ? 0.0 : pct);
+                    rows.add(s);
+                }
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load series", ex);
@@ -63,8 +81,12 @@ public class ProductionRepository {
         if (publicationDate == null) {
             throw new IllegalArgumentException("publicationDate is required");
         }
+        if (publicationDate.before(Date.valueOf(LocalDate.now()))) {
+            throw new IllegalArgumentException("Series deadline cannot be in the past");
+        }
 
         String readSql = "SELECT mangakaId, tantouEditorId, title FROM Series WHERE id = ?";
+        String chapterDeadlineSql = "SELECT COUNT(1) FROM Chapter WHERE seriesId = ? AND submissionDeadline > DATEADD(DAY, -7, ?)";
         String updateSql = "UPDATE Series SET publicationDate = ? WHERE id = ?";
         String notifySql =
             "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
@@ -88,6 +110,17 @@ public class ProductionRepository {
 
             if (assignedTantouId != tantouEditorId) {
                 throw new IllegalArgumentException("Only assigned Tantou can update series deadline");
+            }
+
+            try (PreparedStatement chapterDeadline = conn.prepareStatement(chapterDeadlineSql)) {
+                chapterDeadline.setLong(1, seriesId);
+                chapterDeadline.setDate(2, publicationDate);
+                try (ResultSet rs = chapterDeadline.executeQuery()) {
+                    rs.next();
+                    if (rs.getInt(1) > 0) {
+                        throw new IllegalArgumentException("Series deadline must be at least 7 days after all chapter deadlines");
+                    }
+                }
             }
 
             try (PreparedStatement update = conn.prepareStatement(updateSql)) {
@@ -253,7 +286,12 @@ public class ProductionRepository {
                 c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
                 c.setPublicationDate(rs.getDate("publicationDate"));
                 c.setCompletionPct(rs.getDouble("completionPct"));
-                c.setAtRisk(rs.getBoolean("atRisk"));
+                boolean storedAtRisk = rs.getBoolean("atRisk");
+                boolean missedDeadline = c.getSubmissionDeadline() != null
+                        && c.getSubmissionDeadline().before(Date.valueOf(LocalDate.now()))
+                        && c.getCompletionPct() < 100.0
+                        && ("PLANNING".equalsIgnoreCase(c.getStatus()) || "IN_PROGRESS".equalsIgnoreCase(c.getStatus()));
+                c.setAtRisk(storedAtRisk || missedDeadline);
                 rows.add(c);
             }
         } catch (SQLException ex) {

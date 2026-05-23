@@ -4,6 +4,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptSummary;
 import manga.model.Proposal;
 import manga.model.TaskSummary;
+import manga.common.util.SessionUserUtil;
 import manga.repository.ProductionRepository;
 import manga.service.ProposalService;
 import java.io.File;
@@ -79,7 +80,8 @@ public class MainController {
 
     @RequestMapping(value = "/series", method = RequestMethod.GET)
     public String series(HttpSession session, Model model) {
-        model.addAttribute("seriesList", productionRepository.listSeries());
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        model.addAttribute("seriesList", productionRepository.listSeries(user));
         return "series/list";
     }
 

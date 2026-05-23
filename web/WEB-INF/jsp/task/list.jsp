@@ -43,6 +43,7 @@
         <select id="createTaskChapterId" name="chapterId" required>
             <option value="">Loading chapters...</option>
         </select>
+        <p id="createTaskDeadlineHint" class="section-desc"></p>
         <select id="createTaskAssistantId" name="assistantId" required>
             <option value="">Select Chapter first</option>
         </select>
@@ -57,11 +58,11 @@
         </select>
         <label class="field-label" for="taskCreateDueDate">Due Date</label>
         <input id="taskCreateDueDate" name="dueDate" type="date" aria-label="Due Date" required />
+        <div id="taskCreateError" class="alert error" style="display:none;"></div>
         <button class="btn primary" type="submit">Create</button>
         </form>
     </div>
 </div>
-
 <div class="section-card">
     <h3 class="section-title">All Tasks</h3>
     <table class="data-table">
@@ -101,9 +102,10 @@
     <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="taskViewTitle">
         <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
         <h3 id="taskViewTitle" class="section-title compact-title">Task Detail</h3>
+        <p id="taskViewSubtitle" class="section-desc"></p>
         <div id="taskViewDetail" class="panel" style="margin-top:12px;">Loading detail...</div>
         <div id="taskViewOwnerTools" style="margin-top:14px;"></div>
-        <div id="taskViewAssistantActions" class="detail-actions modal-actions modal-actions-bottom"></div>
+        <div id="taskViewMangakaActions"></div>
         <div class="section-head" style="margin-top:16px;">
             <div>
                 <strong>Task Images</strong>
@@ -111,6 +113,7 @@
             </div>
         </div>
         <div id="taskViewImages">Loading images...</div>
+        <div id="taskViewAssistantActions" class="detail-actions modal-actions modal-actions-bottom"></div>
     </div>
 </div>
 
@@ -157,6 +160,22 @@
     function dateOnly(value) {
         var formatted = formatDate(value);
         return formatted ? new Date(formatted + 'T00:00:00') : null;
+    }
+
+    function todayIso() {
+        var date = new Date();
+        var month = String(date.getMonth() + 1);
+        var day = String(date.getDate());
+        return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+    }
+
+    function addDaysIso(value, days) {
+        var date = dateOnly(value);
+        if (!date) { return ''; }
+        date.setDate(date.getDate() + days);
+        var month = String(date.getMonth() + 1);
+        var day = String(date.getDate());
+        return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
     }
 
     function hasRole(role) {
@@ -213,6 +232,24 @@
         resultBox.textContent = msg;
     }
 
+    function showModalError(msg) {
+        var el = document.getElementById('taskCreateError');
+        if (!el) {
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = msg;
+    }
+
+    function clearModalError() {
+        var el = document.getElementById('taskCreateError');
+        if (!el) {
+            return;
+        }
+        el.style.display = 'none';
+        el.textContent = '';
+    }
+
     function formToObject(form) {
         var data = {};
         var fd = new FormData(form);
@@ -248,6 +285,9 @@
     function openModal(id) {
         var modal = document.getElementById(id);
         if (modal) {
+            if (id === 'taskCreateModal') {
+                clearModalError();
+            }
             modal.classList.add('open');
             modal.setAttribute('aria-hidden', 'false');
         }
@@ -314,6 +354,24 @@
         }).join('');
     }
 
+    function updateCreateTaskDeadlineHint(chapter) {
+        var hint = document.getElementById('createTaskDeadlineHint');
+        var dueDateInput = document.getElementById('taskCreateDueDate');
+        if (dueDateInput) {
+            dueDateInput.min = todayIso();
+            dueDateInput.removeAttribute('max');
+        }
+        var latestDueDate = chapter && chapter.submissionDeadline ? addDaysIso(chapter.submissionDeadline, -3) : '';
+        if (dueDateInput && latestDueDate) {
+            dueDateInput.max = latestDueDate;
+        }
+        if (!hint) {
+            return;
+        }
+        hint.textContent = chapter && chapter.submissionDeadline
+            ? ('Chapter deadline: ' + formatDate(chapter.submissionDeadline) + '. Task due date must be between today and ' + latestDueDate + '.')
+            : '';
+    }
     function renderMetrics() {
         var active = 0;
         var submitted = 0;
@@ -358,6 +416,11 @@
     function renderUpdateForm(task) {
         var chapter = chapterById[String(task.chapterId)];
         var seriesId = chapter ? chapter.seriesId : '';
+        var latestDueDate = chapter && chapter.submissionDeadline ? addDaysIso(chapter.submissionDeadline, -3) : '';
+        var dueDateAttrs = ' min="' + todayIso() + '"' + (latestDueDate ? ' max="' + escapeHtml(latestDueDate) + '"' : '');
+        var deadlineHelp = chapter && chapter.submissionDeadline
+            ? '<p class="section-desc">Chapter deadline: ' + escapeHtml(formatDate(chapter.submissionDeadline)) + '. Task due date must be between today and ' + escapeHtml(latestDueDate) + '.</p>'
+            : '<p class="section-desc">Task due date cannot be in the past.</p>';
         return '<form class="panel form-grid task-inline-update-form" style="max-width:640px;">'
             + '<strong>Reassign / Update Task #' + task.id + '</strong>'
             + '<input name="taskId" type="hidden" value="' + task.id + '" />'
@@ -366,7 +429,8 @@
             + '<input name="pageRangeEnd" type="number" min="1" value="' + task.pageRangeEnd + '" placeholder="Page End" required />'
             + renderTaskTypeSelect(task.taskType)
             + '<label class="field-label" for="taskUpdateDueDate' + task.id + '">Due Date</label>'
-            + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '" aria-label="Due Date" required />'
+            + deadlineHelp
+            + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '" aria-label="Due Date"' + dueDateAttrs + ' required />'
             + '<button class="btn" type="submit">Update</button>'
             + '</form>';
     }
@@ -374,7 +438,7 @@
     function renderImageForm(task) {
         var uploadForm = '';
         if (isAssignedAssistant(task)) {
-            uploadForm = '<form class="panel form-grid task-image-upload-form" data-task-id="' + task.id + '" data-chapter-id="' + task.chapterId + '" style="display:grid; max-width:680px;">'
+            uploadForm = '<form class="form-grid task-image-upload-form" data-task-id="' + task.id + '" data-chapter-id="' + task.chapterId + '" style="display:grid; max-width:680px;margin-bottom:12px;">'
                 + '<strong>Upload Page Image</strong>'
                 + '<input name="imageType" type="hidden" value="PAGE" />'
                 + '<input name="pageTaskId" type="hidden" value="' + task.id + '" />'
@@ -388,7 +452,6 @@
             uploadForm = '<p class="section-desc">Tantou editor has read-only access to task images.</p>';
         }
         return '<div class="panel">'
-            + '<div class="section-head"><div><strong>Task Images</strong><p class="section-desc">Uploaded page images for this task</p></div></div>'
             + uploadForm
             + '<div class="task-image-list" data-task-image-list="' + task.id + '">Loading images...</div>'
             + '</div>';
@@ -442,23 +505,14 @@
     }
 
     function renderTaskDetail(task) {
-        var ownerActions = '';
-        if (isTaskOwner(task)) {
-            ownerActions = '<div class="inline-meta" style="margin-top:12px;gap:8px;">'
-                + '<button class="btn success-soft" type="button" data-task-decision="approve" data-task-id="' + task.id + '">Approve</button>'
-                + '<button class="btn danger-soft" type="button" data-task-decision="reject" data-task-id="' + task.id + '">Reject</button>'
-                + '</div>';
-        }
         return '<strong>Task #' + task.id + ' Detail</strong>'
-            + '<p class="section-desc" style="margin:8px 0 0;">' + escapeHtml(task.seriesTitle) + ' - Ch. ' + escapeHtml(task.chapterNumber) + ' - ' + escapeHtml(task.chapterTitle) + '</p>'
             + '<div class="inline-meta" style="margin-top:10px;gap:14px;">'
             + '<span>Pages: ' + task.pageRangeStart + '-' + task.pageRangeEnd + '</span>'
             + '<span>Type: ' + formatStatus(task.taskType) + '</span>'
             + '<span>Assigned: ' + escapeHtml(task.assistantName) + '</span>'
             + '<span>Status: ' + formatStatus(task.status) + '</span>'
             + '<span>Due Date: ' + escapeHtml(formatDate(task.dueDate)) + '</span>'
-            + '</div>'
-            + ownerActions;
+            + '</div>';
     }
 
     function findTask(taskId) {
@@ -502,10 +556,23 @@
             return;
         }
         document.getElementById('taskViewTitle').textContent = 'Task #' + task.id;
+        document.getElementById('taskViewSubtitle').textContent = (task.seriesTitle || '') + ' - Ch. ' + task.chapterNumber + ' - ' + (task.chapterTitle || '');
         document.getElementById('taskViewDetail').innerHTML = renderTaskDetail(task);
         document.getElementById('taskViewOwnerTools').innerHTML = isTaskOwner(task)
             ? renderUpdateForm(task)
             : '';
+        var mangakaActionsEl = document.getElementById('taskViewMangakaActions');
+        if (mangakaActionsEl) {
+            var st = String(task.status || '').toUpperCase();
+            if (isTaskOwner(task) && st === 'SUBMITTED') {
+                mangakaActionsEl.innerHTML = '<div class="inline-meta" style="gap:8px;margin-top:12px;">'
+                    + '<button class="btn success-soft" type="button" data-task-decision="approve" data-task-id="' + task.id + '">Approve</button>'
+                    + '<button class="btn danger-soft" type="button" data-task-decision="reject" data-task-id="' + task.id + '">Reject</button>'
+                    + '</div>';
+            } else {
+                mangakaActionsEl.innerHTML = '';
+            }
+        }
         var assistantActions = document.getElementById('taskViewAssistantActions');
         assistantActions.innerHTML = canAssistantSubmit(task)
             ? '<button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>'
@@ -550,7 +617,11 @@
 
     document.addEventListener('click', async function (e) {
         var openButton = e.target.closest ? e.target.closest('[data-modal-open]') : null;
-        if (openButton) { openModal(openButton.getAttribute('data-modal-open')); return; }
+        if (openButton) {
+            var modalId = openButton.getAttribute('data-modal-open');
+            openModal(modalId);
+            return;
+        }
         if (e.target.closest && e.target.closest('[data-modal-close]')) { closeModals(); return; }
         if (e.target.classList && e.target.classList.contains('modal-backdrop')) { closeModals(); return; }
 
@@ -608,12 +679,13 @@
             var assistantSelect = document.getElementById('createTaskAssistantId');
             if (!chapter) {
                 assistantSelect.innerHTML = '<option value="">Select Chapter first</option>';
+                updateCreateTaskDeadlineHint(null);
                 return;
             }
+            updateCreateTaskDeadlineHint(chapter);
             await fillAssistantSelect(assistantSelect, chapter.seriesId, '');
         }
     });
-
     document.addEventListener('submit', async function (e) {
         if (e.target.id === 'taskCreateForm') {
             e.preventDefault();
@@ -629,13 +701,14 @@
                 showMessage('Task created successfully.', false);
                 e.target.reset();
                 document.getElementById('createTaskAssistantId').innerHTML = '<option value="">Select Chapter first</option>';
+                updateCreateTaskDeadlineHint(null);
+                clearModalError();
                 closeModals();
                 await loadData();
             } catch (err) {
-                showMessage(err.message, true);
+                showModalError(err.message);
             }
         }
-
         if (e.target.classList.contains('task-inline-update-form')) {
             e.preventDefault();
             try {

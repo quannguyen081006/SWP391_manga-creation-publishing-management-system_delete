@@ -38,7 +38,7 @@ public class ChapterApiController {
             @PathVariable("seriesId") long seriesId,
             HttpSession session,
             @RequestParam("title") String title,
-            @RequestParam("publicationDate") String publicationDate) {
+            @RequestParam("submissionDeadline") String submissionDeadline) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can create chapter");
 
@@ -47,7 +47,7 @@ public class ChapterApiController {
             throw new IllegalArgumentException("Only series owner can create chapter");
         }
 
-        long id = chapterRepository.createNext(seriesId, title, Date.valueOf(publicationDate));
+        long id = chapterRepository.createNext(seriesId, title, Date.valueOf(submissionDeadline));
         return ApiResponse.ok(chapterRepository.findById(id), "Chapter created");
     }
 
@@ -65,8 +65,11 @@ public class ChapterApiController {
     public ApiResponse<ChapterSummary> update(
             @PathVariable("id") long id,
             HttpSession session,
-            @RequestParam("title") String title,
-            @RequestParam("publicationDate") String publicationDate) {
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "submissionDeadline", required = false) String submissionDeadline,
+            @RequestParam(value = "publicationDate", required = false) String publicationDate,
+            @RequestParam(value = "deadline", required = false) String deadline,
+            @RequestParam(value = "chapterDeadline", required = false) String chapterDeadline) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can update chapter");
 
@@ -75,7 +78,24 @@ public class ChapterApiController {
             throw new IllegalArgumentException("Only series owner can update chapter");
         }
 
-        chapterRepository.updateChapterMetadata(id, title, Date.valueOf(publicationDate));
+        ChapterSummary existing = chapterRepository.findById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("Chapter not found");
+        }
+        String nextTitle = (title == null || title.trim().isEmpty()) ? existing.getTitle() : title;
+        String deadlineText = (submissionDeadline == null || submissionDeadline.trim().isEmpty()) ? publicationDate : submissionDeadline;
+        if (deadlineText == null || deadlineText.trim().isEmpty()) {
+            deadlineText = deadline;
+        }
+        if (deadlineText == null || deadlineText.trim().isEmpty()) {
+            deadlineText = chapterDeadline;
+        }
+        if (deadlineText == null || deadlineText.trim().isEmpty()) {
+            chapterRepository.updateChapterTitle(id, nextTitle);
+            return ApiResponse.ok(chapterRepository.findById(id), "Chapter updated");
+        }
+
+        chapterRepository.updateChapterMetadata(id, nextTitle, Date.valueOf(deadlineText));
         return ApiResponse.ok(chapterRepository.findById(id), "Chapter updated");
     }
 
@@ -95,7 +115,3 @@ public class ChapterApiController {
         return ApiResponse.ok(null, "Chapter deleted");
     }
 }
-
-
-
-

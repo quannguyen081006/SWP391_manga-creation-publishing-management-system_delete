@@ -1,5 +1,6 @@
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@taglib uri="http://java.sun.com/jsp/jstl/fmt" prefix="fmt" %>
 <!DOCTYPE html>
 <html>
 <head>
@@ -19,7 +20,7 @@
         <article class="tile">
             <div class="section-head" style="margin-bottom:8px">
                 <h3>${s.title}</h3>
-                <div class="score ${s.progressPct >= 70 ? 'metric-ok' : (s.progressPct >= 45 ? 'metric-amber' : 'metric-danger')}">${s.progressPct}%</div>
+                <div class="score ${s.progressPct >= 70 ? 'metric-ok' : (s.progressPct >= 45 ? 'metric-amber' : 'metric-danger')}"><fmt:formatNumber value="${s.progressPct}" maxFractionDigits="0" />%</div>
             </div>
             <div class="genre">${s.genre}</div>
             <div class="inline-meta">
@@ -46,7 +47,7 @@
 
             <div class="series-card-actions">
                 <span class="status-chip ${s.status == 'CANCELLED' ? 'status-rejected' : 'status-approved'}">${s.status}</span>
-                <a class="btn small" href="${pageContext.request.contextPath}/main/chapters">View</a>
+                <a class="btn small" href="${pageContext.request.contextPath}/main/chapters?seriesId=${s.id}">View</a>
             </div>
         </article>
     </c:forEach>
@@ -63,6 +64,18 @@
             message.textContent = text;
             message.style.display = 'block';
             message.className = 'alert ' + (isError ? 'error' : 'success');
+        }
+
+        function todayIso() {
+            var date = new Date();
+            var month = String(date.getMonth() + 1);
+            var day = String(date.getDate());
+            return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+        }
+
+        var deadlineInputs = document.querySelectorAll('.series-deadline-form input[type="date"]');
+        for (var i = 0; i < deadlineInputs.length; i++) {
+            deadlineInputs[i].min = todayIso();
         }
 
         document.addEventListener('submit', async function (e) {

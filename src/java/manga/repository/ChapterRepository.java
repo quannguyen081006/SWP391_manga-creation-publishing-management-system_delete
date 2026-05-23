@@ -7,6 +7,7 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
@@ -15,6 +16,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class ChapterRepository {
+
+    private static final int CHAPTER_PUBLICATION_OFFSET_DAYS = 14;
+    private static final int CHAPTER_SERIES_DEADLINE_BUFFER_DAYS = 7;
 
     @Autowired
     private DataSource dataSource;
@@ -105,16 +109,16 @@ public class ChapterRepository {
         }
     }
 
-    public long create(long seriesId, int chapterNumber, String title, Date publicationDate) {
-        Date submissionDeadline = new Date(publicationDate.getTime() - (14L * 24L * 60L * 60L * 1000L));
+    public long create(long seriesId, int chapterNumber, String title, Date submissionDeadline) {
         String sql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, GETDATE())";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+            validateChapterDeadlineForSeries(conn, seriesId, submissionDeadline);
             ps.setLong(1, seriesId);
             ps.setInt(2, chapterNumber);
             ps.setString(3, title);
             ps.setDate(4, submissionDeadline);
-            ps.setDate(5, publicationDate);
+            ps.setDate(5, publicationDateFor(submissionDeadline));
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -127,8 +131,7 @@ public class ChapterRepository {
         }
     }
 
-    public long createNext(long seriesId, String title, Date publicationDate) {
-        Date submissionDeadline = new Date(publicationDate.getTime() - (14L * 24L * 60L * 60L * 1000L));
+    public long createNext(long seriesId, String title, Date submissionDeadline) {
         String nextSql = "SELECT ISNULL(MAX(chapterNumber), 0) + 1 FROM Chapter WITH (UPDLOCK, HOLDLOCK) WHERE seriesId = ?";
         String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, GETDATE())";
 
@@ -136,6 +139,8 @@ public class ChapterRepository {
             boolean oldAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
+                validateChapterDeadlineForSeries(conn, seriesId, submissionDeadline);
+
                 int nextChapterNumber;
                 try (PreparedStatement ps = conn.prepareStatement(nextSql)) {
                     ps.setLong(1, seriesId);
@@ -153,7 +158,7 @@ public class ChapterRepository {
                     ps.setInt(2, nextChapterNumber);
                     ps.setString(3, title);
                     ps.setDate(4, submissionDeadline);
-                    ps.setDate(5, publicationDate);
+                    ps.setDate(5, publicationDateFor(submissionDeadline));
                     ps.executeUpdate();
                     try (ResultSet rs = ps.getGeneratedKeys()) {
                         if (!rs.next()) {
@@ -165,11 +170,11 @@ public class ChapterRepository {
                 conn.commit();
                 return newId;
             } catch (RuntimeException ex) {
-                conn.rollback();
+                try { conn.rollback(); } catch (SQLException ignore) {}
                 throw ex;
             } catch (SQLException ex) {
-                conn.rollback();
-                throw ex;
+                try { conn.rollback(); } catch (SQLException ignore) {}
+                throw new RuntimeException("Cannot create chapter", ex);
             } finally {
                 conn.setAutoCommit(oldAutoCommit);
             }
@@ -178,15 +183,29 @@ public class ChapterRepository {
         }
     }
 
-    public void updateChapterMetadata(long chapterId, String title, Date publicationDate) {
-        Date submissionDeadline = new Date(publicationDate.getTime() - (14L * 24L * 60L * 60L * 1000L));
+    public void updateChapterMetadata(long chapterId, String title, Date submissionDeadline) {
         String sql = "UPDATE Chapter SET title = ?, publicationDate = ?, submissionDeadline = ? WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            validateChapterDeadlineForChapter(conn, chapterId, submissionDeadline);
             ps.setString(1, title);
-            ps.setDate(2, publicationDate);
+            ps.setDate(2, publicationDateFor(submissionDeadline));
             ps.setDate(3, submissionDeadline);
             ps.setLong(4, chapterId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Chapter not found");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update chapter", ex);
+        }
+    }
+
+    public void updateChapterTitle(long chapterId, String title) {
+        String sql = "UPDATE Chapter SET title = ? WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, title);
+            ps.setLong(2, chapterId);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Chapter not found");
             }
@@ -381,8 +400,67 @@ public class ChapterRepository {
         c.setSubmissionDeadline(rs.getDate("submissionDeadline"));
         c.setPublicationDate(rs.getDate("publicationDate"));
         c.setCompletionPct(rs.getDouble("completionPct"));
-        c.setAtRisk(rs.getBoolean("atRisk"));
+        boolean storedAtRisk = rs.getBoolean("atRisk");
+        boolean missedDeadline = c.getSubmissionDeadline() != null
+                && c.getSubmissionDeadline().before(Date.valueOf(LocalDate.now()))
+                && c.getCompletionPct() < 100.0
+                && ("PLANNING".equalsIgnoreCase(c.getStatus()) || "IN_PROGRESS".equalsIgnoreCase(c.getStatus()));
+        c.setAtRisk(storedAtRisk || missedDeadline);
         return c;
+    }
+
+    private Date publicationDateFor(Date submissionDeadline) {
+        if (submissionDeadline == null) {
+            throw new IllegalArgumentException("submissionDeadline is required");
+        }
+        return Date.valueOf(submissionDeadline.toLocalDate().plusDays(CHAPTER_PUBLICATION_OFFSET_DAYS));
+    }
+
+    private void validateNotPast(Date date, String fieldName) {
+        if (date == null) {
+            throw new IllegalArgumentException(fieldName + " is required");
+        }
+        if (date.before(Date.valueOf(LocalDate.now()))) {
+            throw new IllegalArgumentException(fieldName + " cannot be in the past");
+        }
+    }
+
+    private void validateChapterDeadlineForSeries(Connection conn, long seriesId, Date submissionDeadline) throws SQLException {
+        validateNotPast(submissionDeadline, "submissionDeadline");
+        String sql = "SELECT publicationDate FROM Series WHERE id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, seriesId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Series not found");
+                }
+                validateBeforeSeriesDeadline(submissionDeadline, rs.getDate("publicationDate"));
+            }
+        }
+    }
+
+    private void validateChapterDeadlineForChapter(Connection conn, long chapterId, Date submissionDeadline) throws SQLException {
+        validateNotPast(submissionDeadline, "submissionDeadline");
+        String sql = "SELECT s.publicationDate FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Chapter not found");
+                }
+                validateBeforeSeriesDeadline(submissionDeadline, rs.getDate("publicationDate"));
+            }
+        }
+    }
+
+    private void validateBeforeSeriesDeadline(Date submissionDeadline, Date seriesDeadline) {
+        if (seriesDeadline == null) {
+            return;
+        }
+        Date latestChapterDeadline = Date.valueOf(seriesDeadline.toLocalDate().minusDays(CHAPTER_SERIES_DEADLINE_BUFFER_DAYS));
+        if (submissionDeadline.after(latestChapterDeadline)) {
+            throw new IllegalArgumentException("Chapter deadline must be at least 7 days before series deadline");
+        }
     }
 }
 

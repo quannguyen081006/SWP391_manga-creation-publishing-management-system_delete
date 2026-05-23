@@ -23,16 +23,6 @@
     <div><span class="detail-label">Status</span><span class="status-chip ${task.status=='APPROVED' ? 'status-approved' : (task.status=='OVERDUE' ? 'status-overdue' : 'status-progress')}">${task.status}</span></div>
 </div>
 
-<c:if test="${canAssistantSubmit}">
-    <div class="section-card">
-        <h3 class="section-title compact-title">Assistant Review</h3>
-        <form method="post" action="${pageContext.request.contextPath}/main/tasks/${task.id}/assistant-status" class="inline-form">
-            <input name="status" type="hidden" value="SUBMITTED" />
-            <button class="btn small primary" type="submit">Submit for Review</button>
-        </form>
-    </div>
-</c:if>
-
 <c:if test="${canMangakaReview}">
     <div class="section-card">
         <h3 class="section-title compact-title">Mangaka Review</h3>
@@ -75,6 +65,16 @@
     <div id="taskImageList">Loading images...</div>
 </div>
 
+<c:if test="${canAssistantSubmit}">
+    <div class="section-card">
+        <h3 class="section-title compact-title">Assistant Review</h3>
+        <form method="post" action="${pageContext.request.contextPath}/main/tasks/${task.id}/assistant-status" class="inline-form">
+            <input name="status" type="hidden" value="SUBMITTED" />
+            <button class="btn small primary" type="submit">Submit for Review</button>
+        </form>
+    </div>
+</c:if>
+
 <a class="btn" href="${pageContext.request.contextPath}/main/tasks">Back to Tasks</a>
 
 <script>
@@ -82,7 +82,7 @@
     var ctx = '${pageContext.request.contextPath}';
     var taskId = '${task.id}';
     var chapterId = '${task.chapterId}';
-    var canDeleteImages = ${canAssistantUpdate || canMangakaReview};
+    var canDeleteImages = ${canAssistantUpdate || canMangakaTaskOwner};
     var resultBox = document.getElementById('taskImageResult');
     var listBox = document.getElementById('taskImageList');
 

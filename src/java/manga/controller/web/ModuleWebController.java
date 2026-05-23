@@ -146,9 +146,9 @@ public class ModuleWebController {
 
     @RequestMapping(value = "/series/{id}", method = RequestMethod.GET)
     public String seriesDetail(@PathVariable("id") long id, HttpSession session, Model model) {
-        requireUser(session);
+        AuthenticatedUser user = requireUser(session);
         SeriesSummary found = null;
-        for (SeriesSummary s : productionRepository.listSeries()) {
+        for (SeriesSummary s : productionRepository.listSeries(user)) {
             if (s.getId() == id) {
                 found = s;
                 break;
@@ -201,14 +201,17 @@ public class ModuleWebController {
                 && ("IN_PROGRESS".equalsIgnoreCase(task.getStatus())
                 || "REJECTED".equalsIgnoreCase(task.getStatus())
                 || "OVERDUE".equalsIgnoreCase(task.getStatus()));
-        boolean canMangakaReview = user.hasRole("MANGAKA") && pageTaskRepository.getTaskOwnerMangaka(id) == user.getId();
+        boolean isOwnerMangaka = user.hasRole("MANGAKA") && pageTaskRepository.getTaskOwnerMangaka(id) == user.getId();
+        boolean canMangakaReview = isOwnerMangaka
+                && "SUBMITTED".equalsIgnoreCase(task.getStatus());
         boolean canTantouView = user.hasRole("TANTOU_EDITOR") && pageTaskRepository.getTaskTantouEditor(id) == user.getId();
-        if (!user.hasRole("ADMIN") && !canAssistantUpdate && !canMangakaReview && !canTantouView) {
+        if (!user.hasRole("ADMIN") && !canAssistantUpdate && !isOwnerMangaka && !canTantouView) {
             throw new IllegalArgumentException("You can only view tasks assigned to your role");
         }
         model.addAttribute("task", task);
         model.addAttribute("canAssistantUpdate", canAssistantUpdate);
         model.addAttribute("canAssistantSubmit", canAssistantSubmit);
+        model.addAttribute("canMangakaTaskOwner", isOwnerMangaka);
         model.addAttribute("canMangakaReview", canMangakaReview);
         return "task/detail";
     }

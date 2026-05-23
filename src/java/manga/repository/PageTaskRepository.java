@@ -7,6 +7,7 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -294,6 +295,9 @@ public class PageTaskRepository {
         if (dueDate == null) {
             throw new IllegalArgumentException("dueDate is required");
         }
+        if (dueDate.before(Date.valueOf(LocalDate.now()))) {
+            throw new IllegalArgumentException("Task dueDate cannot be in the past");
+        }
         if (end < start) {
             throw new IllegalArgumentException("pageRangeEnd must be >= pageRangeStart");
         }
@@ -342,8 +346,9 @@ public class PageTaskRepository {
             throw new IllegalArgumentException("Mangaka cannot self-assign page task (BR-35)");
         }
 
-        if (dueDate.after(submissionDeadline)) {
-            throw new IllegalArgumentException("Task dueDate must be <= chapter submissionDeadline (BR-34)");
+        Date deadline3DaysBefore = new Date(submissionDeadline.getTime() - (3L * 24L * 60L * 60L * 1000L));
+        if (dueDate.after(deadline3DaysBefore)) {
+            throw new IllegalArgumentException("Task dueDate must be at least 3 days before chapter submissionDeadline (BR-34)");
         }
 
         try (PreparedStatement enrollment = conn.prepareStatement(enrollmentSql)) {
@@ -684,6 +689,7 @@ public class PageTaskRepository {
             + "  WHEN stats.totalTasks > 0 AND stats.completionPct < 100 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'IN_PROGRESS' "
             + "  ELSE c.status END, "
             + "atRisk = CASE "
+            + "  WHEN c.submissionDeadline < CAST(GETDATE() AS DATE) AND stats.completionPct < 100 THEN 1 "
             + "  WHEN DATEDIFF(DAY, CAST(c.createdAt AS DATE), c.publicationDate) > 0 "
             + "       AND stats.completionPct < 50 "
             + "       AND (100.0 * DATEDIFF(DAY, CAST(c.createdAt AS DATE), CAST(GETDATE() AS DATE)) / DATEDIFF(DAY, CAST(c.createdAt AS DATE), c.publicationDate)) > 70 "

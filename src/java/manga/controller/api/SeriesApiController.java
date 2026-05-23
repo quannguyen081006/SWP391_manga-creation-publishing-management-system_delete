@@ -25,14 +25,14 @@ public class SeriesApiController {
 
     @RequestMapping(method = RequestMethod.GET)
     public ApiResponse<List<SeriesSummary>> list(HttpSession session) {
-        SessionUserUtil.requireUser(session);
-        return ApiResponse.ok(productionRepository.listSeries(), "Series list");
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(productionRepository.listSeries(user), "Series list");
     }
 
     @RequestMapping(value = "/{id}", method = RequestMethod.GET)
     public ApiResponse<SeriesSummary> detail(@PathVariable("id") long id, HttpSession session) {
-        SessionUserUtil.requireUser(session);
-        List<SeriesSummary> list = productionRepository.listSeries();
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        List<SeriesSummary> list = productionRepository.listSeries(user);
         for (SeriesSummary s : list) {
             if (s.getId() == id) {
                 return ApiResponse.ok(s, "Series detail");

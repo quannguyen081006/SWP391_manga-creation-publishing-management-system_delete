@@ -88,10 +88,6 @@
                 <span class="nav-icon" aria-hidden="true"></span>
                 <span class="nav-label">Series</span>
             </a>
-            <a class="nav-item nav-chapters ${fn:contains(uri, '/main/chapters') ? 'active' : ''}" href="${ctx}/main/chapters" title="Chapters">
-                <span class="nav-icon" aria-hidden="true"></span>
-                <span class="nav-label">Chapters</span>
-            </a>
         </c:if>
         <c:if test="${isAdmin || isMangaka || isAssistant || isTantou}">
             <a class="nav-item nav-tasks ${fn:contains(uri, '/main/tasks') ? 'active' : ''}" href="${ctx}/main/tasks" title="Tasks">
