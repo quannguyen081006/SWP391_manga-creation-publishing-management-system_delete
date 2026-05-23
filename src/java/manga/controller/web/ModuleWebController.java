@@ -253,16 +253,7 @@ public class ModuleWebController {
             if (pageTaskRepository.getTaskOwnerMangaka(id) != user.getId()) {
                 throw new IllegalArgumentException("Only owner can reject");
             }
-            int rejectCount = pageTaskRepository.rejectByMangaka(id, user.getId());
-            if (rejectCount >= 3) {
-                long tantouId = pageTaskRepository.getTaskTantouEditor(id);
-                notificationService.notifyUser(
-                        tantouId,
-                        "TASK_ESCALATED",
-                        "Task #" + id + " reached 3 rejections and requires intervention.",
-                        id,
-                        "TASK");
-            }
+            pageTaskRepository.rejectByMangaka(id, user.getId());
             return "redirect:/main/tasks/" + id;
         } catch (RuntimeException ex) {
             taskDetail(id, session, model);

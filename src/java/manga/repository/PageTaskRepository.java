@@ -177,6 +177,12 @@ public class PageTaskRepository {
             }
 
             refreshChapterProgress(chapterId);
+            createNotification(
+                    assistantId,
+                    "TASK_ASSIGNED",
+                    "You have been assigned task #" + newId + ".",
+                    newId,
+                    "TASK");
             return newId;
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot create task", ex);
@@ -184,12 +190,13 @@ public class PageTaskRepository {
     }
 
     public void updateTaskByMangaka(long taskId, long mangakaId, long assistantId, int start, int end, String taskType, Date dueDate) {
-        String taskInfoSql = "SELECT t.chapterId, t.status FROM PageTask t WHERE t.id = ?";
+        String taskInfoSql = "SELECT t.chapterId, t.assistantId, t.status FROM PageTask t WHERE t.id = ?";
         String updateSql = "UPDATE PageTask SET assistantId = ?, pageRangeStart = ?, pageRangeEnd = ?, taskType = ?, dueDate = ?, status = 'IN_PROGRESS', rejectionCount = 0, updatedAt = GETDATE(), assignedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection()) {
             taskType = normalizeTaskType(taskType);
             long chapterId;
+            long currentAssistantId;
             String currentStatus;
             try (PreparedStatement ps = conn.prepareStatement(taskInfoSql)) {
                 ps.setLong(1, taskId);
@@ -198,6 +205,7 @@ public class PageTaskRepository {
                         throw new IllegalArgumentException("Task not found");
                     }
                     chapterId = rs.getLong("chapterId");
+                    currentAssistantId = rs.getLong("assistantId");
                     currentStatus = rs.getString("status");
                 }
             }
@@ -237,6 +245,15 @@ public class PageTaskRepository {
             }
 
             refreshChapterProgress(chapterId);
+            boolean reassigned = currentAssistantId != assistantId;
+            createNotification(
+                    assistantId,
+                    reassigned ? "TASK_REASSIGNED" : "TASK_UPDATED",
+                    reassigned
+                            ? "Task #" + taskId + " has been assigned to you."
+                            : "Task #" + taskId + " has been updated.",
+                    taskId,
+                    "TASK");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update task", ex);
         }
