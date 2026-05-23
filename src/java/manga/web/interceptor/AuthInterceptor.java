@@ -17,7 +17,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        if (uri.endsWith("/login") || uri.endsWith("/logout") || uri.contains("/assets/") || uri.endsWith("/redirect.jsp")) {
+        if (uri.endsWith("/login") || uri.endsWith("/logout") || uri.endsWith("/switch-role")
+                || uri.contains("/assets/") || uri.endsWith("/redirect.jsp")) {
             return true;
         }
 

@@ -9,7 +9,7 @@ public final class SessionUserUtil {
     }
 
     public static AuthenticatedUser requireUser(HttpSession session) {
-        Object auth = session.getAttribute("AUTH_USER");
+        Object auth = session == null ? null : session.getAttribute("AUTH_USER");
         if (auth == null || !(auth instanceof AuthenticatedUser)) {
             throw new IllegalStateException("Unauthorized");
         }

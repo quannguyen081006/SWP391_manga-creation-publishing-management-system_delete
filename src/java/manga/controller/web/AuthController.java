@@ -46,12 +46,8 @@ public class AuthController {
             @RequestParam("username") String username,
             @RequestParam(value = "back", required = false) String back,
             HttpServletRequest request) {
-        HttpSession session = request.getSession(false);
-        if (session == null || session.getAttribute("AUTH_USER") == null) {
-            return "redirect:/main/login";
-        }
-
         AuthenticatedUser switched = authService.switchUserForTesting(username);
+        HttpSession session = request.getSession(true);
         session.setAttribute("AUTH_USER", switched);
 
         return "redirect:/main/dashboard";

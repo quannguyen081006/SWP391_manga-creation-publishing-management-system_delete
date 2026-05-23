@@ -3,6 +3,11 @@ package manga.service;
 import manga.model.AuthenticatedUser;
 import manga.repository.UserAdminRepository;
 import manga.repository.UserRepository;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +20,13 @@ public class AuthService {
     @Autowired
     private UserAdminRepository userAdminRepository;
 
+    @Autowired
+    private DataSource dataSource;
+
     public AuthenticatedUser login(String username, String password) {
         if (username != null) {
             ensureTestingAccountExists(username.trim());
+            ensureTestingAssignments(username.trim());
         }
 
         AuthenticatedUser user = userRepository.findByUsername(username);
@@ -43,6 +52,7 @@ public class AuthService {
 
         String normalized = username.trim();
         ensureTestingAccountExists(normalized);
+        ensureTestingAssignments(normalized);
 
         AuthenticatedUser user = userRepository.findByUsername(normalized);
         if (user == null) {
@@ -89,6 +99,78 @@ public class AuthService {
             userAdminRepository.addRole(userId, role);
         } catch (RuntimeException ignored) {
             // Ignore duplicate-create races for testing helper.
+        }
+    }
+
+    private void ensureTestingAssignments(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return;
+        }
+        String normalized = username.trim().toLowerCase();
+        if (!"mangaka1".equals(normalized)
+                && !"assistant1".equals(normalized)
+                && !"assistant2".equals(normalized)
+                && !"assistant3".equals(normalized)
+                && !"assistant4".equals(normalized)) {
+            return;
+        }
+
+        ensureTestingAccountExists("mangaka1");
+        ensureTestingAssistant("assistant1", "Aiko Mori", "asst1@mangaflow.local");
+        ensureTestingAssistant("assistant2", "Riku Hayashi", "asst2@mangaflow.local");
+        ensureTestingAssistant("assistant3", "Mika Saito", "asst3@mangaflow.local");
+        ensureTestingAssistant("assistant4", "Ren Fujimoto", "asst4@mangaflow.local");
+
+        AuthenticatedUser mangaka = userRepository.findByUsername("mangaka1");
+        if (mangaka == null) {
+            return;
+        }
+
+        enrollTestingAssistant(mangaka.getId(), "assistant1");
+        enrollTestingAssistant(mangaka.getId(), "assistant2");
+        enrollTestingAssistant(mangaka.getId(), "assistant3");
+        enrollTestingAssistant(mangaka.getId(), "assistant4");
+    }
+
+    private void ensureTestingAssistant(String username, String fullName, String email) {
+        AuthenticatedUser user = userRepository.findByUsername(username);
+        if (user == null) {
+            try {
+                long id = userAdminRepository.createUser(username, "12345", fullName, email);
+                userAdminRepository.addRole(id, "ASSISTANT");
+            } catch (RuntimeException ignored) {
+                // Ignore duplicate-create races for testing helper.
+            }
+            return;
+        }
+        userAdminRepository.addRole(user.getId(), "ASSISTANT");
+    }
+
+    private void enrollTestingAssistant(long mangakaId, String assistantUsername) {
+        AuthenticatedUser assistant = userRepository.findByUsername(assistantUsername);
+        if (assistant == null) {
+            return;
+        }
+
+        String existsSql = "SELECT 1 FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
+        String insertSql = "INSERT INTO MangakaAssistant (mangakaId, assistantId, enrolledAt) VALUES (?, ?, GETDATE())";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement exists = conn.prepareStatement(existsSql)) {
+            exists.setLong(1, mangakaId);
+            exists.setLong(2, assistant.getId());
+            try (ResultSet rs = exists.executeQuery()) {
+                if (rs.next()) {
+                    return;
+                }
+            }
+
+            try (PreparedStatement insert = conn.prepareStatement(insertSql)) {
+                insert.setLong(1, mangakaId);
+                insert.setLong(2, assistant.getId());
+                insert.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot ensure testing assistant assignment", ex);
         }
     }
 }
