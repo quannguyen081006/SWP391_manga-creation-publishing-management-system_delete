@@ -23,6 +23,9 @@ public class ChapterRepository {
     @Autowired
     private DataSource dataSource;
 
+    @Autowired
+    private PageTaskRepository pageTaskRepository;
+
     public List<ChapterSummary> listAll() {
         String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter ORDER BY createdAt DESC";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
@@ -195,6 +198,7 @@ public class ChapterRepository {
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Chapter not found");
             }
+            pageTaskRepository.refreshChapterProgress(chapterId);
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update chapter", ex);
         }

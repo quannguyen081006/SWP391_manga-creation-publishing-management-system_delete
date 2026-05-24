@@ -625,13 +625,16 @@
                     showViewMessage('Submission deadline is required.', true);
                     return;
                 }
-                await callApi('PUT', '/api/v1/chapters/' + updateData.chapterId, {
+                // Spring @RequestParam on PUT may not bind x-www-form-urlencoded body unless HttpPutFormContentFilter is enabled.
+                // Send data as query string (same pattern as series deadline update).
+                var qs = new URLSearchParams({
                     title: updateData.title,
                     submissionDeadline: deadlineValue,
                     publicationDate: deadlineValue,
                     deadline: deadlineValue,
                     chapterDeadline: deadlineValue
-                });
+                }).toString();
+                await callApi('PUT', '/api/v1/chapters/' + updateData.chapterId + '?' + qs);
                 showViewMessage('Chapter metadata updated.', false);
                 await loadData();
                 var updated = findChapter(updateData.chapterId);
