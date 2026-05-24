@@ -169,6 +169,8 @@ The current manga production process is fragmented across multiple unconnected t
 | BR-TSK-03 | Reassigning a page task to a different Assistant resets its status to Pending and clears the previous submission. |
 | BR-TSK-05 | A Mangaka may reject a page task a maximum of 3 times; after the third rejection, the task is escalated to the Tantou Editor. |
 | BR-TSK-06 | An Approved page task may not be rolled back; a new task must be created to replace it. |
+| BR-TSK-08 | If a page task is not updated within 3 days of assignment, the system flags it as Delayed and notifies the Mangaka. |
+| BR-TSK-09 | A reminder is sent 24 hours before a page task's dueDate. |
 | BR-TSK-10 | If a page task's dueDate has passed and the task is not Approved, the system automatically marks it Overdue. |
 | BR-TSK-11 | Chapter Completion % = (Approved Page Tasks / Total Page Tasks) × 100%; recalculated on every task status change. |
 | BR-TSK-12 | A chapter with less than 50% progress after consuming 70% of its deadline window is automatically flagged At Risk, and the Tantou Editor is notified. |

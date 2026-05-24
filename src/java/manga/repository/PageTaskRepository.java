@@ -20,6 +20,16 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class PageTaskRepository {
 
+    private static final String SQL_IS_DELAYED =
+            "CAST(CASE WHEN t.status IN ('PENDING','IN_PROGRESS','REJECTED') "
+            + "AND DATEDIFF(DAY, t.assignedAt, GETDATE()) >= 3 "
+            + "AND DATEDIFF(DAY, t.updatedAt, GETDATE()) >= 3 "
+            + "THEN 1 ELSE 0 END AS BIT) AS isDelayed";
+
+    private static final String SQL_TASK_COLUMNS =
+            "t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + SQL_IS_DELAYED;
+
     @Autowired
     private DataSource dataSource;
 
@@ -29,7 +39,7 @@ public class PageTaskRepository {
 
     public List<TaskSummary> listVisible(AuthenticatedUser user, String status, Long chapterId) {
         String baseSql =
-            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            "SELECT " + SQL_TASK_COLUMNS + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -104,7 +114,7 @@ public class PageTaskRepository {
     }
     public List<TaskSummary> listByChapter(long chapterId) {
         String sql =
-            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            "SELECT " + SQL_TASK_COLUMNS + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -129,7 +139,7 @@ public class PageTaskRepository {
 
     public TaskSummary findById(long taskId) {
         String sql =
-            "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            "SELECT " + SQL_TASK_COLUMNS + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -646,9 +656,10 @@ public class PageTaskRepository {
         return sent;
     }
 
-    public int notifyStaleTasks() {
+    /** BR-TSK-08: flag delayed tasks (computed on read) and notify Mangaka once per day. */
+    public int markDelayedTasks() {
         String sql =
-            "SELECT t.id, c.id AS chapterId, s.mangakaId "
+            "SELECT t.id, s.mangakaId "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
             + "JOIN Series s ON s.id = c.seriesId "
@@ -666,14 +677,14 @@ public class PageTaskRepository {
                 if (createNotificationIfAbsentToday(
                         mangakaId,
                         "TASK_DELAYED",
-                        "Task #" + taskId + " has not been updated for 3 days.",
+                        "Task #" + taskId + " is delayed (no update for 3+ days since assignment).",
                         taskId,
                         "TASK")) {
                     sent++;
                 }
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot detect stale tasks", ex);
+            throw new RuntimeException("Cannot mark delayed tasks", ex);
         }
         return sent;
     }
@@ -876,6 +887,7 @@ public class PageTaskRepository {
         t.setChapterNumber(rs.getInt("chapterNumber"));
         t.setSeriesTitle(rs.getString("seriesTitle"));
         t.setAssistantName(rs.getString("assistantName"));
+        t.setDelayed(rs.getBoolean("isDelayed"));
         return t;
     }
     private TaskSummary map(ResultSet rs) throws SQLException {

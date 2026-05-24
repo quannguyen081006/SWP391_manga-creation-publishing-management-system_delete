@@ -192,6 +192,8 @@ public class ModuleWebController {
     @RequestMapping(value = "/tasks/{id}", method = RequestMethod.GET)
     public String taskDetail(@PathVariable("id") long id, HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
+        pageTaskRepository.markDelayedTasks();
+        pageTaskRepository.markOverdueTasks();
         TaskSummary task = pageTaskRepository.findById(id);
         if (task == null) {
             throw new IllegalArgumentException("Task not found");

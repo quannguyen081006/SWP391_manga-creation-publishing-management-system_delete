@@ -4,6 +4,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptSummary;
 import manga.model.TaskSummary;
 import manga.common.util.SessionUserUtil;
+import manga.repository.PageTaskRepository;
 import manga.repository.ProductionRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -21,6 +22,9 @@ public class ProductionController {
     @Autowired
     private ProductionRepository productionRepository;
 
+    @Autowired
+    private PageTaskRepository pageTaskRepository;
+
     @RequestMapping(value = "/series", method = RequestMethod.GET)
     public String series(HttpSession session, Model model) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
@@ -36,6 +40,8 @@ public class ProductionController {
     @RequestMapping(value = "/tasks", method = RequestMethod.GET)
     public String tasks(HttpSession session, Model model) {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        pageTaskRepository.markDelayedTasks();
+        pageTaskRepository.markOverdueTasks();
         List<TaskSummary> tasks = visibleTasks(user, productionRepository.listTasks());
         int active = 0;
         int submitted = 0;

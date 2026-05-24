@@ -5,6 +5,7 @@ import manga.model.ManuscriptSummary;
 import manga.model.Proposal;
 import manga.model.TaskSummary;
 import manga.common.util.SessionUserUtil;
+import manga.repository.PageTaskRepository;
 import manga.repository.ProductionRepository;
 import manga.service.ProposalService;
 import java.io.File;
@@ -40,6 +41,9 @@ public class MainController {
 
     @Autowired
     private ProductionRepository productionRepository;
+
+    @Autowired
+    private PageTaskRepository pageTaskRepository;
 
     @RequestMapping(value = "", method = RequestMethod.GET)
     public String root() {
@@ -93,6 +97,8 @@ public class MainController {
     @RequestMapping(value = "/tasks", method = RequestMethod.GET)
     public String tasks(HttpSession session, Model model) {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        pageTaskRepository.markDelayedTasks();
+        pageTaskRepository.markOverdueTasks();
         List<TaskSummary> tasks = visibleTasks(user, productionRepository.listTasks());
         int active = 0;
         int submitted = 0;

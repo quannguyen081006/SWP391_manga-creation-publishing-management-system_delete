@@ -23,9 +23,9 @@ public class PageTaskScheduler {
         pageTaskRepository.notifyDueSoonTasks();
     }
 
-    // BR-TSK-08: no update for >= 3 days after assignment -> delayed alert
+    // BR-TSK-08: no update for >= 3 days after assignment -> flag Delayed + notify Mangaka
     @Scheduled(cron = "0 30 8 * * *")
     public void detectDelayedTasks() {
-        pageTaskRepository.notifyStaleTasks();
+        pageTaskRepository.markDelayedTasks();
     }
 }

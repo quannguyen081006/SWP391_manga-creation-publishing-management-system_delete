@@ -303,6 +303,9 @@ public class ProductionRepository {
     public List<TaskSummary> listTasks() {
         String sql =
             "SELECT t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + "CAST(CASE WHEN t.status IN ('PENDING','IN_PROGRESS','REJECTED') "
+            + "AND DATEDIFF(DAY, t.assignedAt, GETDATE()) >= 3 "
+            + "AND DATEDIFF(DAY, t.updatedAt, GETDATE()) >= 3 THEN 1 ELSE 0 END AS BIT) AS isDelayed, "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -329,6 +332,7 @@ public class ProductionRepository {
                 t.setChapterNumber(rs.getInt("chapterNumber"));
                 t.setSeriesTitle(rs.getString("seriesTitle"));
                 t.setAssistantName(rs.getString("assistantName"));
+                t.setDelayed(rs.getBoolean("isDelayed"));
                 rows.add(t);
             }
         } catch (SQLException ex) {

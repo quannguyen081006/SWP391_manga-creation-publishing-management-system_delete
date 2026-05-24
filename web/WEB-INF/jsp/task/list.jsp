@@ -5,7 +5,53 @@
 <head>
     <meta charset="UTF-8">
     <title>Tasks</title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css" />
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=20260524" />
+    <style>
+        .data-table td .due-date-overdue {
+            display: inline-flex !important;
+            align-items: center;
+            gap: 6px;
+            color: #b91c1c !important;
+            font-weight: 700 !important;
+            font-size: 0.875rem;
+            line-height: 1.3;
+            background: #fef2f2 !important;
+            border: 1px solid #f87171 !important;
+            border-radius: 8px;
+            padding: 5px 10px;
+            box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+            white-space: nowrap;
+        }
+        .data-table tbody tr.task-row-overdue {
+            background: #fff1f2 !important;
+            box-shadow: inset 4px 0 0 #dc2626 !important;
+        }
+        .data-table tbody tr.task-row-overdue:hover {
+            background: #ffe4e6 !important;
+            box-shadow: inset 4px 0 0 #dc2626 !important;
+        }
+        .data-table tbody tr.task-row-overdue td {
+            color: #1f2937;
+        }
+        .data-table tbody tr.task-row-delayed {
+            background: #fffbeb !important;
+            box-shadow: inset 4px 0 0 #f59e0b !important;
+        }
+        .data-table tbody tr.task-row-delayed:hover {
+            background: #fef3c7 !important;
+            box-shadow: inset 4px 0 0 #f59e0b !important;
+        }
+        .alert-box-warn {
+            border-color: #fcd34d;
+            background: #fffbeb;
+            color: #92400e;
+        }
+        .status-delayed {
+            background: #fef3c7 !important;
+            color: #b45309 !important;
+            border: 1px solid #fcd34d;
+        }
+    </style>
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
@@ -14,10 +60,12 @@
 <p class="page-sub">Manage page tasks for your series</p>
 
 <div id="overdueAlert" class="alert-box" style="display:none;"></div>
+<div id="delayedAlert" class="alert-box alert-box-warn" style="display:none;"></div>
 
 <section class="metric-grid">
     <article class="metric-card"><div id="activeTasks" class="metric-value">0</div><div class="metric-label">Active</div></article>
     <article class="metric-card"><div id="submittedTasks" class="metric-value metric-violet">0</div><div class="metric-label">Submitted</div></article>
+    <article class="metric-card"><div id="delayedTasks" class="metric-value metric-amber">0</div><div class="metric-label">Delayed</div></article>
     <article class="metric-card"><div id="overdueTasks" class="metric-value metric-danger">0</div><div class="metric-label">Overdue</div></article>
     <article class="metric-card"><div id="completedTasks" class="metric-value metric-ok">0</div><div class="metric-label">Completed</div></article>
 </section>
@@ -210,6 +258,48 @@
         return 'status-draft';
     }
 
+    function isTaskOverdue(task) {
+        var st = String(task.status || '').toUpperCase();
+        if (st === 'APPROVED') { return false; }
+        if (st === 'OVERDUE') { return true; }
+        if (!task.dueDate) { return false; }
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var due = dateOnly(task.dueDate);
+        return due && due < today;
+    }
+
+    function isTaskDelayed(task) {
+        return task && (task.delayed === true || task.isDelayed === true);
+    }
+
+    function renderStatusCell(task) {
+        var html = '<span class="status-chip ' + statusClass(task.status) + '">' + formatStatus(task.status) + '</span>';
+        if (isTaskDelayed(task)) {
+            html += ' <span class="status-chip status-delayed" title="No update for 3+ days since assignment">Delayed</span>';
+        }
+        return html;
+    }
+
+    function taskRowClass(task) {
+        if (isTaskOverdue(task)) {
+            return ' class="task-row-overdue"';
+        }
+        if (isTaskDelayed(task)) {
+            return ' class="task-row-delayed"';
+        }
+        return '';
+    }
+
+    function formatDueDateCell(task) {
+        var formatted = formatDate(task.dueDate);
+        if (!formatted) { return '-'; }
+        if (isTaskOverdue(task)) {
+            return '<span class="due-date-overdue" style="display:inline-flex;align-items:center;gap:6px;color:#b91c1c;font-weight:700;background:#fef2f2;border:1px solid #f87171;border-radius:8px;padding:5px 10px;box-shadow:0 1px 3px rgba(220,38,38,.25);">'
+                + '&#9888; ' + escapeHtml(formatted) + ' (Overdue)</span>';
+        }
+        return escapeHtml(formatted);
+    }
 
     function renderTaskTypeSelect(selectedType) {
         var options = [
@@ -377,8 +467,7 @@
         var submitted = 0;
         var completed = 0;
         var overdue = 0;
-        var today = new Date();
-        today.setHours(0, 0, 0, 0);
+        var delayed = 0;
 
         for (var i = 0; i < tasks.length; i++) {
             var t = tasks[i];
@@ -386,11 +475,11 @@
             if (st === 'PENDING' || st === 'IN_PROGRESS') { active++; }
             if (st === 'SUBMITTED') { submitted++; }
             if (st === 'APPROVED') { completed++; }
-            if (st === 'OVERDUE') {
+            if (isTaskOverdue(t)) {
                 overdue++;
-            } else if (t.dueDate && st !== 'APPROVED') {
-                var due = dateOnly(t.dueDate);
-                if (due && due < today) { overdue++; }
+            }
+            if (isTaskDelayed(t)) {
+                delayed++;
             }
         }
 
@@ -398,13 +487,22 @@
         document.getElementById('submittedTasks').textContent = submitted;
         document.getElementById('completedTasks').textContent = completed;
         document.getElementById('overdueTasks').textContent = overdue;
+        document.getElementById('delayedTasks').textContent = delayed;
 
-        var alert = document.getElementById('overdueAlert');
+        var overdueAlert = document.getElementById('overdueAlert');
         if (overdue > 0) {
-            alert.style.display = 'block';
-            alert.innerHTML = '<strong>' + overdue + ' Overdue Task</strong><br/>These tasks have passed their due date and need immediate attention.';
+            overdueAlert.style.display = 'block';
+            overdueAlert.innerHTML = '<strong>' + overdue + ' Overdue Task' + (overdue > 1 ? 's' : '') + '</strong><br/>These tasks have passed their due date and need immediate attention.';
         } else {
-            alert.style.display = 'none';
+            overdueAlert.style.display = 'none';
+        }
+
+        var delayedAlert = document.getElementById('delayedAlert');
+        if (delayed > 0) {
+            delayedAlert.style.display = 'block';
+            delayedAlert.innerHTML = '<strong>' + delayed + ' Delayed Task' + (delayed > 1 ? 's' : '') + '</strong><br/>These tasks have not been updated for 3+ days since assignment. Check with your assistant.';
+        } else {
+            delayedAlert.style.display = 'none';
         }
     }
 
@@ -510,8 +608,8 @@
             + '<span>Pages: ' + task.pageRangeStart + '-' + task.pageRangeEnd + '</span>'
             + '<span>Type: ' + formatStatus(task.taskType) + '</span>'
             + '<span>Assigned: ' + escapeHtml(task.assistantName) + '</span>'
-            + '<span>Status: ' + formatStatus(task.status) + '</span>'
-            + '<span>Due Date: ' + escapeHtml(formatDate(task.dueDate)) + '</span>'
+            + '<span>Status: ' + renderStatusCell(task) + '</span>'
+            + '<span>Due Date: ' + formatDueDateCell(task) + '</span>'
             + '</div>';
     }
 
@@ -537,14 +635,14 @@
                 actionButtons += ' <button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>';
             }
 
-            return '<tr>'
+            return '<tr' + taskRowClass(task) + '>'
                 + '<td>' + task.id + '</td>'
                 + '<td><strong>' + escapeHtml(task.seriesTitle) + '</strong><br/>Ch. ' + escapeHtml(task.chapterNumber) + ' - ' + escapeHtml(task.chapterTitle) + '</td>'
                 + '<td>' + task.pageRangeStart + '-' + task.pageRangeEnd + '</td>'
                 + '<td>' + formatStatus(task.taskType) + '</td>'
                 + '<td>' + escapeHtml(task.assistantName) + '</td>'
-                + '<td><span class="status-chip ' + statusClass(task.status) + '">' + formatStatus(task.status) + '</span></td>'
-                + '<td>' + escapeHtml(formatDate(task.dueDate)) + '</td>'
+                + '<td>' + renderStatusCell(task) + '</td>'
+                + '<td>' + formatDueDateCell(task) + '</td>'
                 + '<td><div class="inline-meta" style="gap:6px;margin:0;">' + actionButtons + '</div></td>'
                 + '</tr>';
         }).join('');

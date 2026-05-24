@@ -28,6 +28,8 @@ public class PageTaskApiController {
             @RequestParam(value = "status", required = false) String status,
             @RequestParam(value = "chapterId", required = false) Long chapterId) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        pageTaskRepository.markDelayedTasks();
+        pageTaskRepository.markOverdueTasks();
         return ApiResponse.ok(pageTaskRepository.listVisible(user, status, chapterId), "Task list");
     }
     @RequestMapping(value = "/chapters/{chapterId}/tasks", method = RequestMethod.GET)

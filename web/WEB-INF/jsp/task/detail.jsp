@@ -20,7 +20,10 @@
     <div><span class="detail-label">Pages</span><strong>${task.pageRangeStart}-${task.pageRangeEnd}</strong></div>
     <div><span class="detail-label">Assigned To</span><strong>${task.assistantName}</strong></div>
     <div><span class="detail-label">Due Date</span><strong>${task.dueDate}</strong></div>
-    <div><span class="detail-label">Status</span><span class="status-chip ${task.status=='APPROVED' ? 'status-approved' : (task.status=='OVERDUE' ? 'status-overdue' : 'status-progress')}">${task.status}</span></div>
+    <div><span class="detail-label">Status</span>
+        <span class="status-chip ${task.status=='APPROVED' ? 'status-approved' : (task.status=='OVERDUE' ? 'status-overdue' : 'status-progress')}">${task.status}</span>
+        <c:if test="${task.delayed}"><span class="status-chip status-delayed" style="margin-left:6px;">Delayed</span></c:if>
+    </div>
 </div>
 
 <c:if test="${canMangakaReview}">

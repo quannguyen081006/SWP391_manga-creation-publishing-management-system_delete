@@ -13,6 +13,7 @@
            http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.3.xsd">
 
     <context:component-scan base-package="manga" />
+    <task:annotation-driven />
     <mvc:annotation-driven />
 
     <mvc:resources mapping="/assets/**" location="/assets/"/>

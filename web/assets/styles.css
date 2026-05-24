@@ -236,6 +236,46 @@ a { color: inherit; text-decoration: none; }
 .status-rejected { background: #fee2e2; color: #b91c1c; }
 .status-review { background: #dbeafe; color: #1d4ed8; }
 .status-overdue { background: #fee2e2; color: #dc2626; }
+.status-delayed { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+.alert-box-warn {
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    color: #92400e;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.data-table tbody tr.task-row-delayed {
+    background: #fffbeb !important;
+    box-shadow: inset 4px 0 0 #f59e0b !important;
+}
+.data-table tbody tr.task-row-delayed:hover {
+    background: #fef3c7 !important;
+    box-shadow: inset 4px 0 0 #f59e0b !important;
+}
+.data-table td .due-date-overdue {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    color: #b91c1c !important;
+    font-weight: 700 !important;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    background: #fef2f2 !important;
+    border: 1px solid #f87171 !important;
+    border-radius: 8px;
+    padding: 5px 10px;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+    white-space: nowrap;
+}
+.data-table tbody tr.task-row-overdue {
+    background: #fff1f2 !important;
+    box-shadow: inset 4px 0 0 #dc2626 !important;
+}
+.data-table tbody tr.task-row-overdue:hover {
+    background: #ffe4e6 !important;
+    box-shadow: inset 4px 0 0 #dc2626 !important;
+}
 .status-progress { background: #dbeafe; color: #1d4ed8; }
 .status-pending { background: #ede9fe; color: #6d28d9; }
 
