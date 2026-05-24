@@ -4,95 +4,124 @@
 <head>
     <meta charset="UTF-8">
     <title>Chapters</title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css" />
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=20260525" />
+    <style>
+        .chapter-page-intro { margin-bottom: 28px; }
+        .chapter-page-intro .page-sub { margin: 10px 0 0; font-size: 15px; line-height: 1.5; }
+        .chapter-page-intro #chapterFilterSubtitle { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+        #chapterResult { margin-bottom: 16px; }
+    </style>
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
 
-<h2 class="page-title">Chapters</h2>
-<p class="page-sub">Track each chapter and current chapter progress</p>
-<p id="chapterFilterSubtitle" class="section-desc" style="display:none;"></p>
+<header class="chapter-page-intro">
+    <h2 class="page-title">Chapters</h2>
+    <p class="page-sub">Track each chapter and current chapter progress</p>
+    <p id="chapterFilterSubtitle" class="section-desc" style="display:none;"></p>
+</header>
 
 <div id="chapterResult" class="alert error" style="display:none;"></div>
 
-<div id="chapterActions" class="section-card" style="display:none;">
-    <div class="section-head">
-        <div>
-            <h3 class="section-title">Chapter Actions</h3>
-            <p class="section-desc">Create chapter. Submit review is inside View.</p>
-        </div>
-        <button class="btn primary" type="button" data-modal-open="chapterCreateModal">Create Chapter</button>
-    </div>
-</div>
+<div id="chapterLayoutGrid" style="display:grid;grid-template-columns:1fr;gap:20px;align-items:start;margin-top:4px;">
 
-<div class="section-card">
-    <div class="section-head">
-        <div>
-            <h3 class="section-title">Chapter Tracker</h3>
-            <p class="section-desc">Current chapter progress across your series</p>
-        </div>
-    </div>
-
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>No. <button class="btn small" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
-                <th>Title
-                    <button class="btn small" style="padding:2px 6px;margin-left:6px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button>
-                </th>
-                <th>Status <button class="btn small" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
-                <th>Current Chapter Progress</th>
-                <th>At Risk</th>
-                <th>Deadline <button class="btn small" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
-                <th id="chapterActionHeader" style="display:none;">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="chapterRows">
-            <tr><td colspan="7">Loading chapters...</td></tr>
-        </tbody>
-    </table>
-</div>
-
-<div id="chapterCreateModal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="chapterCreateTitle">
-        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
-        <h3 id="chapterCreateTitle" class="section-title compact-title">Create Chapter</h3>
-        <form id="chapterCreateForm" class="form-grid">
-            <select id="createSeriesId" name="seriesId" required>
-                <option value="">Loading series...</option>
-            </select>
-            <p class="section-desc" id="nextChapterHint">Chapter number will be assigned automatically.</p>
-            <p class="section-desc" id="createSeriesDeadlineHint"></p>
-            <input name="title" type="text" placeholder="Title" required />
-            <label class="field-label" for="chapterCreateDeadline">Submission Deadline</label>
-            <input id="chapterCreateDeadline" name="submissionDeadline" type="date" required />
-            <div id="chapterCreateError" class="alert error" style="display:none;margin-bottom:8px;"></div>
-            <button class="btn primary" type="submit">Create</button>
-        </form>
-    </div>
-</div>
-
-<div id="chapterViewModal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="chapterViewTitle">
-        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
-        <h3 id="chapterViewTitle" class="section-title compact-title">Chapter Detail</h3>
-        <p id="chapterViewSubtitle" class="section-desc"></p>
-        <div id="chapterViewMessage" class="alert error" style="display:none;margin-bottom:10px;"></div>
-        <div id="chapterViewMeta" class="detail-grid"></div>
-        <div id="chapterOwnerTools" style="margin-top:14px;"></div>
-        <div class="section-head" style="margin-top:16px;">
+    <div class="section-card">
+        <div class="section-head" style="margin-bottom:8px;">
             <div>
-                <strong>Chapter Images</strong>
-                <p class="section-desc">Cover and reference files for this chapter</p>
+                <h3 class="section-title" style="margin:0;">Chapter Tracker</h3>
+                <p class="section-desc" style="margin:6px 0 0;">Current chapter progress across your series</p>
             </div>
         </div>
-        <div id="chapterImageList">Loading images...</div>
-        <div class="detail-actions modal-actions modal-actions-bottom">
-            <button id="chapterSubmitReviewButton" class="btn small primary" type="button">Submit Review</button>
-            <button class="btn small" type="button" data-modal-close>Close</button>
+        <div id="chapterStatusPills" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+
+        <div id="groupOverdue" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;"></span>
+                <span style="font-size:13px;font-weight:600;color:#6b7280;">Overdue</span>
+                <span id="countOverdue" style="font-size:11px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:1px 8px;color:#6b7280;">0</span>
+            </div>
+            <table class="data-table" id="tableOverdue">
+                <thead><tr>
+                    <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                    <th class="col-series">Series</th>
+                    <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
+                    <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
+                    <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                    <th style="width:160px;">Progress</th>
+                    <th style="width:88px;">At Risk</th>
+                    <th style="width:80px;" id="chapterActionHeader">Actions</th>
+                </tr></thead>
+                <tbody id="rowsOverdue"><tr><td colspan="8" style="color:#9ca3af;font-size:13px;">Loading...</td></tr></tbody>
+            </table>
         </div>
-        <p id="chapterSubmitHint" class="section-desc"></p>
+
+        <div id="groupInProgress" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>
+                <span style="font-size:13px;font-weight:600;color:#6b7280;">In progress</span>
+                <span id="countInProgress" style="font-size:11px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:1px 8px;color:#6b7280;">0</span>
+            </div>
+            <table class="data-table" id="tableInProgress">
+                <thead><tr>
+                    <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                    <th class="col-series">Series</th>
+                    <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
+                    <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
+                    <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                    <th style="width:160px;">Progress</th>
+                    <th style="width:88px;">At Risk</th>
+                    <th style="width:80px;">Actions</th>
+                </tr></thead>
+                <tbody id="rowsInProgress"><tr><td colspan="8" style="color:#9ca3af;font-size:13px;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div id="groupCompleted">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
+                <span style="font-size:13px;font-weight:600;color:#6b7280;">Completed</span>
+                <span id="countCompleted" style="font-size:11px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:1px 8px;color:#6b7280;">0</span>
+                <button class="btn small" type="button" id="toggleCompleted" style="margin-left:auto;">Show</button>
+            </div>
+            <div id="completedBody" style="display:none;">
+                <table class="data-table" id="tableCompleted">
+                    <thead><tr>
+                        <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                        <th class="col-series">Series</th>
+                        <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
+                        <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
+                        <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                        <th style="width:160px;">Progress</th>
+                        <th style="width:88px;">At Risk</th>
+                        <th style="width:80px;">Actions</th>
+                    </tr></thead>
+                    <tbody id="rowsCompleted"><tr><td colspan="8" style="color:#9ca3af;font-size:13px;">None</td></tr></tbody>
+                </table>
+            </div>
+        </div>
     </div>
+
+    <div id="createSidebar" style="display:none;">
+        <div class="panel" style="margin-bottom:16px;">
+            <strong id="createSidebarTitle">New chapter</strong>
+            <p class="section-desc" id="createSidebarSub" style="margin:4px 0 12px;"></p>
+            <p class="section-desc" id="createSeriesDeadlineHint" style="margin:0 0 12px;"></p>
+            <div id="createErrorBox" class="alert error" style="display:none;margin-bottom:8px;"></div>
+            <form id="chapterCreateForm" class="form-grid">
+                <label class="field-label" for="chapterCreateTitle">Title</label>
+                <input id="chapterCreateTitle" name="title" type="text" placeholder="Chapter title" required />
+                <label class="field-label" for="chapterCreateDeadline">Submission deadline</label>
+                <input id="chapterCreateDeadline" name="submissionDeadline" type="date" required />
+                <button class="btn primary" type="submit" style="margin-top:4px;">Create chapter</button>
+            </form>
+        </div>
+
+        <div class="panel">
+            <strong>Series overview</strong>
+            <div id="seriesOverviewStats" style="margin-top:12px;"></div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -103,10 +132,11 @@
     var seriesList = [];
     var chapters = [];
     var seriesById = {};
-    var selectedChapter = null;
     var filterSeriesId = new URLSearchParams(window.location.search).get('seriesId');
-    var sortField = null; // 'no' | 'title' | 'status' | 'deadline'
+    var sortField = null;
     var sortDir = 'asc';
+    var completedVisible = false;
+    var chapterStatusFilter = 'ALL';
 
     function escapeHtml(value) {
         if (value === null || value === undefined) { return ''; }
@@ -134,6 +164,68 @@
         return formatted ? new Date(formatted + 'T00:00:00') : null;
     }
 
+    function daysUntilDate(value) {
+        var due = dateOnly(value);
+        if (!due) { return null; }
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.ceil((due - today) / 86400000);
+    }
+
+    function deadlineSuffixText(daysLeft, isDone, isOverdue) {
+        if (isDone) { return 'Done'; }
+        if (isOverdue) {
+            if (daysLeft !== null && daysLeft < 0) {
+                var overdueDays = Math.abs(daysLeft);
+                return overdueDays === 1 ? '1 day overdue' : (overdueDays + ' days overdue');
+            }
+            return 'Overdue';
+        }
+        if (daysLeft === null) { return ''; }
+        if (daysLeft === 0) { return 'Due today'; }
+        if (daysLeft === 1) { return '1 day left'; }
+        return daysLeft + ' days left';
+    }
+
+    function formatDeadlineCell(dateValue, isDone, isOverdue) {
+        var formatted = formatDate(dateValue);
+        if (!formatted) { return '<span style="color:#9ca3af;">—</span>'; }
+        var daysLeft = daysUntilDate(dateValue);
+        if (!isDone && !isOverdue && daysLeft !== null && daysLeft < 0) {
+            isOverdue = true;
+        }
+        var suffixLabel = deadlineSuffixText(daysLeft, isDone, isOverdue);
+        var suffix = suffixLabel ? ' (' + suffixLabel + ')' : '';
+
+        if (isDone) {
+            return '<span class="due-date-done">' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        if (isOverdue) {
+            return '<span class="due-date-overdue">&#9888; ' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        if (daysLeft !== null && daysLeft <= 3) {
+            return '<span class="due-date-urgent">' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        return '<span class="due-date-active">' + escapeHtml(formatted) + suffix + '</span>';
+    }
+
+    function isChapterDone(ch) {
+        var st = String(ch.status || '').toUpperCase();
+        return st === 'COMPLETE' || st === 'APPROVED' || Number(ch.completionPct || 0) >= 100;
+    }
+
+    function isChapterOverdue(ch) {
+        if (isChapterDone(ch)) { return false; }
+        var daysLeft = daysUntilDate(ch.submissionDeadline);
+        return daysLeft !== null && daysLeft < 0;
+    }
+
+    function chapterRowClass(ch, forceOverdue) {
+        if (forceOverdue || isChapterOverdue(ch)) { return ' class="task-row-overdue"'; }
+        if (ch.atRisk && !isChapterDone(ch)) { return ' class="task-row-delayed"'; }
+        return '';
+    }
+
     function todayIso() {
         var date = new Date();
         var month = String(date.getMonth() + 1);
@@ -159,36 +251,139 @@
         return roles.indexOf(role) !== -1;
     }
 
-    function isOwnSeries(seriesId) {
-        var s = seriesById[String(seriesId)];
-        return hasRole('MANGAKA') && s && Number(s.mangakaId) === Number(currentUser.id);
-    }
-
     function formatStatus(status) {
         if (!status) { return ''; }
         return String(status).toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
     }
 
+    function chapterStatusClass(status) {
+        status = String(status || '').toUpperCase();
+        if (status === 'PLANNING') { return 'status-draft'; }
+        if (status === 'IN_PROGRESS') { return 'status-progress'; }
+        if (status === 'COMPLETE') { return 'status-approved'; }
+        if (status === 'EDITORIAL_REVIEW') { return 'status-review'; }
+        if (status === 'APPROVED') { return 'status-approved'; }
+        if (status === 'REJECTED') { return 'status-rejected'; }
+        return 'status-draft';
+    }
+
+    function renderChapterStatusCell(ch) {
+        return '<span class="status-chip chapter-status-chip ' + chapterStatusClass(ch.status) + '">'
+            + escapeHtml(formatStatus(ch.status))
+            + '</span>';
+    }
+
+    function renderAtRiskCell(ch) {
+        return '<span class="status-chip ' + (ch.atRisk ? 'status-rejected' : 'status-approved') + '">'
+            + (ch.atRisk ? 'AT RISK' : 'NORMAL')
+            + '</span>';
+    }
+
+    function renderStatusPill(id, label, count, cssClass, activeFilter) {
+        var active = activeFilter === id ? ' is-active' : '';
+        return '<button type="button" class="status-pill ' + cssClass + active + '" data-chapter-status-pill="' + id + '" aria-pressed="' + (activeFilter === id ? 'true' : 'false') + '">'
+            + '<span class="status-pill-label">' + escapeHtml(label) + '</span>'
+            + '<span class="status-pill-count">' + Number(count || 0) + '</span>'
+            + '</button>';
+    }
+
+    function computeChapterCounts() {
+        var counts = {
+            ALL: chapters.length,
+            OVERDUE: 0,
+            PLANNING: 0,
+            IN_PROGRESS: 0,
+            COMPLETE: 0,
+            EDITORIAL_REVIEW: 0,
+            APPROVED: 0,
+            REJECTED: 0,
+            AT_RISK: 0
+        };
+        for (var i = 0; i < chapters.length; i++) {
+            var ch = chapters[i];
+            var st = String(ch.status || '').toUpperCase();
+            if (isChapterOverdue(ch)) { counts.OVERDUE++; }
+            if (st === 'PLANNING') { counts.PLANNING++; }
+            if (st === 'IN_PROGRESS') { counts.IN_PROGRESS++; }
+            if (st === 'COMPLETE') { counts.COMPLETE++; }
+            if (st === 'EDITORIAL_REVIEW') { counts.EDITORIAL_REVIEW++; }
+            if (st === 'APPROVED') { counts.APPROVED++; }
+            if (st === 'REJECTED') { counts.REJECTED++; }
+            if (ch.atRisk) { counts.AT_RISK++; }
+        }
+        return counts;
+    }
+
+    function chapterMatchesFilter(ch, filter) {
+        if (!filter || filter === 'ALL') { return true; }
+        if (filter === 'OVERDUE') { return isChapterOverdue(ch); }
+        if (filter === 'AT_RISK') { return !!ch.atRisk; }
+        return String(ch.status || '').toUpperCase() === filter;
+    }
+
+    function renderChapterStatusPills(counts) {
+        var el = document.getElementById('chapterStatusPills');
+        if (!el) { return; }
+        el.innerHTML = ''
+            + renderStatusPill('ALL', 'All', counts.ALL, 'pill-all', chapterStatusFilter)
+            + renderStatusPill('OVERDUE', 'Overdue', counts.OVERDUE, 'pill-overdue', chapterStatusFilter)
+            + renderStatusPill('PLANNING', 'Planning', counts.PLANNING, 'pill-planning', chapterStatusFilter)
+            + renderStatusPill('IN_PROGRESS', 'In Progress', counts.IN_PROGRESS, 'pill-progress', chapterStatusFilter)
+            + renderStatusPill('COMPLETE', 'Complete', counts.COMPLETE, 'pill-complete', chapterStatusFilter)
+            + renderStatusPill('EDITORIAL_REVIEW', 'Editorial Review', counts.EDITORIAL_REVIEW, 'pill-review', chapterStatusFilter)
+            + renderStatusPill('APPROVED', 'Approved', counts.APPROVED, 'pill-approved', chapterStatusFilter)
+            + renderStatusPill('REJECTED', 'Rejected', counts.REJECTED, 'pill-rejected', chapterStatusFilter)
+            + renderStatusPill('AT_RISK', 'At Risk', counts.AT_RISK, 'pill-at-risk', chapterStatusFilter);
+    }
+
+    function trackerColspan() {
+        return filterSeriesId ? 7 : 8;
+    }
+
+    function toggleSeriesColumns() {
+        var show = !filterSeriesId;
+        var cols = document.querySelectorAll('.col-series');
+        for (var i = 0; i < cols.length; i++) {
+            cols[i].style.display = show ? '' : 'none';
+        }
+    }
+
+    function sortChapterList(list) {
+        if (!sortField) { return list.slice(); }
+        var dir = sortDir === 'asc' ? 1 : -1;
+        return list.slice().sort(function (a, b) {
+            var av, bv;
+            if (sortField === 'no') {
+                av = Number(a.chapterNumber || 0);
+                bv = Number(b.chapterNumber || 0);
+            } else if (sortField === 'title') {
+                av = String(a.title || '').toLowerCase();
+                bv = String(b.title || '').toLowerCase();
+            } else if (sortField === 'status') {
+                av = String(a.status || '');
+                bv = String(b.status || '');
+            } else if (sortField === 'deadline') {
+                av = a.submissionDeadline ? String(a.submissionDeadline) : 'zzz';
+                bv = b.submissionDeadline ? String(b.submissionDeadline) : 'zzz';
+            } else {
+                return 0;
+            }
+            if (av < bv) { return -1 * dir; }
+            if (av > bv) { return 1 * dir; }
+            return 0;
+        });
+    }
+
     function showMessage(msg, isError) {
         if (!box) { return; }
+        if (!msg) {
+            box.style.display = 'none';
+            box.textContent = '';
+            return;
+        }
         box.style.display = 'block';
         box.className = isError ? 'alert error' : 'panel';
         box.textContent = msg;
-    }
-
-    function showCreateError(msg) {
-        var el = document.getElementById('chapterCreateError');
-        if (!el) { return; }
-        el.style.display = msg ? 'block' : 'none';
-        el.textContent = msg || '';
-    }
-
-    function showViewMessage(msg, isError) {
-        var el = document.getElementById('chapterViewMessage');
-        if (!el) { return; }
-        el.style.display = msg ? 'block' : 'none';
-        el.className = isError ? 'alert error' : 'panel';
-        el.textContent = msg || '';
     }
 
     function formToObject(form) {
@@ -221,93 +416,6 @@
         return body;
     }
 
-    async function uploadMultipart(path, form) {
-        var fd = new FormData(form);
-        var res = await fetch(ctx + path, { method: 'POST', headers: { 'Accept': 'application/json' }, body: fd });
-        var text = await res.text();
-        var body = null;
-        try { body = text ? JSON.parse(text) : null; } catch (e) {}
-        if (!res.ok || (body && body.success === false)) {
-            var msg = (body && (body.message || (body.errors && body.errors[0]))) || text || ('HTTP ' + res.status);
-            throw new Error(msg);
-        }
-        return body;
-    }
-
-    function openModal(id) {
-        var modal = document.getElementById(id);
-        if (modal) {
-            modal.classList.add('open');
-            modal.setAttribute('aria-hidden', 'false');
-        }
-    }
-
-    function closeModals() {
-        var modals = document.querySelectorAll('.modal-backdrop');
-        for (var i = 0; i < modals.length; i++) {
-            modals[i].classList.remove('open');
-            modals[i].setAttribute('aria-hidden', 'true');
-        }
-        showCreateError('');
-        showViewMessage('');
-    }
-
-    function canSubmitChapter(ch) {
-        var status = String(ch.status || '').toUpperCase();
-        var series = seriesById[String(ch.seriesId)];
-        // ADD MANUSCRIPT button: MANGAKA owner + chapter COMPLETE + no active review cycle + series not CANCELLED
-        return isOwnSeries(ch.seriesId) 
-            && Number(ch.completionPct || 0) >= 100 
-            && status === 'COMPLETE'
-            && series && String(series.status || '').toUpperCase() !== 'CANCELLED';
-    }
-
-    function submitHint(ch) {
-        if (!isOwnSeries(ch.seriesId)) { return 'Only the owner Mangaka can submit this chapter.'; }
-        if (Number(ch.completionPct || 0) < 100) { return 'Chapter must be 100% complete before submit review.'; }
-        var status = String(ch.status || '').toUpperCase();
-        if (status !== 'COMPLETE') { return 'Chapter status must be Complete.'; }
-        var series = seriesById[String(ch.seriesId)];
-        if (series && String(series.status || '').toUpperCase() === 'CANCELLED') { return 'Cannot submit manuscript for cancelled series.'; }
-        return 'Ready to submit manuscript for editorial review.';
-    }
-
-    function renderChapterActions() {
-        var actions = document.getElementById('chapterActions');
-        var header = document.getElementById('chapterActionHeader');
-        header.style.display = '';
-        if (!hasRole('MANGAKA')) {
-            actions.style.display = 'none';
-            return;
-        }
-        actions.style.display = 'block';
-        var seriesSelect = document.getElementById('createSeriesId');
-        var ownSeries = seriesList.filter(function (s) { return Number(s.mangakaId) === Number(currentUser.id); });
-        seriesSelect.innerHTML = '<option value="">Select Series</option>' + ownSeries.map(function (s) {
-            return '<option value="' + s.id + '" data-next-chapter="' + nextChapterNumber(s.id) + '">#' + s.id + ' - ' + escapeHtml(s.title) + '</option>';
-        }).join('');
-        if (filterSeriesId) {
-            seriesSelect.style.display = 'none';
-            seriesSelect.innerHTML = '<option value="' + escapeHtml(filterSeriesId) + '" data-next-chapter="' + nextChapterNumber(filterSeriesId) + '" selected></option>';
-
-            var existingLabel = document.getElementById('createSeriesLabel');
-            if (!existingLabel) {
-                existingLabel = document.createElement('p');
-                existingLabel.id = 'createSeriesLabel';
-                existingLabel.className = 'section-desc';
-                seriesSelect.parentNode.insertBefore(existingLabel, seriesSelect);
-            }
-            var fs = seriesById[String(filterSeriesId)];
-            existingLabel.textContent = 'Tạo chapter cho series: '
-                + (fs ? fs.title : '#' + filterSeriesId);
-        } else {
-            seriesSelect.style.display = '';
-            var oldLabel = document.getElementById('createSeriesLabel');
-            if (oldLabel) { oldLabel.remove(); }
-        }
-        updateNextChapterHint();
-    }
-
     function nextChapterNumber(seriesId) {
         var next = 1;
         for (var i = 0; i < chapters.length; i++) {
@@ -318,192 +426,195 @@
         return next;
     }
 
-    function updateNextChapterHint() {
-        var select = document.getElementById('createSeriesId');
-        var hint = document.getElementById('nextChapterHint');
-        var deadlineHint = document.getElementById('createSeriesDeadlineHint');
+    function updateCreateDeadlineConstraints() {
         var deadlineInput = document.getElementById('chapterCreateDeadline');
-        if (!select || !hint) { return; }
-        var selected = select.options[select.selectedIndex];
-        var next = selected ? selected.getAttribute('data-next-chapter') : '';
-        hint.textContent = next ? ('Next chapter will be Ch. ' + next + '.') : 'Chapter number will be assigned automatically.';
-        if (deadlineInput) {
-            deadlineInput.min = todayIso();
-            deadlineInput.removeAttribute('max');
-        }
-        if (deadlineHint) {
-            var selectedSeriesId = select.value || filterSeriesId;
-            var series = seriesById[String(selectedSeriesId)];
-            var maxDeadline = latestChapterDeadline(series);
-            if (deadlineInput && maxDeadline) {
-                deadlineInput.max = maxDeadline;
-            }
-            deadlineHint.textContent = series && series.publicationDate
-                ? ('Series deadline: ' + formatDate(series.publicationDate) + '. Chapter deadline must be on or before ' + maxDeadline + '.')
-                : (selectedSeriesId ? 'Series deadline is not set. Chapter deadline cannot be in the past.' : '');
-        }
+        var deadlineHint = document.getElementById('createSeriesDeadlineHint');
+        if (!deadlineInput) { return; }
+        deadlineInput.min = todayIso();
+        deadlineInput.removeAttribute('max');
+        if (!deadlineHint) { return; }
+        var series = seriesById[String(filterSeriesId)];
+        var maxDeadline = latestChapterDeadline(series);
+        if (maxDeadline) { deadlineInput.max = maxDeadline; }
+        deadlineHint.textContent = series && series.publicationDate
+            ? ('Series deadline: ' + formatDate(series.publicationDate) + '. Chapter deadline must be on or before ' + maxDeadline + '.')
+            : (filterSeriesId ? 'Chapter deadline cannot be in the past.' : '');
     }
 
-    function findChapter(chapterId) {
-        for (var i = 0; i < chapters.length; i++) {
-            if (Number(chapters[i].id) === Number(chapterId)) { return chapters[i]; }
+    function setTrackerLoading(msg) {
+        var colspan = trackerColspan();
+        var html = '<tr><td colspan="' + colspan + '" style="color:#9ca3af;font-size:13px;">' + escapeHtml(msg) + '</td></tr>';
+        document.getElementById('rowsOverdue').innerHTML = html;
+        document.getElementById('rowsInProgress').innerHTML = html;
+        document.getElementById('rowsCompleted').innerHTML = html;
+    }
+
+    function renderChapterActions() {
+        var header = document.getElementById('chapterActionHeader');
+        var layout = document.getElementById('chapterLayoutGrid');
+        var sidebar = document.getElementById('createSidebar');
+        var showActions = hasRole('MANGAKA');
+
+        if (header) {
+            header.style.display = showActions ? '' : 'none';
         }
-        return null;
-    }
 
-    function getSortedChapters() {
-        if (!sortField) { return chapters.slice(); }
-        return chapters.slice().sort(function (a, b) {
-            var av, bv;
-            if (sortField === 'no') {
-                av = Number(a.chapterNumber || 0);
-                bv = Number(b.chapterNumber || 0);
-            } else if (sortField === 'title') {
-                av = String(a.title || '').toLowerCase();
-                bv = String(b.title || '').toLowerCase();
-            } else if (sortField === 'status') {
-                av = String(a.status || '');
-                bv = String(b.status || '');
-            } else if (sortField === 'deadline') {
-                av = a.submissionDeadline ? String(a.submissionDeadline) : 'zzz';
-                bv = b.submissionDeadline ? String(b.submissionDeadline) : 'zzz';
-            }
-            if (av < bv) { return sortDir === 'asc' ? -1 : 1; }
-            if (av > bv) { return sortDir === 'asc' ? 1 : -1; }
-            return 0;
-        });
-    }
-
-    function renderChapters() {
-        var tbody = document.getElementById('chapterRows');
-        if (!chapters.length) {
-            tbody.innerHTML = '<tr><td colspan="7">No chapters found.</td></tr>';
+        if (!showActions || !filterSeriesId) {
+            if (sidebar) { sidebar.style.display = 'none'; }
+            if (layout) { layout.style.gridTemplateColumns = '1fr'; }
             return;
         }
-        tbody.innerHTML = getSortedChapters().map(function (ch) {
-            var progress = Math.max(0, Math.min(100, Number(ch.completionPct || 0)));
-            var formattedDeadline = formatDate(ch.submissionDeadline);
+
+        sidebar.style.display = '';
+        if (layout) { layout.style.gridTemplateColumns = '1fr 280px'; }
+
+        var nextNum = nextChapterNumber(filterSeriesId);
+        var seriesName = (seriesById[String(filterSeriesId)] || {}).title || ('#' + filterSeriesId);
+
+        document.getElementById('createSidebarTitle').textContent = 'New chapter';
+        document.getElementById('createSidebarSub').textContent = seriesName + ' · #' + nextNum;
+        updateCreateDeadlineConstraints();
+
+        var total = chapters.length;
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var overdueCount = 0;
+        var inProgressCount = 0;
+        var doneCount = 0;
+
+        for (var i = 0; i < chapters.length; i++) {
+            var ch = chapters[i];
+            var status = String(ch.status || '').toUpperCase();
             var deadlineDate = dateOnly(ch.submissionDeadline);
-            var today = new Date(); today.setHours(0,0,0,0);
-            var daysLeft = deadlineDate ? Math.ceil((deadlineDate - today) / 86400000) : null;
-            var isComplete = String(ch.status || '').toUpperCase() === 'COMPLETE' || Number(ch.completionPct || 0) >= 100;
-            var deadlineStyle = (!isComplete && daysLeft !== null && daysLeft <= 3) ? 'color:var(--danger,#e53e3e);font-weight:600;' : '';
-            var deadlineSuffix = isComplete ? ' (Done)' : (daysLeft !== null ? ' (' + daysLeft + 'd)' : '');
-            var deadlineText = formattedDeadline
-                ? ('<span style="' + deadlineStyle + '">' + escapeHtml(formattedDeadline) + deadlineSuffix + '</span>')
-                : '-';
-            return '<tr>'
-                + '<td>' + ch.chapterNumber + '</td>'
-                + '<td>' + escapeHtml(ch.title) + '</td>'
-                + '<td>' + formatStatus(ch.status) + '</td>'
-                + '<td style="min-width: 220px;"><div class="inline-meta" style="justify-content:space-between; margin-bottom:6px;"><span>' + Math.round(progress) + '%</span></div><div class="progress ' + (progress < 40 ? 'red' : '') + '" style="margin-top:0;"><span style="width:' + progress + '%;"></span></div></td>'
-                + '<td><span class="status-chip ' + (ch.atRisk ? 'status-rejected' : 'status-approved') + '">' + (ch.atRisk ? 'AT RISK' : 'NORMAL') + '</span></td>'
+            var isComplete = isChapterDone(ch);
+            if (isComplete || status === 'EDITORIAL_REVIEW') {
+                doneCount++;
+            } else if (!isComplete && deadlineDate && deadlineDate < today) {
+                overdueCount++;
+            } else {
+                inProgressCount++;
+            }
+        }
+
+        var overallPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+        document.getElementById('seriesOverviewStats').innerHTML = ''
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;">'
+            + '<span style="font-size:13px;color:#6b7280;">Overall progress</span>'
+            + '<span style="font-size:13px;font-weight:600;">' + overallPct + '%</span></div>'
+            + '<div class="progress" style="margin-bottom:12px;"><span style="width:' + overallPct + '%;background:#8b5cf6;"></span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">'
+            + '<span style="color:#6b7280;">Completed</span><span style="color:#10b981;font-weight:500;">' + doneCount + '</span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">'
+            + '<span style="color:#6b7280;">In progress</span><span style="color:#f59e0b;font-weight:500;">' + inProgressCount + '</span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:13px;">'
+            + '<span style="color:#6b7280;">Overdue</span><span style="color:#ef4444;font-weight:500;">' + overdueCount + '</span></div>';
+    }
+
+    function renderGroup(tbodyId, list, isOverdueGroup) {
+        var tbody = document.getElementById(tbodyId);
+        var colspan = trackerColspan();
+        if (!list.length) {
+            var emptyMsg = chapterStatusFilter === 'ALL' ? 'None' : 'No chapters match this filter.';
+            tbody.innerHTML = '<tr><td colspan="' + colspan + '" style="color:#9ca3af;font-size:13px;">' + emptyMsg + '</td></tr>';
+            return;
+        }
+        var showActions = hasRole('MANGAKA');
+        var showSeries = !filterSeriesId;
+        tbody.innerHTML = list.map(function (ch) {
+            var progress = Math.max(0, Math.min(100, Number(ch.completionPct || 0)));
+            var done = isChapterDone(ch);
+            var overdue = isChapterOverdue(ch);
+            var deadlineText = formatDeadlineCell(ch.submissionDeadline, done, overdue);
+            var seriesName = (seriesById[String(ch.seriesId)] || {}).title || ('#' + ch.seriesId);
+            var progressColor = progress >= 100 ? '#10b981' : (progress >= 50 ? '#f59e0b' : '#ef4444');
+            var rowBg = isOverdueGroup ? 'background:rgba(239,68,68,0.04);' : '';
+            var seriesCell = showSeries
+                ? '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(seriesName) + '">' + escapeHtml(seriesName) + '</td>'
+                : '';
+            var actionsCell = showActions
+                ? '<td><a class="btn small" href="' + ctx + '/main/chapters/detail?id=' + ch.id + '">View</a></td>'
+                : '<td></td>';
+            return '<tr' + chapterRowClass(ch, isOverdueGroup) + ' style="' + rowBg + '">'
+                + '<td style="color:#9ca3af;">' + ch.chapterNumber + '</td>'
+                + seriesCell
+                + '<td style="font-weight:500;">' + escapeHtml(ch.title) + '</td>'
+                + '<td>' + renderChapterStatusCell(ch) + '</td>'
                 + '<td>' + deadlineText + '</td>'
-                + '<td><button class="btn small" type="button" data-chapter-view="' + ch.id + '">View</button></td>'
+                + '<td style="min-width:140px;">'
+                + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+                + '<span style="font-size:12px;color:#6b7280;">' + Math.round(progress) + '%</span>'
+                + '</div>'
+                + '<div class="progress' + (progress < 40 ? ' red' : '') + '" style="margin-top:0;">'
+                + '<span style="width:' + progress + '%;background:' + progressColor + ';"></span></div>'
+                + '</td>'
+                + '<td>' + renderAtRiskCell(ch) + '</td>'
+                + actionsCell
                 + '</tr>';
         }).join('');
     }
 
-    function renderOwnerTools(ch) {
-        if (!isOwnSeries(ch.seriesId)) {
-            return '<p class="section-desc">Only the owner Mangaka can update metadata or upload cover/reference images.</p>';
+    function renderChapters() {
+        renderChapterStatusPills(computeChapterCounts());
+        toggleSeriesColumns();
+
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var overdue = [];
+        var inProgress = [];
+        var completed = [];
+
+        var filtered = chapters.filter(function (ch) {
+            return chapterMatchesFilter(ch, chapterStatusFilter);
+        });
+        var sorted = sortChapterList(filtered);
+
+        for (var i = 0; i < sorted.length; i++) {
+            var ch = sorted[i];
+            var status = String(ch.status || '').toUpperCase();
+            var deadlineDate = dateOnly(ch.submissionDeadline);
+            var isComplete = isChapterDone(ch);
+            var isOverdue = !isComplete && deadlineDate && deadlineDate < today;
+
+            if (isComplete || status === 'EDITORIAL_REVIEW') {
+                completed.push(ch);
+            } else if (isOverdue) {
+                overdue.push(ch);
+            } else {
+                inProgress.push(ch);
+            }
         }
-        var deleteButton = String(ch.status || '').toUpperCase() === 'PLANNING'
-            ? '<button class="btn small danger-soft" type="button" data-chapter-delete="' + ch.id + '">Delete Chapter</button>'
-            : '';
-        var series = seriesById[String(ch.seriesId)];
-        var maxDeadline = latestChapterDeadline(series);
-        var deadlineAttrs = ' min="' + todayIso() + '"' + (maxDeadline ? ' max="' + escapeHtml(maxDeadline) + '"' : '');
-        var deadlineHelp = series && series.publicationDate
-            ? '<p class="section-desc">Series deadline: ' + escapeHtml(formatDate(series.publicationDate)) + '. Chapter deadline must be on or before ' + escapeHtml(maxDeadline) + '.</p>'
-            : '<p class="section-desc">Chapter deadline cannot be in the past.</p>';
-        return '<form class="panel form-grid chapter-inline-update-form" style="max-width:720px;">'
-            + '<strong>Update Ch.' + ch.chapterNumber + ' - ' + escapeHtml(ch.title) + '</strong>'
-            + '<input name="chapterId" type="hidden" value="' + ch.id + '" />'
-            + '<input name="title" type="text" value="' + escapeHtml(ch.title) + '" placeholder="New Title" required />'
-            + '<label class="field-label" for="chapterUpdateDeadline' + ch.id + '">Submission Deadline</label>'
-            + deadlineHelp
-            + '<input id="chapterUpdateDeadline' + ch.id + '" name="submissionDeadline" type="date" value="' + escapeHtml(formatDate(ch.submissionDeadline)) + '"' + deadlineAttrs + ' required />'
-            + '<button class="btn small" type="submit">Update</button>'
-            + '</form>'
-            + '<form class="panel form-grid chapter-image-upload-form" style="max-width:680px;margin-bottom:12px;" data-chapter-id="' + ch.id + '">'
-            + '<strong>Upload Cover / Reference</strong>'
-            + '<select name="imageType" required><option value="COVER">Cover</option><option value="REFERENCE">Reference</option></select>'
-            + '<input name="file" type="file" accept="image/*" required />'
-            + '<button class="btn small primary" type="submit">Upload Image</button>'
-            + '</form>'
-            + deleteButton;
+
+        document.getElementById('countOverdue').textContent = overdue.length;
+        document.getElementById('countInProgress').textContent = inProgress.length;
+        document.getElementById('countCompleted').textContent = completed.length;
+
+        renderGroup('rowsOverdue', overdue, true);
+        renderGroup('rowsInProgress', inProgress, false);
+        renderGroup('rowsCompleted', completed, false);
+
+        document.getElementById('groupOverdue').style.display = overdue.length ? '' : 'none';
+        document.getElementById('groupInProgress').style.display = inProgress.length ? '' : 'none';
+        document.getElementById('groupCompleted').style.display = completed.length ? '' : 'none';
+        updateSortIndicators();
     }
 
-    async function openChapterView(chapterId) {
-        var ch = findChapter(chapterId);
-        if (!ch) { return; }
-        selectedChapter = ch;
-        showViewMessage('');
-        var progress = Math.max(0, Math.min(100, Number(ch.completionPct || 0)));
-        var deadlineDate = dateOnly(ch.submissionDeadline);
-        var today = new Date(); today.setHours(0,0,0,0);
-        var daysLeft = deadlineDate ? Math.ceil((deadlineDate - today) / 86400000) : null;
-        var isComplete = String(ch.status || '').toUpperCase() === 'COMPLETE' || progress >= 100;
-        var deadlineStyle = (!isComplete && daysLeft !== null && daysLeft <= 3) ? 'color:var(--danger,#e53e3e);font-weight:600;' : '';
-        document.getElementById('chapterViewTitle').textContent = 'Ch. ' + ch.chapterNumber + ' - ' + ch.title;
-        document.getElementById('chapterViewSubtitle').textContent = 'Series #' + ch.seriesId;
-        document.getElementById('chapterViewMeta').innerHTML = ''
-            + '<div><span class="detail-label">Status</span><strong>' + formatStatus(ch.status) + '</strong></div>'
-            + '<div><span class="detail-label">Progress</span><strong>' + Math.round(progress) + '%</strong></div>'
-            + '<div><span class="detail-label">Deadline</span><strong style="' + deadlineStyle + '">' + escapeHtml(formatDate(ch.submissionDeadline)) + '</strong></div>'
-            + '<div><span class="detail-label">At Risk</span><strong>' + (ch.atRisk ? 'AT RISK' : 'NORMAL') + '</strong></div>';
-        document.getElementById('chapterOwnerTools').innerHTML = renderOwnerTools(ch);
-        var submitButton = document.getElementById('chapterSubmitReviewButton');
-        var ready = canSubmitChapter(ch);
-        submitButton.disabled = !ready;
-        submitButton.className = ready ? 'btn small primary' : 'btn small disabled-soft';
-        document.getElementById('chapterSubmitHint').textContent = submitHint(ch);
-        document.getElementById('chapterImageList').innerHTML = 'Loading images...';
-        openModal('chapterViewModal');
-        await loadChapterImages(ch.id);
-    }
-
-    function renderImages(images) {
-        if (!images.length) { return '<p class="section-desc">No images uploaded yet.</p>'; }
-        return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">' + images.map(function (img) {
-            var url = imageUrl(img.fileUrl);
-            var deleteButton = canDeleteImage(img)
-                ? '<button class="btn small danger-soft" type="button" data-chapter-image-delete="' + img.id + '" data-chapter-id="' + img.chapterId + '">Delete</button>'
-                : '';
-            return '<div class="panel" style="margin:0;padding:10px;">'
-                + '<a href="' + escapeHtml(url) + '" target="_blank"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || img.imageType) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" /></a>'
-                + '<div style="margin-top:8px;font-weight:700;">' + escapeHtml(img.imageType) + '</div>'
-                + '<div class="section-desc">' + escapeHtml(img.originalFileName || '') + '</div>'
-                + deleteButton
-                + '</div>';
-        }).join('') + '</div>';
-    }
-
-    function canDeleteImage(img) {
-        return currentUser && (Number(img.uploadedBy) === Number(currentUser.id) || hasRole('MANGAKA'));
-    }
-
-    function imageUrl(fileUrl) {
-        var url = String(fileUrl || '');
-        if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) { return url; }
-        if (url.indexOf(ctx + '/') === 0) { return url; }
-        return ctx + url;
-    }
-
-    async function loadChapterImages(chapterId) {
-        var target = document.getElementById('chapterImageList');
-        if (!target) { return; }
-        target.innerHTML = 'Loading images...';
-        try {
-            var res = await callApi('GET', '/api/v1/chapters/' + chapterId + '/images');
-            target.innerHTML = renderImages(res.data || []);
-        } catch (err) {
-            target.innerHTML = '<div class="alert error">' + escapeHtml(err.message) + '</div>';
+    function updateSortIndicators() {
+        var buttons = document.querySelectorAll('.chapter-sort-btn[data-sort]');
+        for (var i = 0; i < buttons.length; i++) {
+            var btn = buttons[i];
+            var field = btn.getAttribute('data-sort');
+            if (field === sortField) {
+                btn.textContent = sortDir === 'asc' ? '↑' : '↓';
+                btn.setAttribute('aria-pressed', 'true');
+            } else {
+                btn.textContent = '↕';
+                btn.setAttribute('aria-pressed', 'false');
+            }
         }
     }
 
     async function loadData() {
+        setTrackerLoading('Loading...');
         try {
             var userRes = await callApi('GET', '/api/v1/auth/me');
             currentUser = userRes.data;
@@ -514,28 +625,38 @@
             seriesList = results[0].data || [];
             chapters = results[1].data || [];
             seriesById = {};
-            for (var i = 0; i < seriesList.length; i++) { seriesById[String(seriesList[i].id)] = seriesList[i]; }
+            for (var i = 0; i < seriesList.length; i++) {
+                seriesById[String(seriesList[i].id)] = seriesList[i];
+            }
             var filterSubtitle = document.getElementById('chapterFilterSubtitle');
             if (filterSubtitle && filterSeriesId) {
                 var filteredSeries = seriesById[String(filterSeriesId)];
                 filterSubtitle.style.display = 'block';
                 filterSubtitle.textContent = filteredSeries
-                    ? ('Viewing chapters for series #' + filterSeriesId + ' - ' + filteredSeries.title)
+                    ? ('Viewing chapters for series #' + filterSeriesId + ' — ' + filteredSeries.title)
                     : ('Viewing chapters for series #' + filterSeriesId);
             }
             renderChapterActions();
             renderChapters();
+            showMessage('');
         } catch (err) {
-            document.getElementById('chapterRows').innerHTML = '<tr><td colspan="7">' + escapeHtml(err.message) + '</td></tr>';
+            setTrackerLoading(err.message);
+            showMessage(err.message, true);
         }
     }
 
-    document.addEventListener('click', async function (e) {
-        var sortBtn = e.target.closest ? e.target.closest('[data-sort]') : null;
+    document.getElementById('toggleCompleted').addEventListener('click', function () {
+        completedVisible = !completedVisible;
+        document.getElementById('completedBody').style.display = completedVisible ? '' : 'none';
+        this.textContent = completedVisible ? 'Hide' : 'Show';
+    });
+
+    document.addEventListener('click', function (e) {
+        var sortBtn = e.target.closest ? e.target.closest('.chapter-sort-btn[data-sort]') : null;
         if (sortBtn) {
             var field = sortBtn.getAttribute('data-sort');
             if (sortField === field) {
-                sortDir = (sortDir === 'asc' ? 'desc' : 'asc');
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
             } else {
                 sortField = field;
                 sortDir = 'asc';
@@ -544,114 +665,33 @@
             return;
         }
 
-        var openButton = e.target.closest ? e.target.closest('[data-modal-open]') : null;
-        if (openButton) { openModal(openButton.getAttribute('data-modal-open')); return; }
-        if (e.target.closest && e.target.closest('[data-modal-close]')) { closeModals(); return; }
-        if (e.target.classList && e.target.classList.contains('modal-backdrop')) { closeModals(); return; }
-
-        var deleteButton = e.target.closest ? e.target.closest('[data-chapter-delete]') : null;
-        if (deleteButton) {
-            var chId = deleteButton.getAttribute('data-chapter-delete');
-            if (!confirm('Delete chapter #' + chId + '? This cannot be undone.')) return;
-            try {
-                showViewMessage('');
-                await callApi('DELETE', '/api/v1/chapters/' + chId);
-                showMessage('Chapter deleted.', false);
-                closeModals();
-                await loadData();
-            } catch (err) { showViewMessage(err.message, true); }
-            return;
+        var chapterPill = e.target.closest ? e.target.closest('#chapterStatusPills [data-chapter-status-pill]') : null;
+        if (chapterPill) {
+            chapterStatusFilter = chapterPill.getAttribute('data-chapter-status-pill') || 'ALL';
+            renderChapters();
         }
-
-        var viewButton = e.target.closest ? e.target.closest('[data-chapter-view]') : null;
-        if (viewButton) { await openChapterView(viewButton.getAttribute('data-chapter-view')); return; }
-
-        var imageDeleteButton = e.target.closest ? e.target.closest('[data-chapter-image-delete]') : null;
-        if (imageDeleteButton) {
-            if (!confirm('Delete this image?')) return;
-            try {
-                showViewMessage('');
-                await callApi('DELETE', '/api/v1/images/' + imageDeleteButton.getAttribute('data-chapter-image-delete'));
-                showViewMessage('Image deleted.', false);
-                await loadChapterImages(imageDeleteButton.getAttribute('data-chapter-id'));
-            } catch (err) { showViewMessage(err.message, true); }
-            return;
-        }
-
-        if (e.target.id === 'chapterSubmitReviewButton') {
-            if (!selectedChapter || e.target.disabled) { return; }
-            try {
-                showViewMessage('');
-                await callApi('POST', '/api/v1/chapters/' + selectedChapter.id + '/submit-review');
-                showViewMessage('Chapter submitted for review.', false);
-                await loadData();
-                var refreshed = findChapter(selectedChapter.id);
-                if (refreshed) { await openChapterView(refreshed.id); showViewMessage('Chapter submitted for review.', false); }
-            } catch (err) { showViewMessage(err.message, true); }
-        }
-    });
-
-    document.addEventListener('change', function (e) {
-        if (e.target.id === 'createSeriesId') { updateNextChapterHint(); }
     });
 
     document.addEventListener('submit', async function (e) {
         if (e.target.id === 'chapterCreateForm') {
             e.preventDefault();
+            var errorBox = document.getElementById('createErrorBox');
+            errorBox.style.display = 'none';
             try {
-                showCreateError('');
                 var createData = formToObject(e.target);
-                var targetSeriesId = createData.seriesId || filterSeriesId;
-                if (!targetSeriesId) { showCreateError('Vui lòng chọn series.'); return; }
+                var targetSeriesId = filterSeriesId;
+                if (!targetSeriesId) { throw new Error('Series not found.'); }
                 await callApi('POST', '/api/v1/series/' + targetSeriesId + '/chapters', {
                     title: createData.title,
                     submissionDeadline: createData.submissionDeadline
                 });
+                e.target.reset();
                 showMessage('Chapter created successfully.', false);
-                e.target.reset();
-                closeModals();
                 await loadData();
-            } catch (err) { showCreateError(err.message); }
-        }
-
-        if (e.target.classList.contains('chapter-inline-update-form')) {
-            e.preventDefault();
-            try {
-                showViewMessage('');
-                var updateData = formToObject(e.target);
-                var deadlineInput = e.target.querySelector('[name="submissionDeadline"]') || e.target.querySelector('[name="publicationDate"]');
-                var deadlineValue = deadlineInput ? deadlineInput.value : '';
-                if (!deadlineValue) {
-                    showViewMessage('Submission deadline is required.', true);
-                    return;
-                }
-                // Spring @RequestParam on PUT may not bind x-www-form-urlencoded body unless HttpPutFormContentFilter is enabled.
-                // Send data as query string (same pattern as series deadline update).
-                var qs = new URLSearchParams({
-                    title: updateData.title,
-                    submissionDeadline: deadlineValue,
-                    publicationDate: deadlineValue,
-                    deadline: deadlineValue,
-                    chapterDeadline: deadlineValue
-                }).toString();
-                await callApi('PUT', '/api/v1/chapters/' + updateData.chapterId + '?' + qs);
-                showViewMessage('Chapter metadata updated.', false);
-                await loadData();
-                var updated = findChapter(updateData.chapterId);
-                if (updated) { await openChapterView(updated.id); showViewMessage('Chapter metadata updated.', false); }
-            } catch (err) { showViewMessage(err.message, true); }
-        }
-
-        if (e.target.classList.contains('chapter-image-upload-form')) {
-            e.preventDefault();
-            try {
-                showViewMessage('');
-                var chapterImageId = e.target.getAttribute('data-chapter-id');
-                await uploadMultipart('/api/v1/chapters/' + chapterImageId + '/images', e.target);
-                showViewMessage('Chapter image uploaded.', false);
-                e.target.reset();
-                await loadChapterImages(chapterImageId);
-            } catch (err) { showViewMessage(err.message, true); }
+            } catch (err) {
+                errorBox.style.display = 'block';
+                errorBox.textContent = err.message;
+            }
         }
     });
 

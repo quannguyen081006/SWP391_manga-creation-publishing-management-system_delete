@@ -162,18 +162,20 @@ public class ModuleWebController {
         return "series/detail";
     }
 
+    @RequestMapping(value = "/chapters/detail", method = RequestMethod.GET)
+    public String chapterDetailPage(HttpSession session) {
+        requireUser(session);
+        return "chapter/detail";
+    }
+
     @RequestMapping(value = "/chapters/{id}", method = RequestMethod.GET)
-    public String chapterDetail(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
+    public String chapterDetail(@PathVariable("id") long id, HttpSession session) {
+        requireUser(session);
         ChapterSummary chapter = chapterRepository.findById(id);
         if (chapter == null) {
             throw new IllegalArgumentException("Chapter not found");
         }
-        model.addAttribute("chapter", chapter);
-        model.addAttribute("tasks", pageTaskRepository.listByChapter(chapter.getId()));
-        model.addAttribute("manuscripts", manuscriptRepository.listByChapter(chapter.getId()));
-        model.addAttribute("canSubmitReview", user.hasRole("MANGAKA") && chapter.getCompletionPct() >= 100.0);
-        return "chapter/detail";
+        return "redirect:/main/chapters/detail?id=" + id;
     }
 
     @RequestMapping(value = "/chapters/{id}/submit-review", method = RequestMethod.POST)
@@ -181,11 +183,14 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         try {
             chapterRepository.submitForReview(id, user.getId());
-            return "redirect:/main/chapters/" + id;
+            return "redirect:/main/chapters/detail?id=" + id;
         } catch (RuntimeException ex) {
-            chapterDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "chapter/detail";
+            try {
+                return "redirect:/main/chapters/detail?id=" + id + "&error="
+                        + java.net.URLEncoder.encode(ex.getMessage(), "UTF-8");
+            } catch (java.io.UnsupportedEncodingException e) {
+                return "redirect:/main/chapters/detail?id=" + id;
+            }
         }
     }
 

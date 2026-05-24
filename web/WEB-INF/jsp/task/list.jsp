@@ -5,83 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Tasks</title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=20260524" />
-    <style>
-        .data-table td .due-date-overdue {
-            display: inline-flex !important;
-            align-items: center;
-            gap: 6px;
-            color: #b91c1c !important;
-            font-weight: 700 !important;
-            font-size: 0.875rem;
-            line-height: 1.3;
-            background: #fef2f2 !important;
-            border: 1px solid #f87171 !important;
-            border-radius: 8px;
-            padding: 5px 10px;
-            box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
-            white-space: nowrap;
-        }
-        .data-table tbody tr.task-row-overdue {
-            background: #fff1f2 !important;
-            box-shadow: inset 4px 0 0 #dc2626 !important;
-        }
-        .data-table tbody tr.task-row-overdue:hover {
-            background: #ffe4e6 !important;
-            box-shadow: inset 4px 0 0 #dc2626 !important;
-        }
-        .data-table tbody tr.task-row-overdue td {
-            color: #1f2937;
-        }
-        .data-table tbody tr.task-row-delayed {
-            background: #fffbeb !important;
-            box-shadow: inset 4px 0 0 #f59e0b !important;
-        }
-        .data-table tbody tr.task-row-delayed:hover {
-            background: #fef3c7 !important;
-            box-shadow: inset 4px 0 0 #f59e0b !important;
-        }
-        .alert-box-warn {
-            border-color: #fcd34d;
-            background: #fffbeb;
-            color: #92400e;
-        }
-        .status-delayed {
-            background: #fef3c7 !important;
-            color: #b45309 !important;
-            border: 1px solid #fcd34d;
-        }
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            border: 1px solid #e5e7eb;
-            background: #fff;
-            font-weight: 800;
-            font-size: 13px;
-            line-height: 1;
-            white-space: nowrap;
-        }
-        .status-pill-label { opacity: .9; }
-        .status-pill-count {
-            display: inline-flex;
-            min-width: 22px;
-            height: 22px;
-            align-items: center;
-            justify-content: center;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.08);
-            font-weight: 900;
-        }
-        .pill-progress { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
-        .pill-submitted { border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }
-        .pill-approved { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
-        .pill-rejected { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
-        .pill-delayed { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
-        .pill-overdue { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
-    </style>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=20260525" />
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
@@ -207,6 +131,7 @@
     var tasks = [];
     var seriesById = {};
     var chapterById = {};
+    var taskStatusFilter = 'ALL';
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -240,6 +165,55 @@
     function dateOnly(value) {
         var formatted = formatDate(value);
         return formatted ? new Date(formatted + 'T00:00:00') : null;
+    }
+
+    function daysUntilDate(value) {
+        var due = dateOnly(value);
+        if (!due) { return null; }
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.ceil((due - today) / 86400000);
+    }
+
+    function deadlineSuffixText(daysLeft, isDone, isOverdue) {
+        if (isDone) { return 'Done'; }
+        if (isOverdue) {
+            if (daysLeft !== null && daysLeft < 0) {
+                var overdueDays = Math.abs(daysLeft);
+                return overdueDays === 1 ? '1 day overdue' : (overdueDays + ' days overdue');
+            }
+            return 'Overdue';
+        }
+        if (daysLeft === null) { return ''; }
+        if (daysLeft === 0) { return 'Due today'; }
+        if (daysLeft === 1) { return '1 day left'; }
+        return daysLeft + ' days left';
+    }
+
+    function formatDeadlineCell(dateValue, isDone, isOverdue) {
+        var formatted = formatDate(dateValue);
+        if (!formatted) { return '-'; }
+        var daysLeft = daysUntilDate(dateValue);
+        if (!isDone && !isOverdue && daysLeft !== null && daysLeft < 0) {
+            isOverdue = true;
+        }
+        var suffixLabel = deadlineSuffixText(daysLeft, isDone, isOverdue);
+        var suffix = suffixLabel ? ' (' + suffixLabel + ')' : '';
+
+        if (isDone) {
+            return '<span class="due-date-done">' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        if (isOverdue) {
+            return '<span class="due-date-overdue">&#9888; ' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        if (daysLeft !== null && daysLeft <= 3) {
+            return '<span class="due-date-urgent">' + escapeHtml(formatted) + suffix + '</span>';
+        }
+        return '<span class="due-date-active">' + escapeHtml(formatted) + suffix + '</span>';
+    }
+
+    function isTaskDone(task) {
+        return String(task.status || '').toUpperCase() === 'APPROVED';
     }
 
     function todayIso() {
@@ -305,25 +279,60 @@
         return task && (task.delayed === true || task.isDelayed === true);
     }
 
-    function renderStatusPill(id, label, count, cssClass) {
-        return '<span class="status-pill ' + cssClass + '" data-status-pill="' + id + '">'
+    function renderStatusPill(id, label, count, cssClass, activeFilter) {
+        var active = activeFilter === id ? ' is-active' : '';
+        return '<button type="button" class="status-pill ' + cssClass + active + '" data-status-pill="' + id + '" aria-pressed="' + (activeFilter === id ? 'true' : 'false') + '">'
             + '<span class="status-pill-label">' + escapeHtml(label) + '</span>'
             + '<span class="status-pill-count">' + Number(count || 0) + '</span>'
-            + '</span>';
+            + '</button>';
+    }
+
+    function computeTaskCounts() {
+        var counts = {
+            ALL: tasks.length,
+            IN_PROGRESS: 0,
+            SUBMITTED: 0,
+            APPROVED: 0,
+            REJECTED: 0,
+            OVERDUE: 0,
+            DELAYED: 0
+        };
+        for (var i = 0; i < tasks.length; i++) {
+            var t = tasks[i];
+            var st = String(t.status || '').toUpperCase();
+            if (st === 'IN_PROGRESS') { counts.IN_PROGRESS++; }
+            if (st === 'SUBMITTED') { counts.SUBMITTED++; }
+            if (st === 'APPROVED') { counts.APPROVED++; }
+            if (st === 'REJECTED') { counts.REJECTED++; }
+            if (isTaskOverdue(t)) { counts.OVERDUE++; }
+            if (isTaskDelayed(t)) { counts.DELAYED++; }
+        }
+        return counts;
+    }
+
+    function taskMatchesFilter(task, filter) {
+        if (!filter || filter === 'ALL') { return true; }
+        if (filter === 'DELAYED') { return isTaskDelayed(task); }
+        if (filter === 'OVERDUE') { return isTaskOverdue(task); }
+        return String(task.status || '').toUpperCase() === filter;
+    }
+
+    function getFilteredTasks() {
+        return tasks.filter(function (t) { return taskMatchesFilter(t, taskStatusFilter); });
     }
 
     function renderStatusPills(counts) {
         var el = document.getElementById('taskStatusPills');
         if (!el) { return; }
 
-        // Requested: show all status tags except Pending.
         el.innerHTML = ''
-            + renderStatusPill('IN_PROGRESS', 'In Progress', counts.IN_PROGRESS, 'pill-progress')
-            + renderStatusPill('SUBMITTED', 'Submitted', counts.SUBMITTED, 'pill-submitted')
-            + renderStatusPill('APPROVED', 'Completed', counts.APPROVED, 'pill-approved')
-            + renderStatusPill('REJECTED', 'Rejected', counts.REJECTED, 'pill-rejected')
-            + renderStatusPill('DELAYED', 'Delayed', counts.DELAYED, 'pill-delayed')
-            + renderStatusPill('OVERDUE', 'Overdue', counts.OVERDUE, 'pill-overdue');
+            + renderStatusPill('ALL', 'All', counts.ALL, 'pill-all', taskStatusFilter)
+            + renderStatusPill('IN_PROGRESS', 'In Progress', counts.IN_PROGRESS, 'pill-progress', taskStatusFilter)
+            + renderStatusPill('SUBMITTED', 'Submitted', counts.SUBMITTED, 'pill-submitted', taskStatusFilter)
+            + renderStatusPill('APPROVED', 'Completed', counts.APPROVED, 'pill-approved', taskStatusFilter)
+            + renderStatusPill('REJECTED', 'Rejected', counts.REJECTED, 'pill-rejected', taskStatusFilter)
+            + renderStatusPill('DELAYED', 'Delayed', counts.DELAYED, 'pill-delayed', taskStatusFilter)
+            + renderStatusPill('OVERDUE', 'Overdue', counts.OVERDUE, 'pill-overdue', taskStatusFilter);
     }
 
     function renderStatusCell(task) {
@@ -345,13 +354,7 @@
     }
 
     function formatDueDateCell(task) {
-        var formatted = formatDate(task.dueDate);
-        if (!formatted) { return '-'; }
-        if (isTaskOverdue(task)) {
-            return '<span class="due-date-overdue" style="display:inline-flex;align-items:center;gap:6px;color:#b91c1c;font-weight:700;background:#fef2f2;border:1px solid #f87171;border-radius:8px;padding:5px 10px;box-shadow:0 1px 3px rgba(220,38,38,.25);">'
-                + '&#9888; ' + escapeHtml(formatted) + ' (Overdue)</span>';
-        }
-        return escapeHtml(formatted);
+        return formatDeadlineCell(task.dueDate, isTaskDone(task), isTaskOverdue(task));
     }
 
     function renderTaskTypeSelect(selectedType) {
@@ -519,36 +522,20 @@
         var active = 0;
         var submitted = 0;
         var completed = 0;
-        var overdue = 0;
-        var delayed = 0;
-        var counts = { IN_PROGRESS: 0, SUBMITTED: 0, APPROVED: 0, REJECTED: 0, OVERDUE: 0, DELAYED: 0 };
+        var counts = computeTaskCounts();
 
         for (var i = 0; i < tasks.length; i++) {
-            var t = tasks[i];
-            var st = String(t.status || '').toUpperCase();
+            var st = String(tasks[i].status || '').toUpperCase();
             if (st === 'PENDING' || st === 'IN_PROGRESS') { active++; }
             if (st === 'SUBMITTED') { submitted++; }
             if (st === 'APPROVED') { completed++; }
-            if (isTaskOverdue(t)) {
-                overdue++;
-            }
-            if (isTaskDelayed(t)) {
-                delayed++;
-            }
-
-            if (st === 'IN_PROGRESS') { counts.IN_PROGRESS++; }
-            if (st === 'SUBMITTED') { counts.SUBMITTED++; }
-            if (st === 'APPROVED') { counts.APPROVED++; }
-            if (st === 'REJECTED') { counts.REJECTED++; }
-            if (isTaskOverdue(t)) { counts.OVERDUE++; }
-            if (isTaskDelayed(t)) { counts.DELAYED++; }
         }
 
         document.getElementById('activeTasks').textContent = active;
         document.getElementById('submittedTasks').textContent = submitted;
         document.getElementById('completedTasks').textContent = completed;
-        document.getElementById('overdueTasks').textContent = overdue;
-        document.getElementById('delayedTasks').textContent = delayed;
+        document.getElementById('overdueTasks').textContent = counts.OVERDUE;
+        document.getElementById('delayedTasks').textContent = counts.DELAYED;
         renderStatusPills(counts);
     }
 
@@ -670,12 +657,17 @@
 
     function renderTasks() {
         var tbody = document.getElementById('taskRows');
+        var visible = getFilteredTasks();
         if (!tasks.length) {
             tbody.innerHTML = '<tr><td colspan="8">No tasks found.</td></tr>';
             return;
         }
+        if (!visible.length) {
+            tbody.innerHTML = '<tr><td colspan="8">No tasks match this filter.</td></tr>';
+            return;
+        }
 
-        tbody.innerHTML = tasks.map(function (task) {
+        tbody.innerHTML = visible.map(function (task) {
             var actionButtons = '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
             if (canAssistantSubmit(task)) {
                 actionButtons += ' <button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>';
@@ -760,6 +752,14 @@
     }
 
     document.addEventListener('click', async function (e) {
+        var taskPill = e.target.closest ? e.target.closest('#taskStatusPills [data-status-pill]') : null;
+        if (taskPill) {
+            taskStatusFilter = taskPill.getAttribute('data-status-pill') || 'ALL';
+            renderStatusPills(computeTaskCounts());
+            renderTasks();
+            return;
+        }
+
         var openButton = e.target.closest ? e.target.closest('[data-modal-open]') : null;
         if (openButton) {
             var modalId = openButton.getAttribute('data-modal-open');
