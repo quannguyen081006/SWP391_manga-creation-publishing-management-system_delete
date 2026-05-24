@@ -18,6 +18,7 @@
 
     <mvc:resources mapping="/assets/**" location="/assets/"/>
     <mvc:resources mapping="/uploads/**" location="/uploads/"/>
+    <mvc:resources mapping="/img/**" location="/img/"/>
 
     <mvc:interceptors>
         <mvc:interceptor>

@@ -51,6 +51,36 @@
             color: #b45309 !important;
             border: 1px solid #fcd34d;
         }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            font-weight: 800;
+            font-size: 13px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .status-pill-label { opacity: .9; }
+        .status-pill-count {
+            display: inline-flex;
+            min-width: 22px;
+            height: 22px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.08);
+            font-weight: 900;
+        }
+        .pill-progress { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+        .pill-submitted { border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }
+        .pill-approved { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
+        .pill-rejected { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+        .pill-delayed { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+        .pill-overdue { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -58,9 +88,6 @@
 
 <h2 class="page-title">Tasks</h2>
 <p class="page-sub">Manage page tasks for your series</p>
-
-<div id="overdueAlert" class="alert-box" style="display:none;"></div>
-<div id="delayedAlert" class="alert-box alert-box-warn" style="display:none;"></div>
 
 <section class="metric-grid">
     <article class="metric-card"><div id="activeTasks" class="metric-value">0</div><div class="metric-label">Active</div></article>
@@ -112,7 +139,12 @@
     </div>
 </div>
 <div class="section-card">
-    <h3 class="section-title">All Tasks</h3>
+    <div class="section-head" style="align-items:center; gap:12px;">
+        <div style="min-width:180px;">
+            <h3 class="section-title" style="margin:0;">All Tasks</h3>
+        </div>
+        <div id="taskStatusPills" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; width:100%;"></div>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
@@ -271,6 +303,27 @@
 
     function isTaskDelayed(task) {
         return task && (task.delayed === true || task.isDelayed === true);
+    }
+
+    function renderStatusPill(id, label, count, cssClass) {
+        return '<span class="status-pill ' + cssClass + '" data-status-pill="' + id + '">'
+            + '<span class="status-pill-label">' + escapeHtml(label) + '</span>'
+            + '<span class="status-pill-count">' + Number(count || 0) + '</span>'
+            + '</span>';
+    }
+
+    function renderStatusPills(counts) {
+        var el = document.getElementById('taskStatusPills');
+        if (!el) { return; }
+
+        // Requested: show all status tags except Pending.
+        el.innerHTML = ''
+            + renderStatusPill('IN_PROGRESS', 'In Progress', counts.IN_PROGRESS, 'pill-progress')
+            + renderStatusPill('SUBMITTED', 'Submitted', counts.SUBMITTED, 'pill-submitted')
+            + renderStatusPill('APPROVED', 'Completed', counts.APPROVED, 'pill-approved')
+            + renderStatusPill('REJECTED', 'Rejected', counts.REJECTED, 'pill-rejected')
+            + renderStatusPill('DELAYED', 'Delayed', counts.DELAYED, 'pill-delayed')
+            + renderStatusPill('OVERDUE', 'Overdue', counts.OVERDUE, 'pill-overdue');
     }
 
     function renderStatusCell(task) {
@@ -468,6 +521,7 @@
         var completed = 0;
         var overdue = 0;
         var delayed = 0;
+        var counts = { IN_PROGRESS: 0, SUBMITTED: 0, APPROVED: 0, REJECTED: 0, OVERDUE: 0, DELAYED: 0 };
 
         for (var i = 0; i < tasks.length; i++) {
             var t = tasks[i];
@@ -481,6 +535,13 @@
             if (isTaskDelayed(t)) {
                 delayed++;
             }
+
+            if (st === 'IN_PROGRESS') { counts.IN_PROGRESS++; }
+            if (st === 'SUBMITTED') { counts.SUBMITTED++; }
+            if (st === 'APPROVED') { counts.APPROVED++; }
+            if (st === 'REJECTED') { counts.REJECTED++; }
+            if (isTaskOverdue(t)) { counts.OVERDUE++; }
+            if (isTaskDelayed(t)) { counts.DELAYED++; }
         }
 
         document.getElementById('activeTasks').textContent = active;
@@ -488,22 +549,7 @@
         document.getElementById('completedTasks').textContent = completed;
         document.getElementById('overdueTasks').textContent = overdue;
         document.getElementById('delayedTasks').textContent = delayed;
-
-        var overdueAlert = document.getElementById('overdueAlert');
-        if (overdue > 0) {
-            overdueAlert.style.display = 'block';
-            overdueAlert.innerHTML = '<strong>' + overdue + ' Overdue Task' + (overdue > 1 ? 's' : '') + '</strong><br/>These tasks have passed their due date and need immediate attention.';
-        } else {
-            overdueAlert.style.display = 'none';
-        }
-
-        var delayedAlert = document.getElementById('delayedAlert');
-        if (delayed > 0) {
-            delayedAlert.style.display = 'block';
-            delayedAlert.innerHTML = '<strong>' + delayed + ' Delayed Task' + (delayed > 1 ? 's' : '') + '</strong><br/>These tasks have not been updated for 3+ days since assignment. Check with your assistant.';
-        } else {
-            delayedAlert.style.display = 'none';
-        }
+        renderStatusPills(counts);
     }
 
     function canAssistantSubmit(task) {

@@ -47,7 +47,7 @@ public class ChapterImageApiController {
         String originalFileName = trimToNull(request.getParameter("originalFileName"));
         Long fileSizeBytes = parseLong(request.getParameter("fileSizeBytes"));
 
-        UploadInfo upload = saveMultipartFileIfPresent(request);
+        UploadInfo upload = saveMultipartFileIfPresent(request, pageTaskId, imageType);
         if (upload != null) {
             fileUrl = upload.path;
             originalFileName = upload.originalName;
@@ -136,7 +136,7 @@ public class ChapterImageApiController {
         throw new IllegalArgumentException("Only assigned users can view task images");
     }
 
-    private UploadInfo saveMultipartFileIfPresent(HttpServletRequest request) {
+    private UploadInfo saveMultipartFileIfPresent(HttpServletRequest request, Long pageTaskId, String imageType) {
         String contentType = request.getContentType();
         if (contentType == null || !contentType.toLowerCase().startsWith("multipart/")) {
             return null;
@@ -150,7 +150,11 @@ public class ChapterImageApiController {
 
             String originalName = extractFileName(part);
             String storedName = System.currentTimeMillis() + "_" + sanitizeFileName(originalName);
-            String uploadPath = request.getServletContext().getRealPath("/uploads/chapter-images");
+            boolean taskImage = pageTaskId != null
+                    || "PAGE".equalsIgnoreCase(trimToNull(imageType));
+            String folder = taskImage ? "task" : "chapter";
+            String publicBase = "/img/" + folder;
+            String uploadPath = request.getServletContext().getRealPath(publicBase);
             if (uploadPath == null) {
                 throw new IllegalArgumentException("Cannot resolve upload directory");
             }
@@ -161,7 +165,7 @@ public class ChapterImageApiController {
 
             File target = new File(dir, storedName);
             copy(part, target);
-            return new UploadInfo("/uploads/chapter-images/" + storedName, originalName, part.getSize());
+            return new UploadInfo(publicBase + "/" + storedName, originalName, part.getSize());
         } catch (IOException ex) {
             throw new RuntimeException("Cannot save uploaded image", ex);
         } catch (ServletException ex) {
