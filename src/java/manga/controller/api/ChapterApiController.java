@@ -38,7 +38,8 @@ public class ChapterApiController {
             @PathVariable("seriesId") long seriesId,
             HttpSession session,
             @RequestParam("title") String title,
-            @RequestParam("submissionDeadline") String submissionDeadline) {
+            @RequestParam("submissionDeadline") String submissionDeadline,
+            @RequestParam(value = "totalPages", defaultValue = "0") int totalPages) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can create chapter");
 
@@ -47,7 +48,10 @@ public class ChapterApiController {
             throw new IllegalArgumentException("Only series owner can create chapter");
         }
 
-        long id = chapterRepository.createNext(seriesId, title, Date.valueOf(submissionDeadline));
+        if (totalPages < 1) {
+            throw new IllegalArgumentException("totalPages must be at least 1");
+        }
+        long id = chapterRepository.createNext(seriesId, title, Date.valueOf(submissionDeadline), totalPages);
         return ApiResponse.ok(chapterRepository.findById(id), "Chapter created");
     }
 

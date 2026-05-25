@@ -15,6 +15,7 @@ public class ChapterSummary {
     private Date publicationDate;
     private double completionPct;
     private boolean atRisk;
+    private Integer totalPages;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -34,5 +35,7 @@ public class ChapterSummary {
     public void setCompletionPct(double completionPct) { this.completionPct = completionPct; }
     public boolean isAtRisk() { return atRisk; }
     public void setAtRisk(boolean atRisk) { this.atRisk = atRisk; }
+    public Integer getTotalPages() { return totalPages; }
+    public void setTotalPages(Integer totalPages) { this.totalPages = totalPages; }
 }
 

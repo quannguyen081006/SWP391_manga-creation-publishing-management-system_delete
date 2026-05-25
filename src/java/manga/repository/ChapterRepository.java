@@ -26,8 +26,14 @@ public class ChapterRepository {
     @Autowired
     private PageTaskRepository pageTaskRepository;
 
+    @Autowired
+    private PageRepository pageRepository;
+
+    private static final String CHAPTER_COLUMNS =
+            "id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages";
+
     public List<ChapterSummary> listAll() {
-        String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter ORDER BY createdAt DESC";
+        String sql = "SELECT " + chapterSelectColumns(null) + " FROM Chapter ORDER BY createdAt DESC";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -46,16 +52,15 @@ public class ChapterRepository {
         List<Object> params = new ArrayList<Object>();
 
         if (user.hasRole("ADMIN")) {
-            sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
-                + "FROM Chapter ORDER BY createdAt DESC";
+            sql = "SELECT " + chapterSelectColumns(null) + " FROM Chapter ORDER BY createdAt DESC";
         } else if (user.hasRole("MANGAKA")) {
-            sql = "SELECT c.id, c.seriesId, c.chapterNumber, c.title, c.status, c.submissionDeadline, c.publicationDate, c.completionPct, c.atRisk "
-                + "FROM Chapter c JOIN Series s ON s.id = c.seriesId "
+            sql = "SELECT " + chapterSelectColumns("c")
+                + " FROM Chapter c JOIN Series s ON s.id = c.seriesId "
                 + "WHERE s.mangakaId = ? ORDER BY c.createdAt DESC";
             params.add(user.getId());
         } else if (user.hasRole("TANTOU_EDITOR")) {
-            sql = "SELECT c.id, c.seriesId, c.chapterNumber, c.title, c.status, c.submissionDeadline, c.publicationDate, c.completionPct, c.atRisk "
-                + "FROM Chapter c JOIN Series s ON s.id = c.seriesId "
+            sql = "SELECT " + chapterSelectColumns("c")
+                + " FROM Chapter c JOIN Series s ON s.id = c.seriesId "
                 + "WHERE s.tantouEditorId = ? ORDER BY c.createdAt DESC";
             params.add(user.getId());
         } else {
@@ -80,7 +85,7 @@ public class ChapterRepository {
     }
 
     public List<ChapterSummary> listBySeries(long seriesId) {
-        String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter WHERE seriesId = ? ORDER BY chapterNumber";
+        String sql = "SELECT " + chapterSelectColumns(null) + " FROM Chapter WHERE seriesId = ? ORDER BY chapterNumber";
         List<ChapterSummary> rows = new ArrayList<ChapterSummary>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -97,7 +102,7 @@ public class ChapterRepository {
     }
 
     public ChapterSummary findById(long chapterId) {
-        String sql = "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk FROM Chapter WHERE id = ?";
+        String sql = "SELECT " + chapterSelectColumns(null) + " FROM Chapter WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, chapterId);
@@ -134,9 +139,12 @@ public class ChapterRepository {
         }
     }
 
-    public long createNext(long seriesId, String title, Date submissionDeadline) {
+    public long createNext(long seriesId, String title, Date submissionDeadline, int totalPages) {
+        if (totalPages < 1) {
+            throw new IllegalArgumentException("totalPages must be at least 1");
+        }
         String nextSql = "SELECT ISNULL(MAX(chapterNumber), 0) + 1 FROM Chapter WITH (UPDLOCK, HOLDLOCK) WHERE seriesId = ?";
-        String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, GETDATE())";
+        String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, ?, GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
             boolean oldAutoCommit = conn.getAutoCommit();
@@ -162,6 +170,7 @@ public class ChapterRepository {
                     ps.setString(3, title);
                     ps.setDate(4, submissionDeadline);
                     ps.setDate(5, publicationDateFor(submissionDeadline));
+                    ps.setInt(6, totalPages);
                     ps.executeUpdate();
                     try (ResultSet rs = ps.getGeneratedKeys()) {
                         if (!rs.next()) {
@@ -170,6 +179,7 @@ public class ChapterRepository {
                         newId = rs.getLong(1);
                     }
                 }
+                pageRepository.bulkCreate(conn, newId, totalPages);
                 conn.commit();
                 return newId;
             } catch (RuntimeException ex) {
@@ -184,6 +194,22 @@ public class ChapterRepository {
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot create chapter", ex);
         }
+    }
+
+    private String chapterSelectColumns(String tablePrefix) {
+        String cols = CHAPTER_COLUMNS;
+        if (tablePrefix == null || tablePrefix.isEmpty()) {
+            return cols;
+        }
+        String[] parts = cols.split(", ");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(tablePrefix).append('.').append(parts[i]);
+        }
+        return sb.toString();
     }
 
     public void updateChapterMetadata(long chapterId, String title, Date submissionDeadline) {
@@ -276,7 +302,7 @@ public class ChapterRepository {
 
     public List<ChapterSummary> findChaptersWithDeadlineInDays(int days) {
         String sql =
-            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
+            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages "
             + "FROM Chapter "
             + "WHERE submissionDeadline = CAST(DATEADD(DAY, ?, GETDATE()) AS DATE) "
             + "  AND status IN ('PLANNING', 'IN_PROGRESS')";
@@ -297,7 +323,7 @@ public class ChapterRepository {
 
     public List<ChapterSummary> findMissedSubmissionDeadlineChapters() {
         String sql =
-            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk "
+            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages "
             + "FROM Chapter "
             + "WHERE submissionDeadline < CAST(GETDATE() AS DATE) "
             + "  AND status NOT IN ('EDITORIAL_REVIEW', 'COMPLETE')";
@@ -410,6 +436,8 @@ public class ChapterRepository {
                 && c.getCompletionPct() < 100.0
                 && ("PLANNING".equalsIgnoreCase(c.getStatus()) || "IN_PROGRESS".equalsIgnoreCase(c.getStatus()));
         c.setAtRisk(storedAtRisk || missedDeadline);
+        int totalPages = rs.getInt("totalPages");
+        c.setTotalPages(rs.wasNull() ? null : Integer.valueOf(totalPages));
         return c;
     }
 

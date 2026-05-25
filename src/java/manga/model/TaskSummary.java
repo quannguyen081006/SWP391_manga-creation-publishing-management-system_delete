@@ -19,6 +19,8 @@ public class TaskSummary {
     private String seriesTitle;
     private String assistantName;
     private boolean delayed;
+    private String priority;
+    private String notes;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -48,4 +50,8 @@ public class TaskSummary {
     public void setAssistantName(String assistantName) { this.assistantName = assistantName; }
     public boolean isDelayed() { return delayed; }
     public void setDelayed(boolean delayed) { this.delayed = delayed; }
+    public String getPriority() { return priority; }
+    public void setPriority(String priority) { this.priority = priority; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 }

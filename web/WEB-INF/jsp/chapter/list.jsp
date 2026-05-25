@@ -123,6 +123,14 @@
             <form id="chapterCreateForm" class="form-grid">
                 <label class="field-label" for="chapterCreateTitle">Title</label>
                 <input id="chapterCreateTitle" name="title" type="text" placeholder="Chapter title" required />
+                <label class="field-label" for="chapterCreateTotalPages">Số trang dự kiến</label>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button class="btn small" type="button" data-total-pages-delta="-5">−5</button>
+                    <button class="btn small" type="button" data-total-pages-delta="-1">−1</button>
+                    <input id="chapterCreateTotalPages" name="totalPages" type="number" min="1" value="24" required style="width:80px;text-align:center;" />
+                    <button class="btn small" type="button" data-total-pages-delta="1">+1</button>
+                    <button class="btn small" type="button" data-total-pages-delta="5">+5</button>
+                </div>
                 <label class="field-label" for="chapterCreateDeadline">Submission deadline</label>
                 <input id="chapterCreateDeadline" name="submissionDeadline" type="date" required />
                 <button id="chapterCreateSubmit" class="btn primary" type="submit" style="margin-top:4px;">Create chapter</button>
@@ -693,6 +701,15 @@
         }
     });
 
+    document.addEventListener('click', function (e) {
+        var deltaBtn = e.target.closest ? e.target.closest('[data-total-pages-delta]') : null;
+        if (!deltaBtn) { return; }
+        var input = document.getElementById('chapterCreateTotalPages');
+        if (!input) { return; }
+        var next = Number(input.value || 1) + Number(deltaBtn.getAttribute('data-total-pages-delta'));
+        input.value = Math.max(1, next);
+    });
+
     document.addEventListener('submit', async function (e) {
         if (e.target.id === 'chapterCreateForm') {
             e.preventDefault();
@@ -702,12 +719,20 @@
                 var createData = formToObject(e.target);
                 var targetSeriesId = filterSeriesId;
                 if (!targetSeriesId) { throw new Error('Series not found.'); }
-                await callApi('POST', '/api/v1/series/' + targetSeriesId + '/chapters', {
+                var totalPages = Math.max(1, Number(createData.totalPages) || 24);
+                var createRes = await callApi('POST', '/api/v1/series/' + targetSeriesId + '/chapters', {
                     title: createData.title,
-                    submissionDeadline: createData.submissionDeadline
+                    submissionDeadline: createData.submissionDeadline,
+                    totalPages: totalPages
                 });
                 e.target.reset();
+                var pagesInput = document.getElementById('chapterCreateTotalPages');
+                if (pagesInput) { pagesInput.value = '24'; }
                 showMessage('Chapter created successfully.', false);
+                if (createRes && createRes.data && createRes.data.id) {
+                    window.location.href = ctx + '/main/chapters/detail?id=' + createRes.data.id;
+                    return;
+                }
                 await loadData();
             } catch (err) {
                 errorBox.style.display = 'block';

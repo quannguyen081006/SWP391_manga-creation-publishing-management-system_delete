@@ -28,6 +28,7 @@ public class PageTaskRepository {
 
     private static final String SQL_TASK_COLUMNS =
             "t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
+            + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, "
             + SQL_IS_DELAYED;
 
     @Autowired
@@ -161,13 +162,18 @@ public class PageTaskRepository {
     }
 
     public long create(long chapterId, long assistantId, int start, int end, String taskType, Date dueDate) {
+        return create(chapterId, assistantId, start, end, taskType, dueDate, "NORMAL", null);
+    }
+
+    public long create(long chapterId, long assistantId, int start, int end, String taskType, Date dueDate, String priority, String notes) {
         String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         String enrollmentSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
-        String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, GETDATE(), GETDATE())";
+        String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, priority, notes, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, ?, ?, GETDATE(), GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
             taskType = normalizeTaskType(taskType);
+            String normalizedPriority = normalizePriority(priority);
             validateTaskAssignment(conn, 0L, chapterId, assistantId, start, end, taskType, dueDate, overlapSql, chapterSql, enrollmentSql);
 
             long newId;
@@ -178,6 +184,8 @@ public class PageTaskRepository {
                 insert.setInt(4, end);
                 insert.setString(5, taskType);
                 insert.setDate(6, dueDate);
+                insert.setString(7, normalizedPriority);
+                insert.setString(8, notes == null ? null : notes.trim());
                 insert.executeUpdate();
                 try (ResultSet rs = insert.getGeneratedKeys()) {
                     if (!rs.next()) {
@@ -278,8 +286,9 @@ public class PageTaskRepository {
         if (!"SKETCHING".equals(normalized)
                 && !"INKING".equals(normalized)
                 && !"COLORING".equals(normalized)
-                && !"LETTERING".equals(normalized)) {
-            throw new IllegalArgumentException("taskType must be SKETCHING, INKING, COLORING, or LETTERING");
+                && !"LETTERING".equals(normalized)
+                && !"SCREENTONE".equals(normalized)) {
+            throw new IllegalArgumentException("taskType must be SKETCHING, INKING, COLORING, SCREENTONE, or LETTERING");
         }
         return normalized;
     }
@@ -419,20 +428,22 @@ public class PageTaskRepository {
         }
     }
 
-    public void approveByMangaka(long taskId, long mangakaId) {
-        String readSql = "SELECT chapterId, status FROM PageTask WHERE id = ?";
-        String updateSql = "UPDATE PageTask SET status = 'APPROVED', updatedAt = GETDATE() WHERE id = ?";
+    public void approveByMangaka(long taskId, long mangakaId, String comment) {
+        String readSql = "SELECT chapterId, assistantId, status FROM PageTask WHERE id = ?";
+        String updateSql = "UPDATE PageTask SET status = 'APPROVED', approvalComment = ?, updatedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement read = conn.prepareStatement(readSql)) {
             read.setLong(1, taskId);
             long chapterId;
+            long assistantId;
             String currentStatus;
             try (ResultSet rs = read.executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalArgumentException("Task not found");
                 }
                 chapterId = rs.getLong("chapterId");
+                assistantId = rs.getLong("assistantId");
                 currentStatus = rs.getString("status");
             }
 
@@ -446,24 +457,35 @@ public class PageTaskRepository {
             }
 
             try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                ps.setLong(1, taskId);
+                ps.setString(1, comment == null ? null : comment.trim());
+                ps.setLong(2, taskId);
                 ps.executeUpdate();
             }
 
             refreshChapterProgress(chapterId);
+
+            if (comment != null && !comment.trim().isEmpty()) {
+                createNotification(
+                        assistantId,
+                        "TASK_APPROVED",
+                        "Task #" + taskId + " approved. Comment: " + comment.trim(),
+                        taskId,
+                        "TASK");
+            }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot approve task", ex);
         }
     }
 
-    public int rejectByMangaka(long taskId, long mangakaId) {
-        String readSql = "SELECT chapterId, status, rejectionCount FROM PageTask WHERE id = ?";
-        String updateSql = "UPDATE PageTask SET status = 'REJECTED', rejectionCount = ?, updatedAt = GETDATE() WHERE id = ?";
+    public int rejectByMangaka(long taskId, long mangakaId, String reason) {
+        String readSql = "SELECT chapterId, assistantId, status, rejectionCount FROM PageTask WHERE id = ?";
+        String updateSql = "UPDATE PageTask SET status = 'IN_PROGRESS', rejectionCount = ?, rejectionReason = ?, updatedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement read = conn.prepareStatement(readSql)) {
             read.setLong(1, taskId);
             long chapterId;
+            long assistantId;
             String currentStatus;
             int currentReject;
             try (ResultSet rs = read.executeQuery()) {
@@ -471,6 +493,7 @@ public class PageTaskRepository {
                     throw new IllegalArgumentException("Task not found");
                 }
                 chapterId = rs.getLong("chapterId");
+                assistantId = rs.getLong("assistantId");
                 currentStatus = rs.getString("status");
                 currentReject = rs.getInt("rejectionCount");
             }
@@ -490,11 +513,21 @@ public class PageTaskRepository {
             int next = currentReject + 1;
             try (PreparedStatement update = conn.prepareStatement(updateSql)) {
                 update.setInt(1, next);
-                update.setLong(2, taskId);
+                update.setString(2, reason == null ? null : reason.trim());
+                update.setLong(3, taskId);
                 update.executeUpdate();
             }
 
             refreshChapterProgress(chapterId);
+
+            String feedback = reason == null ? "" : reason.trim();
+            createNotification(
+                    assistantId,
+                    "TASK_REJECTED",
+                    "Task #" + taskId + " needs rework."
+                            + (feedback.isEmpty() ? "" : " Reason: " + feedback),
+                    taskId,
+                    "TASK");
 
             if (next == 3) {
                 long tantouId = findChapterTantouEditor(chapterId);
@@ -901,6 +934,55 @@ public class PageTaskRepository {
         t.setDueDate(rs.getDate("dueDate"));
         t.setStatus(rs.getString("status"));
         t.setRejectionCount(rs.getInt("rejectionCount"));
+        t.setPriority(rs.getString("priority"));
+        t.setNotes(rs.getString("notes"));
         return t;
+    }
+
+    public void updateTaskProgress(long taskId, long mangakaId, Date dueDate, String priority, String notes) {
+        String readSql = "SELECT chapterId, status FROM PageTask WHERE id = ?";
+        String updateSql = "UPDATE PageTask SET dueDate = ?, priority = ?, notes = ?, updatedAt = GETDATE() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection()) {
+            long chapterId;
+            String status;
+            try (PreparedStatement ps = conn.prepareStatement(readSql)) {
+                ps.setLong(1, taskId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalArgumentException("Task not found");
+                    }
+                    chapterId = rs.getLong("chapterId");
+                    status = rs.getString("status");
+                }
+            }
+            long ownerId = findChapterOwnerMangaka(chapterId);
+            if (ownerId != mangakaId) {
+                throw new IllegalArgumentException("Only chapter owner can update task");
+            }
+            if ("APPROVED".equalsIgnoreCase(status)) {
+                throw new IllegalArgumentException("Approved task cannot be edited. Create a new task instead (BR-TSK-06)");
+            }
+            String normalizedPriority = normalizePriority(priority);
+            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+                ps.setDate(1, dueDate);
+                ps.setString(2, normalizedPriority);
+                ps.setString(3, notes == null ? null : notes.trim());
+                ps.setLong(4, taskId);
+                ps.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update task progress", ex);
+        }
+    }
+
+    private String normalizePriority(String priority) {
+        if (priority == null || priority.trim().isEmpty()) {
+            return "NORMAL";
+        }
+        String normalized = priority.trim().toUpperCase(Locale.ENGLISH);
+        if (!"NORMAL".equals(normalized) && !"HIGH".equals(normalized) && !"URGENT".equals(normalized)) {
+            throw new IllegalArgumentException("priority must be NORMAL, HIGH, or URGENT");
+        }
+        return normalized;
     }
 }

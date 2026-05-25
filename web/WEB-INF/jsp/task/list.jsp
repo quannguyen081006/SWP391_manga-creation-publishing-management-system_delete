@@ -6,6 +6,57 @@
     <meta charset="UTF-8">
     <title>Tasks</title>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=20260525" />
+    <style>
+        .task-actions-cell { position: relative; vertical-align: top; }
+        .task-row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .task-action-popover {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 300px;
+            z-index: 40;
+            pointer-events: auto;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        }
+        .task-action-popover.open { display: block; }
+        .task-action-popover strong { display: block; font-size: 14px; margin-bottom: 10px; }
+        .task-action-popover textarea {
+            width: 100%;
+            min-height: 72px;
+            resize: vertical;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .task-action-popover .popover-helper { font-size: 12px; color: #6b7280; margin: 6px 0 10px; }
+        .task-action-popover .popover-counter { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 4px; }
+        .task-action-popover .popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .task-decision-label {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
+        }
+        .task-decision-label.approved { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+        .task-decision-label.rejected { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+        .task-view-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .task-view-note {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 14px;
+        }
+    </style>
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
@@ -62,14 +113,14 @@
         </form>
     </div>
 </div>
-<div class="section-card">
+<div class="section-card" style="overflow:visible;">
     <div class="section-head" style="align-items:center; gap:12px;">
         <div style="min-width:180px;">
             <h3 class="section-title" style="margin:0;">All Tasks</h3>
         </div>
         <div id="taskStatusPills" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; width:100%;"></div>
     </div>
-    <table class="data-table">
+    <table class="data-table" style="overflow:visible;">
         <thead>
             <tr>
                 <th>ID</th>
@@ -100,6 +151,30 @@
             <c:if test="${empty tasks}"><tr><td colspan="8">No tasks found.</td></tr></c:if>
         </tbody>
     </table>
+
+    <div id="taskPopoverHost" style="position:absolute;left:-9999px;width:0;height:0;overflow:hidden;" aria-hidden="true">
+    <div id="taskApprovePopover" class="task-action-popover" aria-hidden="true">
+        <strong id="approvePopoverTitle">Approve task</strong>
+        <label class="field-label" for="approvePopoverComment">Comment (optional)</label>
+        <textarea id="approvePopoverComment" maxlength="300" placeholder="Ghi chú cho assistant (tuỳ chọn)"></textarea>
+        <p class="popover-helper">Không điền vẫn có thể approve bình thường.</p>
+        <div class="popover-actions">
+            <button class="btn small" type="button" data-popover-cancel="approve">Cancel</button>
+            <button class="btn small success-soft" type="button" id="approvePopoverConfirm">Confirm approve</button>
+        </div>
+    </div>
+    <div id="taskRejectPopover" class="task-action-popover" aria-hidden="true">
+        <strong id="rejectPopoverTitle">Reject task</strong>
+        <label class="field-label" for="rejectPopoverReason">Lý do từ chối *</label>
+        <textarea id="rejectPopoverReason" maxlength="300" placeholder="Mô tả cần sửa gì..."></textarea>
+        <div class="popover-counter" id="rejectPopoverCounter">0 / 300</div>
+        <p class="popover-helper">Bắt buộc — người nhận task cần biết phải sửa gì.</p>
+        <div class="popover-actions">
+            <button class="btn small" type="button" data-popover-cancel="reject">Cancel</button>
+            <button class="btn small danger-soft" type="button" id="rejectPopoverConfirm" disabled>Confirm reject</button>
+        </div>
+    </div>
+    </div>
 </div>
 
 <div id="taskViewModal" class="modal-backdrop" aria-hidden="true">
@@ -107,17 +182,12 @@
         <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
         <h3 id="taskViewTitle" class="section-title compact-title">Task Detail</h3>
         <p id="taskViewSubtitle" class="section-desc"></p>
-        <div id="taskViewDetail" class="panel" style="margin-top:12px;">Loading detail...</div>
-        <div id="taskViewOwnerTools" style="margin-top:14px;"></div>
-        <div id="taskViewMangakaActions"></div>
-        <div class="section-head" style="margin-top:16px;">
-            <div>
-                <strong>Task Images</strong>
-                <p class="section-desc">Page images uploaded for this task</p>
-            </div>
+        <div id="taskViewContent"></div>
+        <div id="taskViewError" class="alert error" style="display:none;margin-top:12px;"></div>
+        <div class="detail-actions modal-actions modal-actions-bottom" style="justify-content:flex-end;gap:8px;">
+            <button class="btn small" type="button" data-modal-close>Cancel</button>
+            <button class="btn small primary" type="button" id="taskViewSaveBtn">Save changes</button>
         </div>
-        <div id="taskViewImages">Loading images...</div>
-        <div id="taskViewAssistantActions" class="detail-actions modal-actions modal-actions-bottom"></div>
     </div>
 </div>
 
@@ -132,6 +202,10 @@
     var seriesById = {};
     var chapterById = {};
     var taskStatusFilter = 'ALL';
+    var activePopoverType = null;
+    var activePopoverTaskId = null;
+    var activePopoverCell = null;
+    var viewModalTaskId = null;
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -259,6 +333,7 @@
         if (status === 'OVERDUE') { return 'status-overdue'; }
         if (status === 'IN_PROGRESS') { return 'status-progress'; }
         if (status === 'PENDING') { return 'status-pending'; }
+        if (status === 'SUBMITTED') { return 'status-review'; }
         if (status === 'APPROVED') { return 'status-approved'; }
         if (status === 'REJECTED') { return 'status-rejected'; }
         return 'status-draft';
@@ -387,6 +462,20 @@
         el.textContent = msg;
     }
 
+    function showViewError(msg) {
+        var el = document.getElementById('taskViewError');
+        if (!el) {
+            return;
+        }
+        if (!msg) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = msg;
+    }
+
     function clearModalError() {
         var el = document.getElementById('taskCreateError');
         if (!el) {
@@ -445,6 +534,74 @@
             modals[i].classList.remove('open');
             modals[i].setAttribute('aria-hidden', 'true');
         }
+        viewModalTaskId = null;
+    }
+
+    function closePopovers() {
+        var host = document.getElementById('taskPopoverHost');
+        var approvePop = document.getElementById('taskApprovePopover');
+        var rejectPop = document.getElementById('taskRejectPopover');
+        if (approvePop) {
+            approvePop.classList.remove('open');
+            approvePop.setAttribute('aria-hidden', 'true');
+            if (host) { host.appendChild(approvePop); }
+        }
+        if (rejectPop) {
+            rejectPop.classList.remove('open');
+            rejectPop.setAttribute('aria-hidden', 'true');
+            if (host) { host.appendChild(rejectPop); }
+        }
+        activePopoverType = null;
+        activePopoverTaskId = null;
+        activePopoverCell = null;
+    }
+
+    function openPopover(type, taskId, anchorCell) {
+        closePopovers();
+        var task = findTask(taskId);
+        if (!task) { return; }
+        var popId = type === 'approve' ? 'taskApprovePopover' : 'taskRejectPopover';
+        var pop = document.getElementById(popId);
+        if (!pop || !anchorCell) { return; }
+        anchorCell.appendChild(pop);
+        pop.classList.add('open');
+        pop.setAttribute('aria-hidden', 'false');
+        activePopoverType = type;
+        activePopoverTaskId = taskId;
+        activePopoverCell = anchorCell;
+
+        if (type === 'approve') {
+            document.getElementById('approvePopoverTitle').textContent = 'Approve task #' + task.id;
+            document.getElementById('approvePopoverComment').value = '';
+        } else {
+            document.getElementById('rejectPopoverTitle').textContent = 'Reject task #' + task.id;
+            var reasonEl = document.getElementById('rejectPopoverReason');
+            reasonEl.value = '';
+            updateRejectConfirmState();
+        }
+    }
+
+    function updateRejectConfirmState() {
+        var reasonEl = document.getElementById('rejectPopoverReason');
+        var counterEl = document.getElementById('rejectPopoverCounter');
+        var confirmBtn = document.getElementById('rejectPopoverConfirm');
+        if (!reasonEl || !confirmBtn) { return; }
+        var len = reasonEl.value.length;
+        if (counterEl) { counterEl.textContent = len + ' / 300'; }
+        confirmBtn.disabled = len < 5;
+    }
+
+    function applyTaskDecision(taskId, decision) {
+        var task = findTask(taskId);
+        if (!task) { return; }
+        task._decisionLabel = decision;
+        if (decision === 'approved') {
+            task.status = 'APPROVED';
+        } else if (decision === 'rejected') {
+            task.status = 'IN_PROGRESS';
+        }
+        renderMetrics();
+        renderTasks();
     }
 
     async function uploadMultipart(path, form) {
@@ -544,26 +701,64 @@
         return isAssignedAssistant(task) && (st === 'IN_PROGRESS' || st === 'REJECTED' || st === 'OVERDUE');
     }
 
-    function renderUpdateForm(task) {
+    function renderViewModalContent(task) {
         var chapter = chapterById[String(task.chapterId)];
-        var seriesId = chapter ? chapter.seriesId : '';
         var latestDueDate = chapter && chapter.submissionDeadline ? addDaysIso(chapter.submissionDeadline, -3) : '';
         var dueDateAttrs = ' min="' + todayIso() + '"' + (latestDueDate ? ' max="' + escapeHtml(latestDueDate) + '"' : '');
-        var deadlineHelp = chapter && chapter.submissionDeadline
-            ? '<p class="section-desc">Chapter deadline: ' + escapeHtml(formatDate(chapter.submissionDeadline)) + '. Task due date must be between today and ' + escapeHtml(latestDueDate) + '.</p>'
-            : '<p class="section-desc">Task due date cannot be in the past.</p>';
-        return '<form class="panel form-grid task-inline-update-form" style="max-width:640px;">'
-            + '<strong>Reassign / Update Task #' + task.id + '</strong>'
-            + '<input name="taskId" type="hidden" value="' + task.id + '" />'
-            + '<select class="assistant-select" name="assistantId" data-series-id="' + seriesId + '" data-selected-assistant-id="' + task.assistantId + '" required><option value="">Open form to load assistants</option></select>'
-            + '<input name="pageRangeStart" type="number" min="1" value="' + task.pageRangeStart + '" placeholder="Page Start" required />'
-            + '<input name="pageRangeEnd" type="number" min="1" value="' + task.pageRangeEnd + '" placeholder="Page End" required />'
-            + renderTaskTypeSelect(task.taskType)
-            + '<label class="field-label" for="taskUpdateDueDate' + task.id + '">Due Date</label>'
-            + deadlineHelp
-            + '<input id="taskUpdateDueDate' + task.id + '" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '" aria-label="Due Date"' + dueDateAttrs + ' required />'
-            + '<button class="btn" type="submit">Update</button>'
-            + '</form>';
+        var canEdit = isTaskOwner(task) && String(task.status || '').toUpperCase() !== 'APPROVED';
+        var saveBtn = document.getElementById('taskViewSaveBtn');
+        if (saveBtn) {
+            saveBtn.style.display = canEdit ? '' : 'none';
+        }
+        var approvedNote = String(task.status || '').toUpperCase() === 'APPROVED'
+            ? '<div class="alert error" style="margin-bottom:12px;">Approved task cannot be edited. Create a new task instead (BR-TSK-06)</div>'
+            : '';
+        return approvedNote
+            + '<div class="task-view-chips">'
+            + '<span class="status-chip">' + escapeHtml(formatStatus(task.taskType)) + '</span>'
+            + '<span class="status-chip">Assigned: ' + escapeHtml(task.assistantName) + '</span>'
+            + '<span class="status-chip">Pages ' + task.pageRangeStart + '-' + task.pageRangeEnd + '</span>'
+            + renderStatusCell(task)
+            + '</div>'
+            + '<p class="task-view-note">Approve / Reject được thực hiện trực tiếp từ bảng — modal này chỉ để xem và cập nhật tiến độ.</p>'
+            + (canEdit
+                ? ('<form id="taskViewUpdateForm" class="form-grid task-view-update-form" style="max-width:640px;">'
+                    + '<input name="taskId" type="hidden" value="' + task.id + '" />'
+                    + '<input name="assistantId" type="hidden" value="' + task.assistantId + '" />'
+                    + '<input name="pageRangeStart" type="hidden" value="' + task.pageRangeStart + '" />'
+                    + '<input name="pageRangeEnd" type="hidden" value="' + task.pageRangeEnd + '" />'
+                    + '<input name="taskType" type="hidden" value="' + escapeHtml(task.taskType) + '" />'
+                    + '<label class="field-label" for="taskViewDueDate">Due date</label>'
+                    + '<input id="taskViewDueDate" name="dueDate" type="date" value="' + escapeHtml(formatDate(task.dueDate)) + '"' + dueDateAttrs + ' required />'
+                    + '<label class="field-label" for="taskViewPriority">Priority</label>'
+                    + '<select id="taskViewPriority" name="priority">'
+                    + '<option value="NORMAL"' + (task.priority === 'NORMAL' ? ' selected' : '') + '>Normal</option>'
+                    + '<option value="HIGH"' + (task.priority === 'HIGH' ? ' selected' : '') + '>High</option>'
+                    + '<option value="URGENT"' + (task.priority === 'URGENT' ? ' selected' : '') + '>Urgent</option>'
+                    + '</select>'
+                    + '<label class="field-label" for="taskViewNotes">Notes / progress update</label>'
+                    + '<textarea id="taskViewNotes" name="notes" rows="4" placeholder="Ghi chú tiến độ cho assistant...">' + escapeHtml(task.notes || '') + '</textarea>'
+                    + '</form>')
+                : '<p class="section-desc">You can view this task but only the series owner Mangaka can update it.</p>');
+    }
+
+    function renderTaskRowActions(task) {
+        if (task._decisionLabel === 'approved') {
+            return '<span class="task-decision-label approved">Approved</span>';
+        }
+        if (task._decisionLabel === 'rejected') {
+            return '<span class="task-decision-label rejected">Rejected</span>';
+        }
+        var st = String(task.status || '').toUpperCase();
+        var html = '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
+        if (isTaskOwner(task) && st === 'SUBMITTED') {
+            html += ' <button class="btn small success-soft" type="button" data-task-approve-pop="' + task.id + '">Approve</button>';
+            html += ' <button class="btn small danger-soft" type="button" data-task-reject-pop="' + task.id + '">Reject</button>';
+        }
+        if (canAssistantSubmit(task)) {
+            html += ' <button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>';
+        }
+        return html;
     }
 
     function renderImageForm(task) {
@@ -668,11 +863,6 @@
         }
 
         tbody.innerHTML = visible.map(function (task) {
-            var actionButtons = '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
-            if (canAssistantSubmit(task)) {
-                actionButtons += ' <button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>';
-            }
-
             return '<tr' + taskRowClass(task) + '>'
                 + '<td>' + task.id + '</td>'
                 + '<td><strong>' + escapeHtml(task.seriesTitle) + '</strong><br/>Ch. ' + escapeHtml(task.chapterNumber) + ' - ' + escapeHtml(task.chapterTitle) + '</td>'
@@ -681,46 +871,23 @@
                 + '<td>' + escapeHtml(task.assistantName) + '</td>'
                 + '<td>' + renderStatusCell(task) + '</td>'
                 + '<td>' + formatDueDateCell(task) + '</td>'
-                + '<td><div class="inline-meta" style="gap:6px;margin:0;">' + actionButtons + '</div></td>'
+                + '<td class="task-actions-cell"><div class="task-row-actions">' + renderTaskRowActions(task) + '</div></td>'
                 + '</tr>';
         }).join('');
     }
 
     async function openTaskView(taskId) {
+        closePopovers();
+        showViewError('');
         var task = findTask(taskId);
         if (!task) {
             return;
         }
+        viewModalTaskId = taskId;
         document.getElementById('taskViewTitle').textContent = 'Task #' + task.id;
         document.getElementById('taskViewSubtitle').textContent = (task.seriesTitle || '') + ' - Ch. ' + task.chapterNumber + ' - ' + (task.chapterTitle || '');
-        document.getElementById('taskViewDetail').innerHTML = renderTaskDetail(task);
-        document.getElementById('taskViewOwnerTools').innerHTML = isTaskOwner(task)
-            ? renderUpdateForm(task)
-            : '';
-        var mangakaActionsEl = document.getElementById('taskViewMangakaActions');
-        if (mangakaActionsEl) {
-            var st = String(task.status || '').toUpperCase();
-            if (isTaskOwner(task) && st === 'SUBMITTED') {
-                mangakaActionsEl.innerHTML = '<div class="inline-meta" style="gap:8px;margin-top:12px;">'
-                    + '<button class="btn success-soft" type="button" data-task-decision="approve" data-task-id="' + task.id + '">Approve</button>'
-                    + '<button class="btn danger-soft" type="button" data-task-decision="reject" data-task-id="' + task.id + '">Reject</button>'
-                    + '</div>';
-            } else {
-                mangakaActionsEl.innerHTML = '';
-            }
-        }
-        var assistantActions = document.getElementById('taskViewAssistantActions');
-        assistantActions.innerHTML = canAssistantSubmit(task)
-            ? '<button class="btn small primary" type="button" data-task-submit-review="' + task.id + '">Submit for Review</button>'
-            : '';
-        assistantActions.style.display = assistantActions.innerHTML ? 'flex' : 'none';
-        document.getElementById('taskViewImages').innerHTML = renderImageForm(task);
+        document.getElementById('taskViewContent').innerHTML = renderViewModalContent(task);
         openModal('taskViewModal');
-        var updateSelect = document.querySelector('#taskViewOwnerTools .assistant-select');
-        if (updateSelect) {
-            await fillAssistantSelect(updateSelect, updateSelect.getAttribute('data-series-id'), updateSelect.getAttribute('data-selected-assistant-id'));
-        }
-        await loadTaskImages(taskId);
     }
 
     async function loadData() {
@@ -760,17 +927,51 @@
             return;
         }
 
+        var approvePopBtn = e.target.closest ? e.target.closest('[data-task-approve-pop]') : null;
+        if (approvePopBtn) {
+            var approveCell = approvePopBtn.closest('.task-actions-cell');
+            openPopover('approve', approvePopBtn.getAttribute('data-task-approve-pop'), approveCell);
+            return;
+        }
+
+        var rejectPopBtn = e.target.closest ? e.target.closest('[data-task-reject-pop]') : null;
+        if (rejectPopBtn) {
+            var rejectCell = rejectPopBtn.closest('.task-actions-cell');
+            openPopover('reject', rejectPopBtn.getAttribute('data-task-reject-pop'), rejectCell);
+            return;
+        }
+
+        var popoverCancel = e.target.closest ? e.target.closest('[data-popover-cancel]') : null;
+        if (popoverCancel) {
+            closePopovers();
+            return;
+        }
+
+        var insidePopover = e.target.closest ? e.target.closest('.task-action-popover') : null;
+        var insideActions = e.target.closest ? e.target.closest('.task-row-actions') : null;
+        if (!insidePopover && !insideActions && activePopoverType) {
+            closePopovers();
+        }
+
         var openButton = e.target.closest ? e.target.closest('[data-modal-open]') : null;
         if (openButton) {
+            closePopovers();
             var modalId = openButton.getAttribute('data-modal-open');
             openModal(modalId);
             return;
         }
-        if (e.target.closest && e.target.closest('[data-modal-close]')) { closeModals(); return; }
-        if (e.target.classList && e.target.classList.contains('modal-backdrop')) { closeModals(); return; }
+        if (e.target.closest && e.target.closest('[data-modal-close]')) {
+            closeModals();
+            return;
+        }
+        if (e.target.classList && e.target.classList.contains('modal-backdrop')) {
+            closeModals();
+            return;
+        }
 
         var viewButton = e.target.closest ? e.target.closest('[data-task-view]') : null;
         if (viewButton) {
+            closePopovers();
             await openTaskView(viewButton.getAttribute('data-task-view'));
             return;
         }
@@ -778,6 +979,7 @@
         var submitReviewButton = e.target.closest ? e.target.closest('[data-task-submit-review]') : null;
         if (submitReviewButton) {
             try {
+                closePopovers();
                 var submitTaskId = submitReviewButton.getAttribute('data-task-submit-review');
                 await callApi('PATCH', '/api/v1/tasks/' + submitTaskId + '/status', { status: 'SUBMITTED' });
                 showMessage('Task submitted for Mangaka review.', false);
@@ -788,32 +990,64 @@
             }
             return;
         }
+    });
 
-        var decisionButton = e.target.closest ? e.target.closest('[data-task-decision]') : null;
-        if (decisionButton) {
-            try {
-                var action = decisionButton.getAttribute('data-task-decision');
-                var taskId = decisionButton.getAttribute('data-task-id');
-                await callApi('POST', '/api/v1/tasks/' + taskId + '/' + action);
-                showMessage(action === 'approve' ? 'Task approved.' : 'Task rejected.', false);
-                await loadData();
-            } catch (err) {
-                showMessage(err.message, true);
-            }
+    document.getElementById('approvePopoverConfirm').addEventListener('click', async function () {
+        if (!activePopoverTaskId) { return; }
+        try {
+            var comment = document.getElementById('approvePopoverComment').value.trim();
+            var payload = comment ? { comment: comment } : {};
+            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/approve', payload);
+            closePopovers();
+            applyTaskDecision(activePopoverTaskId, 'approved');
+            showMessage('Task approved.', false);
+            await loadData();
+        } catch (err) {
+            showMessage(err.message, true);
+        }
+    });
+
+    document.getElementById('rejectPopoverConfirm').addEventListener('click', async function () {
+        if (!activePopoverTaskId) { return; }
+        var reason = document.getElementById('rejectPopoverReason').value.trim();
+        if (reason.length < 5) { return; }
+        try {
+            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/reject', { reason: reason });
+            closePopovers();
+            applyTaskDecision(activePopoverTaskId, 'rejected');
+            showMessage('Task rejected and sent back for rework.', false);
+            await loadData();
+        } catch (err) {
+            showMessage(err.message, true);
+        }
+    });
+
+    document.getElementById('rejectPopoverReason').addEventListener('input', updateRejectConfirmState);
+
+    document.getElementById('taskViewSaveBtn').addEventListener('click', async function () {
+        var form = document.getElementById('taskViewUpdateForm');
+        showViewError('');
+        if (!form) {
+            closeModals();
             return;
         }
-
-        var imageDeleteButton = e.target.closest ? e.target.closest('[data-task-image-delete]') : null;
-        if (imageDeleteButton) {
-            if (!confirm('Delete this image?')) return;
-            try {
-                await callApi('DELETE', '/api/v1/images/' + imageDeleteButton.getAttribute('data-task-image-delete'));
-                showMessage('Image deleted.', false);
-                await loadTaskImages(imageDeleteButton.getAttribute('data-task-id'));
-            } catch (err) {
-                showMessage(err.message, true);
-            }
+        var task = findTask(viewModalTaskId);
+        if (task && String(task.status || '').toUpperCase() === 'APPROVED') {
+            showViewError('Approved task cannot be edited. Create a new task instead (BR-TSK-06)');
             return;
+        }
+        try {
+            var updateData = formToObject(form);
+            await callApi('PATCH', '/api/v1/tasks/' + updateData.taskId, {
+                dueDate: updateData.dueDate,
+                priority: updateData.priority,
+                notes: updateData.notes
+            });
+            showMessage('Task updated successfully.', false);
+            closeModals();
+            await loadData();
+        } catch (err) {
+            showViewError(err.message);
         }
     });
 
@@ -853,25 +1087,6 @@
                 showModalError(err.message);
             }
         }
-        if (e.target.classList.contains('task-inline-update-form')) {
-            e.preventDefault();
-            try {
-                var updateData = formToObject(e.target);
-                await callApi('PUT', '/api/v1/tasks/' + updateData.taskId, {
-                    assistantId: updateData.assistantId,
-                    pageRangeStart: updateData.pageRangeStart,
-                    pageRangeEnd: updateData.pageRangeEnd,
-                    taskType: updateData.taskType,
-                    dueDate: updateData.dueDate
-                });
-                showMessage('Task updated successfully.', false);
-                closeModals();
-                await loadData();
-            } catch (err) {
-                showMessage(err.message, true);
-            }
-        }
-
         if (e.target.classList.contains('task-image-upload-form')) {
             e.preventDefault();
             try {

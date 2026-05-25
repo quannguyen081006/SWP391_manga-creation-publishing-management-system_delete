@@ -67,7 +67,9 @@ public class PageTaskApiController {
             @RequestParam("pageRangeStart") int pageRangeStart,
             @RequestParam("pageRangeEnd") int pageRangeEnd,
             @RequestParam("taskType") String taskType,
-            @RequestParam("dueDate") String dueDate) {
+            @RequestParam("dueDate") String dueDate,
+            @RequestParam(value = "priority", defaultValue = "NORMAL") String priority,
+            @RequestParam(value = "notes", required = false) String notes) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can create task");
 
@@ -82,8 +84,38 @@ public class PageTaskApiController {
                 pageRangeStart,
                 pageRangeEnd,
                 taskType,
-                Date.valueOf(dueDate));
+                Date.valueOf(dueDate),
+                priority,
+                notes);
         return ApiResponse.ok(pageTaskRepository.findById(taskId), "Task created");
+    }
+
+    @RequestMapping(value = "/tasks/{id}", method = RequestMethod.PATCH)
+    public ApiResponse<TaskSummary> patch(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam(value = "dueDate", required = false) String dueDate,
+            @RequestParam(value = "priority", required = false) String priority,
+            @RequestParam(value = "notes", required = false) String notes) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can update task");
+        TaskSummary existing = pageTaskRepository.findById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("Task not found");
+        }
+        String nextDue = dueDate != null && !dueDate.trim().isEmpty()
+                ? dueDate
+                : (existing.getDueDate() != null ? existing.getDueDate().toString() : null);
+        if (nextDue == null) {
+            throw new IllegalArgumentException("dueDate is required");
+        }
+        pageTaskRepository.updateTaskProgress(
+                id,
+                user.getId(),
+                Date.valueOf(nextDue),
+                priority != null ? priority : existing.getPriority(),
+                notes != null ? notes : existing.getNotes());
+        return ApiResponse.ok(pageTaskRepository.findById(id), "Task updated");
     }
 
     @RequestMapping(value = "/tasks/{id}", method = RequestMethod.GET)
@@ -146,18 +178,30 @@ public class PageTaskApiController {
     }
 
     @RequestMapping(value = "/tasks/{id}/approve", method = RequestMethod.POST)
-    public ApiResponse<Object> approve(@PathVariable("id") long id, HttpSession session) {
+    public ApiResponse<Object> approve(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam(value = "comment", required = false) String comment) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can approve task");
-        pageTaskRepository.approveByMangaka(id, user.getId());
+        pageTaskRepository.approveByMangaka(id, user.getId(), comment);
         return ApiResponse.ok(null, "Task approved");
     }
 
     @RequestMapping(value = "/tasks/{id}/reject", method = RequestMethod.POST)
-    public ApiResponse<Object> reject(@PathVariable("id") long id, HttpSession session) {
+    public ApiResponse<Object> reject(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam("reason") String reason) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can reject task");
-        pageTaskRepository.rejectByMangaka(id, user.getId());
+        if (reason == null || reason.trim().length() < 5) {
+            throw new IllegalArgumentException("Rejection reason must be at least 5 characters");
+        }
+        if (reason.trim().length() > 300) {
+            throw new IllegalArgumentException("Rejection reason must be at most 300 characters");
+        }
+        pageTaskRepository.rejectByMangaka(id, user.getId(), reason.trim());
         return ApiResponse.ok(null, "Task rejected");
     }
 }

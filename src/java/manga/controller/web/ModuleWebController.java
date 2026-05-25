@@ -247,7 +247,7 @@ public class ModuleWebController {
             if (pageTaskRepository.getTaskOwnerMangaka(id) != user.getId()) {
                 throw new IllegalArgumentException("Only owner can approve");
             }
-            pageTaskRepository.approveByMangaka(id, user.getId());
+            pageTaskRepository.approveByMangaka(id, user.getId(), null);
             return "redirect:/main/tasks/" + id;
         } catch (RuntimeException ex) {
             taskDetail(id, session, model);
@@ -263,7 +263,7 @@ public class ModuleWebController {
             if (pageTaskRepository.getTaskOwnerMangaka(id) != user.getId()) {
                 throw new IllegalArgumentException("Only owner can reject");
             }
-            pageTaskRepository.rejectByMangaka(id, user.getId());
+            pageTaskRepository.rejectByMangaka(id, user.getId(), "Rejected via web form");
             return "redirect:/main/tasks/" + id;
         } catch (RuntimeException ex) {
             taskDetail(id, session, model);
