@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -29,8 +30,12 @@ public class ChapterRepository {
     @Autowired
     private PageRepository pageRepository;
 
-    private static final String CHAPTER_COLUMNS =
-            "id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages";
+    private static final String CHAPTER_COLUMNS_LEGACY =
+            "id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk";
+    private static final String CHAPTER_COLUMNS_EXTENDED =
+            CHAPTER_COLUMNS_LEGACY + ", totalPages";
+
+    private volatile Boolean pageSchemaReady;
 
     public List<ChapterSummary> listAll() {
         String sql = "SELECT " + chapterSelectColumns(null) + " FROM Chapter ORDER BY createdAt DESC";
@@ -140,9 +145,25 @@ public class ChapterRepository {
     }
 
     public long createNext(long seriesId, String title, Date submissionDeadline, int totalPages) {
-        if (totalPages < 1) {
-            throw new IllegalArgumentException("totalPages must be at least 1");
+        if (totalPages < 0) {
+            throw new IllegalArgumentException("totalPages cannot be negative");
         }
+        int slots = totalPages < 1 ? 0 : totalPages;
+        try {
+            if (isPageSchemaReady() && slots > 0) {
+                return createNextWithPageSlots(seriesId, title, submissionDeadline, slots);
+            }
+            return createNextLegacy(seriesId, title, submissionDeadline);
+        } catch (RuntimeException ex) {
+            if (isMissingPageSchema(ex)) {
+                pageSchemaReady = Boolean.FALSE;
+                return createNextLegacy(seriesId, title, submissionDeadline);
+            }
+            throw ex;
+        }
+    }
+
+    private long createNextWithPageSlots(long seriesId, String title, Date submissionDeadline, int totalPages) {
         String nextSql = "SELECT ISNULL(MAX(chapterNumber), 0) + 1 FROM Chapter WITH (UPDLOCK, HOLDLOCK) WHERE seriesId = ?";
         String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, ?, GETDATE())";
 
@@ -196,8 +217,99 @@ public class ChapterRepository {
         }
     }
 
+    private long createNextLegacy(long seriesId, String title, Date submissionDeadline) {
+        String nextSql = "SELECT ISNULL(MAX(chapterNumber), 0) + 1 FROM Chapter WITH (UPDLOCK, HOLDLOCK) WHERE seriesId = ?";
+        String insertSql = "INSERT INTO Chapter (seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, createdAt) VALUES (?, ?, ?, 'PLANNING', ?, ?, 0.00, 0, GETDATE())";
+
+        try (Connection conn = dataSource.getConnection()) {
+            boolean oldAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                validateChapterDeadlineForSeries(conn, seriesId, submissionDeadline);
+
+                int nextChapterNumber;
+                try (PreparedStatement ps = conn.prepareStatement(nextSql)) {
+                    ps.setLong(1, seriesId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            throw new IllegalArgumentException("Series not found");
+                        }
+                        nextChapterNumber = rs.getInt(1);
+                    }
+                }
+
+                long newId;
+                try (PreparedStatement ps = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+                    ps.setLong(1, seriesId);
+                    ps.setInt(2, nextChapterNumber);
+                    ps.setString(3, title);
+                    ps.setDate(4, submissionDeadline);
+                    ps.setDate(5, publicationDateFor(submissionDeadline));
+                    ps.executeUpdate();
+                    try (ResultSet rs = ps.getGeneratedKeys()) {
+                        if (!rs.next()) {
+                            throw new IllegalStateException("Cannot create chapter");
+                        }
+                        newId = rs.getLong(1);
+                    }
+                }
+                conn.commit();
+                return newId;
+            } catch (RuntimeException ex) {
+                try { conn.rollback(); } catch (SQLException ignore) {}
+                throw ex;
+            } catch (SQLException ex) {
+                try { conn.rollback(); } catch (SQLException ignore) {}
+                throw new RuntimeException("Cannot create chapter", ex);
+            } finally {
+                conn.setAutoCommit(oldAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot create chapter", ex);
+        }
+    }
+
+    private boolean isPageSchemaReady() {
+        if (pageSchemaReady != null) {
+            return pageSchemaReady.booleanValue();
+        }
+        synchronized (this) {
+            if (pageSchemaReady != null) {
+                return pageSchemaReady.booleanValue();
+            }
+            boolean ready = false;
+            String sql = "SELECT CASE WHEN COL_LENGTH('dbo.Chapter', 'totalPages') IS NOT NULL "
+                    + "AND OBJECT_ID('dbo.Page', 'U') IS NOT NULL THEN 1 ELSE 0 END";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    ready = rs.getInt(1) == 1;
+                }
+            } catch (SQLException ex) {
+                ready = false;
+            }
+            pageSchemaReady = Boolean.valueOf(ready);
+            return ready;
+        }
+    }
+
+    private boolean isMissingPageSchema(Throwable ex) {
+        while (ex != null) {
+            String msg = ex.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase();
+                if (lower.contains("totalpages") || lower.contains("invalid object name 'page'")) {
+                    return true;
+                }
+            }
+            ex = ex.getCause();
+        }
+        return false;
+    }
+
     private String chapterSelectColumns(String tablePrefix) {
-        String cols = CHAPTER_COLUMNS;
+        String cols = isPageSchemaReady() ? CHAPTER_COLUMNS_EXTENDED : CHAPTER_COLUMNS_LEGACY;
         if (tablePrefix == null || tablePrefix.isEmpty()) {
             return cols;
         }
@@ -302,7 +414,7 @@ public class ChapterRepository {
 
     public List<ChapterSummary> findChaptersWithDeadlineInDays(int days) {
         String sql =
-            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages "
+            "SELECT " + chapterSelectColumns(null) + " "
             + "FROM Chapter "
             + "WHERE submissionDeadline = CAST(DATEADD(DAY, ?, GETDATE()) AS DATE) "
             + "  AND status IN ('PLANNING', 'IN_PROGRESS')";
@@ -323,7 +435,7 @@ public class ChapterRepository {
 
     public List<ChapterSummary> findMissedSubmissionDeadlineChapters() {
         String sql =
-            "SELECT id, seriesId, chapterNumber, title, status, submissionDeadline, publicationDate, completionPct, atRisk, totalPages "
+            "SELECT " + chapterSelectColumns(null) + " "
             + "FROM Chapter "
             + "WHERE submissionDeadline < CAST(GETDATE() AS DATE) "
             + "  AND status NOT IN ('EDITORIAL_REVIEW', 'COMPLETE')";
@@ -436,9 +548,23 @@ public class ChapterRepository {
                 && c.getCompletionPct() < 100.0
                 && ("PLANNING".equalsIgnoreCase(c.getStatus()) || "IN_PROGRESS".equalsIgnoreCase(c.getStatus()));
         c.setAtRisk(storedAtRisk || missedDeadline);
-        int totalPages = rs.getInt("totalPages");
-        c.setTotalPages(rs.wasNull() ? null : Integer.valueOf(totalPages));
+        if (hasColumn(rs, "totalPages")) {
+            int totalPages = rs.getInt("totalPages");
+            c.setTotalPages(rs.wasNull() ? null : Integer.valueOf(totalPages));
+        } else {
+            c.setTotalPages(null);
+        }
         return c;
+    }
+
+    private boolean hasColumn(ResultSet rs, String label) throws SQLException {
+        ResultSetMetaData md = rs.getMetaData();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            if (label.equalsIgnoreCase(md.getColumnLabel(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Date publicationDateFor(Date submissionDeadline) {

@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -26,13 +27,59 @@ public class PageTaskRepository {
             + "AND DATEDIFF(DAY, t.updatedAt, GETDATE()) >= 3 "
             + "THEN 1 ELSE 0 END AS BIT) AS isDelayed";
 
-    private static final String SQL_TASK_COLUMNS =
-            "t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, "
-            + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, "
-            + SQL_IS_DELAYED;
+    private static final String SQL_TASK_COLUMNS_BASE =
+            "t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, ";
+
+    private volatile Boolean taskSchemaExtended;
 
     @Autowired
     private DataSource dataSource;
+
+    private String taskSelectColumns() {
+        if (isTaskSchemaExtended()) {
+            return SQL_TASK_COLUMNS_BASE
+                    + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, "
+                    + SQL_IS_DELAYED;
+        }
+        return SQL_TASK_COLUMNS_BASE
+                + "'NORMAL' AS priority, CAST(NULL AS NVARCHAR(500)) AS notes, "
+                + SQL_IS_DELAYED;
+    }
+
+    private boolean isTaskSchemaExtended() {
+        if (taskSchemaExtended != null) {
+            return taskSchemaExtended.booleanValue();
+        }
+        synchronized (this) {
+            if (taskSchemaExtended != null) {
+                return taskSchemaExtended.booleanValue();
+            }
+            boolean ready = false;
+            String sql = "SELECT CASE WHEN COL_LENGTH('dbo.PageTask', 'priority') IS NOT NULL "
+                    + "AND COL_LENGTH('dbo.PageTask', 'notes') IS NOT NULL THEN 1 ELSE 0 END";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    ready = rs.getInt(1) == 1;
+                }
+            } catch (SQLException ex) {
+                ready = false;
+            }
+            taskSchemaExtended = Boolean.valueOf(ready);
+            return ready;
+        }
+    }
+
+    private boolean hasColumn(ResultSet rs, String label) throws SQLException {
+        ResultSetMetaData md = rs.getMetaData();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            if (label.equalsIgnoreCase(md.getColumnLabel(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public List<TaskSummary> listVisible(AuthenticatedUser user) {
         return listVisible(user, null, null);
@@ -40,7 +87,7 @@ public class PageTaskRepository {
 
     public List<TaskSummary> listVisible(AuthenticatedUser user, String status, Long chapterId) {
         String baseSql =
-            "SELECT " + SQL_TASK_COLUMNS + ", "
+            "SELECT " + taskSelectColumns() + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -115,7 +162,7 @@ public class PageTaskRepository {
     }
     public List<TaskSummary> listByChapter(long chapterId) {
         String sql =
-            "SELECT " + SQL_TASK_COLUMNS + ", "
+            "SELECT " + taskSelectColumns() + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -140,7 +187,7 @@ public class PageTaskRepository {
 
     public TaskSummary findById(long taskId) {
         String sql =
-            "SELECT " + SQL_TASK_COLUMNS + ", "
+            "SELECT " + taskSelectColumns() + ", "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, u.fullName AS assistantName "
             + "FROM PageTask t "
             + "JOIN Chapter c ON c.id = t.chapterId "
@@ -169,7 +216,8 @@ public class PageTaskRepository {
         String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         String enrollmentSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
-        String insertSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, priority, notes, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, ?, ?, GETDATE(), GETDATE())";
+        String insertExtendedSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, priority, notes, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, ?, ?, GETDATE(), GETDATE())";
+        String insertLegacySql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, GETDATE(), GETDATE())";
 
         try (Connection conn = dataSource.getConnection()) {
             taskType = normalizeTaskType(taskType);
@@ -177,6 +225,8 @@ public class PageTaskRepository {
             validateTaskAssignment(conn, 0L, chapterId, assistantId, start, end, taskType, dueDate, overlapSql, chapterSql, enrollmentSql);
 
             long newId;
+            boolean extended = isTaskSchemaExtended();
+            String insertSql = extended ? insertExtendedSql : insertLegacySql;
             try (PreparedStatement insert = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
                 insert.setLong(1, chapterId);
                 insert.setLong(2, assistantId);
@@ -184,8 +234,10 @@ public class PageTaskRepository {
                 insert.setInt(4, end);
                 insert.setString(5, taskType);
                 insert.setDate(6, dueDate);
-                insert.setString(7, normalizedPriority);
-                insert.setString(8, notes == null ? null : notes.trim());
+                if (extended) {
+                    insert.setString(7, normalizedPriority);
+                    insert.setString(8, notes == null ? null : notes.trim());
+                }
                 insert.executeUpdate();
                 try (ResultSet rs = insert.getGeneratedKeys()) {
                     if (!rs.next()) {
@@ -430,7 +482,8 @@ public class PageTaskRepository {
 
     public void approveByMangaka(long taskId, long mangakaId, String comment) {
         String readSql = "SELECT chapterId, assistantId, status FROM PageTask WHERE id = ?";
-        String updateSql = "UPDATE PageTask SET status = 'APPROVED', approvalComment = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateExtendedSql = "UPDATE PageTask SET status = 'APPROVED', approvalComment = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateLegacySql = "UPDATE PageTask SET status = 'APPROVED', updatedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement read = conn.prepareStatement(readSql)) {
@@ -456,10 +509,18 @@ public class PageTaskRepository {
                 throw new IllegalArgumentException("Only SUBMITTED task can be approved (BR-39)");
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                ps.setString(1, comment == null ? null : comment.trim());
-                ps.setLong(2, taskId);
-                ps.executeUpdate();
+            boolean extended = isTaskSchemaExtended();
+            if (extended) {
+                try (PreparedStatement ps = conn.prepareStatement(updateExtendedSql)) {
+                    ps.setString(1, comment == null ? null : comment.trim());
+                    ps.setLong(2, taskId);
+                    ps.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement ps = conn.prepareStatement(updateLegacySql)) {
+                    ps.setLong(1, taskId);
+                    ps.executeUpdate();
+                }
             }
 
             refreshChapterProgress(chapterId);
@@ -479,7 +540,8 @@ public class PageTaskRepository {
 
     public int rejectByMangaka(long taskId, long mangakaId, String reason) {
         String readSql = "SELECT chapterId, assistantId, status, rejectionCount FROM PageTask WHERE id = ?";
-        String updateSql = "UPDATE PageTask SET status = 'IN_PROGRESS', rejectionCount = ?, rejectionReason = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateExtendedSql = "UPDATE PageTask SET status = 'IN_PROGRESS', rejectionCount = ?, rejectionReason = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateLegacySql = "UPDATE PageTask SET status = 'IN_PROGRESS', rejectionCount = ?, updatedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement read = conn.prepareStatement(readSql)) {
@@ -511,11 +573,20 @@ public class PageTaskRepository {
             }
 
             int next = currentReject + 1;
-            try (PreparedStatement update = conn.prepareStatement(updateSql)) {
-                update.setInt(1, next);
-                update.setString(2, reason == null ? null : reason.trim());
-                update.setLong(3, taskId);
-                update.executeUpdate();
+            boolean extended = isTaskSchemaExtended();
+            if (extended) {
+                try (PreparedStatement update = conn.prepareStatement(updateExtendedSql)) {
+                    update.setInt(1, next);
+                    update.setString(2, reason == null ? null : reason.trim());
+                    update.setLong(3, taskId);
+                    update.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement update = conn.prepareStatement(updateLegacySql)) {
+                    update.setInt(1, next);
+                    update.setLong(2, taskId);
+                    update.executeUpdate();
+                }
             }
 
             refreshChapterProgress(chapterId);
@@ -934,14 +1005,21 @@ public class PageTaskRepository {
         t.setDueDate(rs.getDate("dueDate"));
         t.setStatus(rs.getString("status"));
         t.setRejectionCount(rs.getInt("rejectionCount"));
-        t.setPriority(rs.getString("priority"));
-        t.setNotes(rs.getString("notes"));
+        if (hasColumn(rs, "priority")) {
+            t.setPriority(rs.getString("priority"));
+        } else {
+            t.setPriority("NORMAL");
+        }
+        if (hasColumn(rs, "notes")) {
+            t.setNotes(rs.getString("notes"));
+        }
         return t;
     }
 
     public void updateTaskProgress(long taskId, long mangakaId, Date dueDate, String priority, String notes) {
         String readSql = "SELECT chapterId, status FROM PageTask WHERE id = ?";
-        String updateSql = "UPDATE PageTask SET dueDate = ?, priority = ?, notes = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateExtendedSql = "UPDATE PageTask SET dueDate = ?, priority = ?, notes = ?, updatedAt = GETDATE() WHERE id = ?";
+        String updateLegacySql = "UPDATE PageTask SET dueDate = ?, updatedAt = GETDATE() WHERE id = ?";
         try (Connection conn = dataSource.getConnection()) {
             long chapterId;
             String status;
@@ -962,13 +1040,21 @@ public class PageTaskRepository {
             if ("APPROVED".equalsIgnoreCase(status)) {
                 throw new IllegalArgumentException("Approved task cannot be edited. Create a new task instead (BR-TSK-06)");
             }
-            String normalizedPriority = normalizePriority(priority);
-            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                ps.setDate(1, dueDate);
-                ps.setString(2, normalizedPriority);
-                ps.setString(3, notes == null ? null : notes.trim());
-                ps.setLong(4, taskId);
-                ps.executeUpdate();
+            if (isTaskSchemaExtended()) {
+                String normalizedPriority = normalizePriority(priority);
+                try (PreparedStatement ps = conn.prepareStatement(updateExtendedSql)) {
+                    ps.setDate(1, dueDate);
+                    ps.setString(2, normalizedPriority);
+                    ps.setString(3, notes == null ? null : notes.trim());
+                    ps.setLong(4, taskId);
+                    ps.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement ps = conn.prepareStatement(updateLegacySql)) {
+                    ps.setDate(1, dueDate);
+                    ps.setLong(2, taskId);
+                    ps.executeUpdate();
+                }
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update task progress", ex);
