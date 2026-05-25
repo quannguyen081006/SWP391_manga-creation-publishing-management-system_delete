@@ -10,6 +10,19 @@
         .chapter-page-intro .page-sub { margin: 10px 0 0; font-size: 15px; line-height: 1.5; }
         .chapter-page-intro #chapterFilterSubtitle { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
         #chapterResult { margin-bottom: 16px; }
+        .data-table th.th-sortable { white-space: nowrap; }
+        .data-table th.th-sortable .th-sort-inner {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+        .data-table th.th-sortable .chapter-sort-btn {
+            flex-shrink: 0;
+            padding: 2px 6px;
+            line-height: 1;
+        }
+        .data-table th.th-sort-no { min-width: 72px; }
     </style>
 </head>
 <body>
@@ -42,11 +55,11 @@
             </div>
             <table class="data-table" id="tableOverdue">
                 <thead><tr>
-                    <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                    <th class="th-sortable th-sort-no"><span class="th-sort-inner">No.<button class="btn small chapter-sort-btn" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></span></th>
                     <th class="col-series">Series</th>
-                    <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
-                    <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
-                    <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                    <th class="th-sortable"><span class="th-sort-inner">Title<button class="btn small chapter-sort-btn" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></span></th>
+                    <th class="th-sortable" style="min-width:96px;"><span class="th-sort-inner">Status<button class="btn small chapter-sort-btn" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></span></th>
+                    <th class="th-sortable" style="min-width:110px;"><span class="th-sort-inner">Deadline<button class="btn small chapter-sort-btn" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></span></th>
                     <th style="width:160px;">Progress</th>
                     <th style="width:88px;">At Risk</th>
                     <th style="width:80px;" id="chapterActionHeader">Actions</th>
@@ -63,11 +76,11 @@
             </div>
             <table class="data-table" id="tableInProgress">
                 <thead><tr>
-                    <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                    <th class="th-sortable th-sort-no"><span class="th-sort-inner">No.<button class="btn small chapter-sort-btn" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></span></th>
                     <th class="col-series">Series</th>
-                    <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
-                    <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
-                    <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                    <th class="th-sortable"><span class="th-sort-inner">Title<button class="btn small chapter-sort-btn" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></span></th>
+                    <th class="th-sortable" style="min-width:96px;"><span class="th-sort-inner">Status<button class="btn small chapter-sort-btn" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></span></th>
+                    <th class="th-sortable" style="min-width:110px;"><span class="th-sort-inner">Deadline<button class="btn small chapter-sort-btn" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></span></th>
                     <th style="width:160px;">Progress</th>
                     <th style="width:88px;">At Risk</th>
                     <th style="width:80px;">Actions</th>
@@ -86,11 +99,11 @@
             <div id="completedBody" style="display:none;">
                 <table class="data-table" id="tableCompleted">
                     <thead><tr>
-                        <th style="width:48px;">No. <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></th>
+                        <th class="th-sortable th-sort-no"><span class="th-sort-inner">No.<button class="btn small chapter-sort-btn" type="button" data-sort="no" title="Sort by chapter number" aria-label="Sort by chapter number">↕</button></span></th>
                         <th class="col-series">Series</th>
-                        <th>Title <button class="btn small chapter-sort-btn" style="padding:2px 6px;margin-left:4px;" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></th>
-                        <th style="width:90px;">Status <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></th>
-                        <th style="width:110px;">Deadline <button class="btn small chapter-sort-btn" style="padding:2px 6px;" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></th>
+                        <th class="th-sortable"><span class="th-sort-inner">Title<button class="btn small chapter-sort-btn" type="button" data-sort="title" title="Sort by title" aria-label="Sort by title">↕</button></span></th>
+                        <th class="th-sortable" style="min-width:96px;"><span class="th-sort-inner">Status<button class="btn small chapter-sort-btn" type="button" data-sort="status" title="Sort by status" aria-label="Sort by status">↕</button></span></th>
+                        <th class="th-sortable" style="min-width:110px;"><span class="th-sort-inner">Deadline<button class="btn small chapter-sort-btn" type="button" data-sort="deadline" title="Sort by deadline" aria-label="Sort by deadline">↕</button></span></th>
                         <th style="width:160px;">Progress</th>
                         <th style="width:88px;">At Risk</th>
                         <th style="width:80px;">Actions</th>
