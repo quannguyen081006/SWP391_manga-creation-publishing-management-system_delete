@@ -125,7 +125,7 @@
                 <input id="chapterCreateTitle" name="title" type="text" placeholder="Chapter title" required />
                 <label class="field-label" for="chapterCreateDeadline">Submission deadline</label>
                 <input id="chapterCreateDeadline" name="submissionDeadline" type="date" required />
-                <button class="btn primary" type="submit" style="margin-top:4px;">Create chapter</button>
+                <button id="chapterCreateSubmit" class="btn primary" type="submit" style="margin-top:4px;">Create chapter</button>
             </form>
         </div>
 
@@ -256,7 +256,7 @@
     }
 
     function latestChapterDeadline(series) {
-        return series && series.publicationDate ? addDaysIso(series.publicationDate, -7) : '';
+        return series && series.publicationDate ? addDaysIso(series.publicationDate, -14) : '';
     }
 
     function hasRole(role) {
@@ -442,16 +442,24 @@
     function updateCreateDeadlineConstraints() {
         var deadlineInput = document.getElementById('chapterCreateDeadline');
         var deadlineHint = document.getElementById('createSeriesDeadlineHint');
+        var submitButton = document.getElementById('chapterCreateSubmit');
         if (!deadlineInput) { return; }
         deadlineInput.min = todayIso();
         deadlineInput.removeAttribute('max');
+        deadlineInput.disabled = false;
+        if (submitButton) { submitButton.disabled = false; }
         if (!deadlineHint) { return; }
         var series = seriesById[String(filterSeriesId)];
         var maxDeadline = latestChapterDeadline(series);
-        if (maxDeadline) { deadlineInput.max = maxDeadline; }
+        if (maxDeadline) {
+            deadlineInput.max = maxDeadline;
+        } else if (filterSeriesId) {
+            deadlineInput.disabled = true;
+            if (submitButton) { submitButton.disabled = true; }
+        }
         deadlineHint.textContent = series && series.publicationDate
             ? ('Series deadline: ' + formatDate(series.publicationDate) + '. Chapter deadline must be on or before ' + maxDeadline + '.')
-            : (filterSeriesId ? 'Chapter deadline cannot be in the past.' : '');
+            : (filterSeriesId ? 'Series deadline must be set by Tantou before creating chapters.' : '');
     }
 
     function setTrackerLoading(msg) {

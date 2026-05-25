@@ -150,6 +150,26 @@
         return d ? new Date(d + 'T00:00:00') : null;
     }
 
+    function todayIso() {
+        var date = new Date();
+        var month = String(date.getMonth() + 1);
+        var day = String(date.getDate());
+        return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+    }
+
+    function addDaysIso(value, days) {
+        var date = dateOnly(value);
+        if (!date) { return ''; }
+        date.setDate(date.getDate() + days);
+        var month = String(date.getMonth() + 1);
+        var day = String(date.getDate());
+        return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+    }
+
+    function latestChapterDeadline(series) {
+        return series && series.publicationDate ? addDaysIso(series.publicationDate, -14) : '';
+    }
+
     function daysUntilDate(value) {
         var due = dateOnly(value);
         if (!due) { return null; }
@@ -316,7 +336,23 @@
 
         document.getElementById('updateChapterId').value = chapter.id;
         document.getElementById('updateTitle').value = chapter.title || '';
-        document.getElementById('updateDeadline').value = formatDate(chapter.submissionDeadline) || '';
+        var updateDeadline = document.getElementById('updateDeadline');
+        var maxDeadline = latestChapterDeadline(seriesData);
+        updateDeadline.value = formatDate(chapter.submissionDeadline) || '';
+        updateDeadline.min = todayIso();
+        updateDeadline.removeAttribute('max');
+        updateDeadline.disabled = false;
+        document.getElementById('btnSave').disabled = false;
+        document.getElementById('updateError').style.display = 'none';
+        document.getElementById('updateError').textContent = '';
+        if (maxDeadline) {
+            updateDeadline.max = maxDeadline;
+        } else if (owner) {
+            updateDeadline.disabled = true;
+            document.getElementById('btnSave').disabled = true;
+            document.getElementById('updateError').style.display = 'block';
+            document.getElementById('updateError').textContent = 'Series deadline must be set by Tantou before updating chapter deadline.';
+        }
         document.getElementById('uploadForm').setAttribute('data-chapter-id', chapter.id);
     }
 

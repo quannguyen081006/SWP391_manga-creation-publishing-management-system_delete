@@ -22,6 +22,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class ProductionRepository {
 
+    private static final int SERIES_CHAPTER_DEADLINE_BUFFER_DAYS = 14;
+
     @Autowired
     private DataSource dataSource;
 
@@ -86,7 +88,7 @@ public class ProductionRepository {
         }
 
         String readSql = "SELECT mangakaId, tantouEditorId, title FROM Series WHERE id = ?";
-        String chapterDeadlineSql = "SELECT COUNT(1) FROM Chapter WHERE seriesId = ? AND submissionDeadline > DATEADD(DAY, -7, ?)";
+        String chapterDeadlineSql = "SELECT COUNT(1) FROM Chapter WHERE seriesId = ? AND submissionDeadline > DATEADD(DAY, -" + SERIES_CHAPTER_DEADLINE_BUFFER_DAYS + ", ?)";
         String updateSql = "UPDATE Series SET publicationDate = ? WHERE id = ?";
         String notifySql =
             "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
@@ -118,7 +120,7 @@ public class ProductionRepository {
                 try (ResultSet rs = chapterDeadline.executeQuery()) {
                     rs.next();
                     if (rs.getInt(1) > 0) {
-                        throw new IllegalArgumentException("Series deadline must be at least 7 days after all chapter deadlines");
+                        throw new IllegalArgumentException("Series deadline must be at least 14 days after all chapter deadlines");
                     }
                 }
             }

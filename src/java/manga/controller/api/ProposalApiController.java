@@ -79,6 +79,17 @@ public class ProposalApiController {
         proposalService.reviewProposal(user, id, decision, note);
         return ApiResponse.ok(null, "Proposal reviewed");
     }
+
+    @RequestMapping(value = "/{id}/board-vote", method = RequestMethod.POST)
+    public ApiResponse<Object> boardVote(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam("decision") String decision,
+            @RequestParam(value = "note", required = false) String note) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        proposalService.voteProposalAsBoard(user, id, decision, note);
+        return ApiResponse.ok(null, "Proposal board vote submitted");
+    }
 }
 
 

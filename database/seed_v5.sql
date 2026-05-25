@@ -215,11 +215,11 @@ VALUES (@mk2, 'Steampunk Chronicles', 'Steampunk',
     20, 'DRAFT', 0, DATEADD(DAY,-10,GETDATE()), DATEADD(DAY,-10,GETDATE()));
 
 -- 7. Moonlight Sanctuary — UNDER_REVIEW (was SUBMITTED — invalid status)
-INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, submitAttemptCount, createdAt, updatedAt)
+INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)
 VALUES (@mk3, 'Moonlight Sanctuary', 'Fantasy',
     'A princess discovers her magical bloodline and must unite fractured kingdoms against an ancient evil.',
     '/uploads/proposals/moonlight-sanctuary-v1.pdf', 'moonlight-sanctuary-v1.pdf',
-    24, 'UNDER_REVIEW', DATEADD(DAY,-7,GETDATE()), 1, DATEADD(DAY,-8,GETDATE()), DATEADD(DAY,-7,GETDATE()));
+    24, 'UNDER_REVIEW', DATEADD(DAY,-7,GETDATE()), @t3, 1, DATEADD(DAY,-8,GETDATE()), DATEADD(DAY,-7,GETDATE()));
 
 -- 8. Mystery at Midnight — UNDER_REVIEW
 INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)

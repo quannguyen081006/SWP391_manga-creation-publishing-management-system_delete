@@ -18,7 +18,7 @@ import org.springframework.stereotype.Repository;
 public class ChapterRepository {
 
     private static final int CHAPTER_PUBLICATION_OFFSET_DAYS = 14;
-    private static final int CHAPTER_SERIES_DEADLINE_BUFFER_DAYS = 7;
+    private static final int CHAPTER_SERIES_DEADLINE_BUFFER_DAYS = 14;
 
     @Autowired
     private DataSource dataSource;
@@ -459,11 +459,11 @@ public class ChapterRepository {
 
     private void validateBeforeSeriesDeadline(Date submissionDeadline, Date seriesDeadline) {
         if (seriesDeadline == null) {
-            return;
+            throw new IllegalArgumentException("Series deadline must be set by assigned Tantou before creating or updating chapters");
         }
         Date latestChapterDeadline = Date.valueOf(seriesDeadline.toLocalDate().minusDays(CHAPTER_SERIES_DEADLINE_BUFFER_DAYS));
         if (submissionDeadline.after(latestChapterDeadline)) {
-            throw new IllegalArgumentException("Chapter deadline must be at least 7 days before series deadline");
+            throw new IllegalArgumentException("Chapter deadline must be at least 14 days before series deadline");
         }
     }
 }

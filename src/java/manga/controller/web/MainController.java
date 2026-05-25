@@ -230,6 +230,7 @@ public class MainController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
+        model.addAttribute("canBoardVote", user.hasRole("EDITORIAL_BOARD") && "BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus()));
         return "proposal/detail";
     }
 
@@ -284,6 +285,22 @@ public class MainController {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
         try {
             proposalService.reviewProposal(user, id, decision, note);
+            return "redirect:/main/proposals/" + id;
+        } catch (IllegalArgumentException ex) {
+            return proposalDetailWithError(id, session, model, ex.getMessage());
+        }
+    }
+
+    @RequestMapping(value = "/proposals/{id}/board-vote", method = RequestMethod.POST)
+    public String boardVoteProposal(
+            @PathVariable("id") long id,
+            @RequestParam("decision") String decision,
+            @RequestParam(value = "note", required = false) String note,
+            HttpSession session,
+            Model model) {
+        AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        try {
+            proposalService.voteProposalAsBoard(user, id, decision, note);
             return "redirect:/main/proposals/" + id;
         } catch (IllegalArgumentException ex) {
             return proposalDetailWithError(id, session, model, ex.getMessage());

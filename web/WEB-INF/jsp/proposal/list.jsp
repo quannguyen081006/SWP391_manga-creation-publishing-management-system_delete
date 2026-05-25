@@ -31,6 +31,7 @@
                 <th>Genre</th>
                 <th>Approx. Chapter</th>
                 <th>Status</th>
+                <th>Board Votes</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -41,7 +42,22 @@
                     <td>${p.genre}</td>
                     <td>${p.approximateChapter}</td>
                     <td>
-                        <span class="status-chip ${p.status=='UNDER_REVIEW' ? 'status-review' : (p.status=='DRAFT' || p.status=='REVISION_REQUESTED' ? 'status-draft' : (p.status=='APPROVED' ? 'status-approved' : 'status-rejected'))}">${p.status}</span>
+                        <span class="status-chip ${p.status=='UNDER_REVIEW' || p.status=='BOARD_REVIEW' ? 'status-review' : (p.status=='DRAFT' || p.status=='REVISION_REQUESTED' ? 'status-draft' : (p.status=='APPROVED' ? 'status-approved' : 'status-rejected'))}">${p.status}</span>
+                    </td>
+                    <td>
+                        <c:choose>
+                            <c:when test="${p.status == 'BOARD_REVIEW'}">
+                                <strong>${p.boardTotalVotes}/3</strong>
+                                <span style="color:#6b7280;font-size:12px;">(${p.boardApproveVotes} approve, ${p.boardReviseVotes} revise, ${p.boardRejectVotes} reject)</span>
+                            </c:when>
+                            <c:when test="${p.boardTotalVotes > 0}">
+                                <strong>${p.boardTotalVotes}/3</strong>
+                                <span style="color:#6b7280;font-size:12px;">(${p.boardApproveVotes} approve, ${p.boardReviseVotes} revise, ${p.boardRejectVotes} reject)</span>
+                            </c:when>
+                            <c:otherwise>
+                                <span style="color:#9ca3af;">Not started</span>
+                            </c:otherwise>
+                        </c:choose>
                     </td>
                     <td><a class="btn small" href="${pageContext.request.contextPath}/main/proposals/${p.id}">View</a></td>
                 </tr>

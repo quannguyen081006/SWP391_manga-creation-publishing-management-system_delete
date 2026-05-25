@@ -16,6 +16,10 @@ public class Proposal {
     private Timestamp rejectedAt;
     private Long assignedEditorId;
     private int submitAttemptCount;
+    private int boardApproveVotes;
+    private int boardReviseVotes;
+    private int boardRejectVotes;
+    private int boardTotalVotes;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -55,4 +59,16 @@ public class Proposal {
 
     public int getSubmitAttemptCount() { return submitAttemptCount; }
     public void setSubmitAttemptCount(int submitAttemptCount) { this.submitAttemptCount = submitAttemptCount; }
+
+    public int getBoardApproveVotes() { return boardApproveVotes; }
+    public void setBoardApproveVotes(int boardApproveVotes) { this.boardApproveVotes = boardApproveVotes; }
+
+    public int getBoardReviseVotes() { return boardReviseVotes; }
+    public void setBoardReviseVotes(int boardReviseVotes) { this.boardReviseVotes = boardReviseVotes; }
+
+    public int getBoardRejectVotes() { return boardRejectVotes; }
+    public void setBoardRejectVotes(int boardRejectVotes) { this.boardRejectVotes = boardRejectVotes; }
+
+    public int getBoardTotalVotes() { return boardTotalVotes; }
+    public void setBoardTotalVotes(int boardTotalVotes) { this.boardTotalVotes = boardTotalVotes; }
 }

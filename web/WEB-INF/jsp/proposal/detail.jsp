@@ -24,6 +24,15 @@
         <p><strong>Approximate Chapter:</strong> ${proposal.approximateChapter}</p>
         <p><strong>Submit Attempts:</strong> ${proposal.submitAttemptCount}/2</p>
         <p><strong>Assigned Tantou Editor:</strong> <c:out value="${proposal.assignedEditorId}" default="Not assigned" /></p>
+        <p><strong>Board Votes:</strong>
+            <c:choose>
+                <c:when test="${proposal.status == 'BOARD_REVIEW' || proposal.boardTotalVotes > 0}">
+                    ${proposal.boardTotalVotes}/3 total
+                    <span style="color:#6b7280;">(${proposal.boardApproveVotes} approve, ${proposal.boardReviseVotes} request revision, ${proposal.boardRejectVotes} reject)</span>
+                </c:when>
+                <c:otherwise>Not started</c:otherwise>
+            </c:choose>
+        </p>
         <p><strong>File Upload:</strong>
             <c:choose>
                 <c:when test="${not empty proposal.originalFileName}">
@@ -72,6 +81,36 @@
                 var note = document.getElementById('reviewNote');
                 function syncNoteRequired() {
                     note.required = decision.value === 'REJECT' || decision.value === 'REVISE';
+                }
+                decision.addEventListener('change', syncNoteRequired);
+                syncNoteRequired();
+            }());
+        </script>
+    </c:if>
+
+    <c:if test="${canBoardVote}">
+        <div class="panel">
+            <h2>Editorial Board Vote</h2>
+            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/board-vote" class="form-grid">
+                <label>Decision</label>
+                <select name="decision">
+                    <option value="APPROVE">APPROVE FOR PUBLICATION</option>
+                    <option value="REVISE">REQUEST REVISION</option>
+                    <option value="REJECT">REJECT</option>
+                </select>
+
+                <label>Reason / Revision Notes</label>
+                <textarea id="boardVoteNote" name="note" rows="4" placeholder="Required when requesting revision or rejecting"></textarea>
+
+                <button type="submit" class="btn primary">Submit Vote</button>
+            </form>
+        </div>
+        <script>
+            (function () {
+                var decision = document.querySelector('form[action$="/board-vote"] select[name="decision"]');
+                var note = document.getElementById('boardVoteNote');
+                function syncNoteRequired() {
+                    note.required = decision.value === 'REVISE' || decision.value === 'REJECT';
                 }
                 decision.addEventListener('change', syncNoteRequired);
                 syncNoteRequired();

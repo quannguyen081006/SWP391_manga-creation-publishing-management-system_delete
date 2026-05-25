@@ -20,9 +20,32 @@ public class ProposalRepository {
     @Autowired
     private DataSource dataSource;
 
+    private static final String BOARD_REVOTE_NOTE = "Board vote tied across approve, revise, and reject. Revote requested.";
+    private static final String BOARD_VOTE_ACTIONS = "'APPROVED','REVISE_REQUESTED','REJECTED'";
+    private static final String CURRENT_BOARD_ROUND_FILTER =
+            "AND h.id > ISNULL((SELECT MAX(rv.id) FROM ProposalHistory rv WHERE rv.proposalId = p.id "
+            + "AND rv.actorRole = 'SYSTEM' AND rv.submitAttemptNumber = p.submitAttemptCount "
+            + "AND rv.actionType = 'UPDATED' AND rv.note = '" + BOARD_REVOTE_NOTE + "'), 0) ";
+
     private static final String SELECT_COLUMNS =
             "p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.sampleFilePath, p.originalFileName, "
-            + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount ";
+            + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount, "
+            + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
+            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actionType = 'APPROVED') AS boardApproveVotes, "
+            + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
+            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actionType = 'REVISE_REQUESTED') AS boardReviseVotes, "
+            + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
+            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actionType = 'REJECTED') AS boardRejectVotes, "
+            + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
+            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ")) AS boardTotalVotes ";
 
     public List<Proposal> findForMangaka(long mangakaId) {
         String sql = "SELECT " + SELECT_COLUMNS
@@ -32,9 +55,18 @@ public class ProposalRepository {
 
     public List<Proposal> findForBoardAndEditor() {
         String sql = "SELECT " + SELECT_COLUMNS
-            + "FROM Proposal p WHERE p.status IN ('UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
+            + "FROM Proposal p WHERE p.status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
             + "ORDER BY p.createdAt DESC";
         return queryMany(sql, null);
+    }
+
+    public List<Proposal> findForAssignedEditor(long editorId) {
+        String sql = "SELECT " + SELECT_COLUMNS
+            + "FROM Proposal p "
+            + "WHERE p.assignedEditorId = ? "
+            + "AND p.status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
+            + "ORDER BY p.createdAt DESC";
+        return queryMany(sql, Long.valueOf(editorId));
     }
 
     public Proposal findById(long id) {
@@ -167,10 +199,9 @@ public class ProposalRepository {
                     throw new IllegalArgumentException("Proposal is not under Tantou review");
                 }
                 if ("APPROVE".equals(decision)) {
-                    long seriesId = ensureSeriesExistsOnApprove(conn, proposalId);
-                    updateProposalStatus(conn, proposalId, "APPROVED", false);
+                    updateProposalStatus(conn, proposalId, "BOARD_REVIEW", false);
                     insertHistory(conn, proposalId, actor, "APPROVED", note, p.getSubmitAttemptCount());
-                    notifyProposalApproved(conn, p, seriesId);
+                    notifyBoardReviewOpened(conn, p);
                 } else if ("REJECT".equals(decision)) {
                     updateProposalStatus(conn, proposalId, "REJECTED", true);
                     insertHistory(conn, proposalId, actor, "REJECTED", note, p.getSubmitAttemptCount());
@@ -189,6 +220,35 @@ public class ProposalRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot review proposal", ex);
+        }
+    }
+
+    public void voteByEditorialBoard(AuthenticatedUser actor, long proposalId, String decision, String note) {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                Proposal p = lockProposal(conn, proposalId);
+                if (!"BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
+                    throw new IllegalArgumentException("Proposal is not waiting for Editorial Board review");
+                }
+                if (hasBoardVote(conn, proposalId, actor.getId(), p.getSubmitAttemptCount())) {
+                    throw new IllegalArgumentException("You have already voted on this proposal");
+                }
+
+                String action = "APPROVE".equals(decision)
+                        ? "APPROVED"
+                        : ("REJECT".equals(decision) ? "REJECTED" : "REVISE_REQUESTED");
+                insertHistory(conn, proposalId, actor, action, note, p.getSubmitAttemptCount());
+                resolveBoardReviewIfReady(conn, p);
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot vote on proposal", ex);
         }
     }
 
@@ -225,7 +285,7 @@ public class ProposalRepository {
     }
 
     public boolean hasActiveProposal(long mangakaId, long excludingProposalId) {
-        String sql = "SELECT COUNT(1) FROM Proposal WHERE mangakaId = ? AND id <> ? AND status IN ('UNDER_REVIEW','REVISION_REQUESTED')";
+        String sql = "SELECT COUNT(1) FROM Proposal WHERE mangakaId = ? AND id <> ? AND status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED')";
         try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, mangakaId);
             ps.setLong(2, excludingProposalId);
@@ -239,9 +299,7 @@ public class ProposalRepository {
     }
 
     private Proposal findById(Connection conn, long id) throws SQLException {
-        String sql =
-            "SELECT id, mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, "
-            + "status, submittedAt, rejectedAt, assignedEditorId, submitAttemptCount FROM Proposal WHERE id = ?";
+        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WHERE p.id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
             try (ResultSet rs = ps.executeQuery()) {
@@ -251,10 +309,7 @@ public class ProposalRepository {
     }
 
     private Proposal lockProposal(Connection conn, long proposalId) throws SQLException {
-        String sql =
-            "SELECT id, mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, "
-            + "status, submittedAt, rejectedAt, assignedEditorId, submitAttemptCount "
-            + "FROM Proposal WITH (UPDLOCK, ROWLOCK) WHERE id = ?";
+        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WITH (UPDLOCK, ROWLOCK) WHERE p.id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -314,6 +369,93 @@ public class ProposalRepository {
         throw new IllegalStateException("Cannot resolve approved series");
     }
 
+    private boolean hasBoardVote(Connection conn, long proposalId, long actorId, int attempt) throws SQLException {
+        String sql =
+            "SELECT COUNT(1) FROM ProposalHistory "
+            + "WHERE proposalId = ? AND actorId = ? AND actorRole = 'EDITORIAL_BOARD' "
+            + "AND submitAttemptNumber = ? AND actionType IN (" + BOARD_VOTE_ACTIONS + ") "
+            + "AND id > ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            ps.setLong(2, actorId);
+            ps.setInt(3, attempt);
+            ps.setLong(4, findCurrentBoardRoundStartId(conn, proposalId, attempt));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private void resolveBoardReviewIfReady(Connection conn, Proposal proposal) throws SQLException {
+        String countSql =
+            "SELECT "
+            + "SUM(CASE WHEN actionType = 'APPROVED' THEN 1 ELSE 0 END) AS approveVotes, "
+            + "SUM(CASE WHEN actionType = 'REVISE_REQUESTED' THEN 1 ELSE 0 END) AS reviseVotes, "
+            + "SUM(CASE WHEN actionType = 'REJECTED' THEN 1 ELSE 0 END) AS rejectVotes, "
+            + "COUNT(1) AS totalVotes "
+            + "FROM ProposalHistory "
+            + "WHERE proposalId = ? AND actorRole = 'EDITORIAL_BOARD' "
+            + "AND submitAttemptNumber = ? AND actionType IN (" + BOARD_VOTE_ACTIONS + ") "
+            + "AND id > ?";
+        int approveVotes;
+        int reviseVotes;
+        int rejectVotes;
+        int totalVotes;
+        try (PreparedStatement ps = conn.prepareStatement(countSql)) {
+            ps.setLong(1, proposal.getId());
+            ps.setInt(2, proposal.getSubmitAttemptCount());
+            ps.setLong(3, findCurrentBoardRoundStartId(conn, proposal.getId(), proposal.getSubmitAttemptCount()));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                approveVotes = rs.getInt("approveVotes");
+                reviseVotes = rs.getInt("reviseVotes");
+                rejectVotes = rs.getInt("rejectVotes");
+                totalVotes = rs.getInt("totalVotes");
+            }
+        }
+        if (totalVotes < 3) {
+            return;
+        }
+
+        if (approveVotes == 1 && reviseVotes == 1 && rejectVotes == 1) {
+            insertSystemHistory(conn, proposal.getId(), "UPDATED", BOARD_REVOTE_NOTE, proposal.getSubmitAttemptCount());
+            return;
+        }
+
+        if (approveVotes > reviseVotes && approveVotes > rejectVotes) {
+            long seriesId = ensureSeriesExistsOnApprove(conn, proposal.getId());
+            updateProposalStatus(conn, proposal.getId(), "APPROVED", false);
+            insertSystemHistory(conn, proposal.getId(), "APPROVED", "Editorial Board approved publication.", proposal.getSubmitAttemptCount());
+            notifyProposalApproved(conn, proposal, seriesId);
+        } else if (reviseVotes > approveVotes && reviseVotes > rejectVotes) {
+            updateProposalStatus(conn, proposal.getId(), "REVISION_REQUESTED", false);
+            insertSystemHistory(conn, proposal.getId(), "REVISE_REQUESTED", "Editorial Board requested revisions before publication.", proposal.getSubmitAttemptCount());
+            notifyProposalRevisionRequested(conn, proposal);
+        } else if (rejectVotes > approveVotes && rejectVotes > reviseVotes) {
+            updateProposalStatus(conn, proposal.getId(), "REJECTED", true);
+            insertSystemHistory(conn, proposal.getId(), "REJECTED", "Editorial Board rejected publication.", proposal.getSubmitAttemptCount());
+        } else {
+            insertSystemHistory(conn, proposal.getId(), "UPDATED", BOARD_REVOTE_NOTE, proposal.getSubmitAttemptCount());
+        }
+    }
+
+    private long findCurrentBoardRoundStartId(Connection conn, long proposalId, int attempt) throws SQLException {
+        String sql =
+            "SELECT ISNULL(MAX(id), 0) FROM ProposalHistory "
+            + "WHERE proposalId = ? AND actorRole = 'SYSTEM' AND submitAttemptNumber = ? "
+            + "AND actionType = 'UPDATED' AND note = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            ps.setInt(2, attempt);
+            ps.setString(3, BOARD_REVOTE_NOTE);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
     private void notifyProposalApproved(Connection conn, Proposal proposal, long seriesId) throws SQLException {
         String sql =
             "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
@@ -337,11 +479,43 @@ public class ProposalRepository {
         }
     }
 
+    private void notifyBoardReviewOpened(Connection conn, Proposal proposal) throws SQLException {
+        String sql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "SELECT u.id, 'PROPOSAL_BOARD_REVIEW_OPENED', 'Proposal ready for board review', "
+            + "?, ?, ?, 'PROPOSAL', 0, GETDATE() "
+            + "FROM [User] u "
+            + "JOIN UserRole ur ON ur.userId = u.id "
+            + "JOIN [Role] r ON r.id = ur.roleId "
+            + "WHERE u.status = 'ACTIVE' AND r.name = 'EDITORIAL_BOARD'";
+        String message = "Proposal \"" + proposal.getTitle() + "\" passed Tantou review and is ready for Editorial Board vote.";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, message);
+            ps.setString(2, "/main/proposals/" + proposal.getId());
+            ps.setLong(3, proposal.getId());
+            ps.executeUpdate();
+        }
+    }
+
+    private void notifyProposalRevisionRequested(Connection conn, Proposal proposal) throws SQLException {
+        String sql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "VALUES (?, 'PROPOSAL_BOARD_REVISION_REQUESTED', 'Revision requested', ?, ?, ?, 'PROPOSAL', 0, GETDATE())";
+        String message = "Editorial Board requested revisions for proposal \"" + proposal.getTitle() + "\".";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposal.getMangakaId());
+            ps.setString(2, message);
+            ps.setString(3, "/main/proposals/" + proposal.getId() + "/edit");
+            ps.setLong(4, proposal.getId());
+            ps.executeUpdate();
+        }
+    }
+
     private long findLeastAssignedTantouEditor(Connection conn) throws SQLException {
         String sql =
             "SELECT TOP 1 u.id "
             + "FROM [User] u JOIN UserRole ur ON ur.userId = u.id JOIN [Role] r ON r.id = ur.roleId "
-            + "LEFT JOIN Proposal p ON p.assignedEditorId = u.id AND p.status IN ('UNDER_REVIEW','REVISION_REQUESTED') "
+            + "LEFT JOIN Proposal p ON p.assignedEditorId = u.id AND p.status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED') "
             + "WHERE r.name = 'TANTOU_EDITOR' AND u.status = 'ACTIVE' "
             + "GROUP BY u.id ORDER BY COUNT(p.id), u.id";
         try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -425,6 +599,18 @@ public class ProposalRepository {
         long editorId = rs.getLong("assignedEditorId");
         p.setAssignedEditorId(rs.wasNull() ? null : Long.valueOf(editorId));
         p.setSubmitAttemptCount(rs.getInt("submitAttemptCount"));
+        p.setBoardApproveVotes(readOptionalInt(rs, "boardApproveVotes"));
+        p.setBoardReviseVotes(readOptionalInt(rs, "boardReviseVotes"));
+        p.setBoardRejectVotes(readOptionalInt(rs, "boardRejectVotes"));
+        p.setBoardTotalVotes(readOptionalInt(rs, "boardTotalVotes"));
         return p;
+    }
+
+    private int readOptionalInt(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getInt(columnName);
+        } catch (SQLException ex) {
+            return 0;
+        }
     }
 }

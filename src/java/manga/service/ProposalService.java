@@ -29,7 +29,10 @@ public class ProposalService {
         if (user.hasRole("MANGAKA")) {
             return proposalRepository.findForMangaka(user.getId());
         }
-        if (user.hasRole("EDITORIAL_BOARD") || user.hasRole("TANTOU_EDITOR") || user.hasRole("ADMIN")) {
+        if (user.hasRole("TANTOU_EDITOR")) {
+            return proposalRepository.findForAssignedEditor(user.getId());
+        }
+        if (user.hasRole("EDITORIAL_BOARD") || user.hasRole("ADMIN")) {
             return proposalRepository.findForBoardAndEditor();
         }
         throw new IllegalArgumentException("You do not have permission to view proposals");
@@ -40,10 +43,25 @@ public class ProposalService {
         if (p == null) {
             throw new IllegalArgumentException("Proposal not found");
         }
-        if ("DRAFT".equalsIgnoreCase(p.getStatus()) && p.getMangakaId() != user.getId()) {
-            throw new IllegalArgumentException("You do not have access to this proposal");
+        if (user.hasRole("MANGAKA")) {
+            if (p.getMangakaId() != user.getId()) {
+                throw new IllegalArgumentException("You do not have access to this proposal");
+            }
+            return p;
         }
-        return p;
+        if (user.hasRole("TANTOU_EDITOR")) {
+            if (p.getAssignedEditorId() == null || p.getAssignedEditorId().longValue() != user.getId()) {
+                throw new IllegalArgumentException("Only assigned Tantou Editor can view this proposal");
+            }
+            return p;
+        }
+        if (user.hasRole("EDITORIAL_BOARD") || user.hasRole("ADMIN")) {
+            if ("DRAFT".equalsIgnoreCase(p.getStatus())) {
+                throw new IllegalArgumentException("You do not have access to this proposal");
+            }
+            return p;
+        }
+        throw new IllegalArgumentException("You do not have access to this proposal");
     }
 
     public long createProposal(AuthenticatedUser user, String title, String genre, String synopsis,
@@ -95,6 +113,18 @@ public class ProposalService {
             throw new IllegalArgumentException("A note is required for REJECT and REVISE decisions");
         }
         proposalRepository.reviewByTantou(user, proposalId, normalized, safeTrim(note));
+    }
+
+    public void voteProposalAsBoard(AuthenticatedUser user, long proposalId, String decision, String note) {
+        requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can vote on proposals");
+        String normalized = decision == null ? "" : decision.trim().toUpperCase();
+        if (!"APPROVE".equals(normalized) && !"REVISE".equals(normalized) && !"REJECT".equals(normalized)) {
+            throw new IllegalArgumentException("Board decision must be APPROVE, REVISE, or REJECT");
+        }
+        if (("REVISE".equals(normalized) || "REJECT".equals(normalized)) && isBlank(note)) {
+            throw new IllegalArgumentException("A note is required when requesting revisions or rejecting");
+        }
+        proposalRepository.voteByEditorialBoard(user, proposalId, normalized, safeTrim(note));
     }
 
     public List<ProposalHistory> listHistory(AuthenticatedUser user, long proposalId) {
