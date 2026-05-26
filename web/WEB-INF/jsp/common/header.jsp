@@ -106,15 +106,17 @@
                 <span class="nav-icon" aria-hidden="true"></span>
                 <span class="nav-label">Decisions</span>
             </a>
-            <a class="nav-item nav-ranking ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods" title="Ranking">
-                <span class="nav-icon" aria-hidden="true"></span>
-                <span class="nav-label">Ranking</span>
-            </a>
+        </c:if>
+        <c:if test="${isAdmin || isBoard || isTantou}">
             <a class="nav-item nav-analytics ${fn:contains(uri, '/main/analytics') ? 'active' : ''}" href="${ctx}/main/analytics" title="Performance Analytics">
                 <span class="nav-icon" aria-hidden="true"></span>
                 <span class="nav-label">Performance Analytics</span>
             </a>
         </c:if>
+        <a class="nav-item nav-ranking ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods" title="Ranking">
+            <span class="nav-icon" aria-hidden="true"></span>
+            <span class="nav-label">Ranking</span>
+        </a>
 
         <c:if test="${isAdmin}">
             <a class="nav-item nav-users ${fn:contains(uri, '/main/users') ? 'active' : ''}" href="${ctx}/main/users" title="Users">

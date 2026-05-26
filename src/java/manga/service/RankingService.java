@@ -42,16 +42,17 @@ public class RankingService {
             throw new BusinessRuleException("Only ADMIN can create ranking period");
         }
 
-        // Validate dates
-        if (request.getStartDate() == null || request.getEndDate() == null) {
-            throw new BusinessRuleException("Start date and end date are required");
+        // Ranking periods always start on creation date.
+        if (request.getEndDate() == null) {
+            throw new BusinessRuleException("End date is required");
         }
 
-        if (request.getStartDate().after(request.getEndDate())) {
-            throw new BusinessRuleException("Start date must be before end date");
+        Date startDate = new Date(System.currentTimeMillis());
+        if (startDate.after(request.getEndDate())) {
+            throw new BusinessRuleException("End date must be today or later");
         }
 
-        long periodId = rankingRepository.createPeriod(request.getName(), request.getStartDate(), request.getEndDate());
+        long periodId = rankingRepository.createPeriod(request.getName(), startDate, request.getEndDate());
 
         // Audit log
         auditLogService.append(user, "CREATE_RANKING_PERIOD", "RANKING_PERIOD", periodId, 

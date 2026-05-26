@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
+import manga.dto.RankingCsvRow;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -154,6 +155,69 @@ public class RankingRepository {
 
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot submit vote entry", ex);
+        }
+    }
+
+    public boolean seriesExists(long seriesId) {
+        String sql = "SELECT COUNT(1) FROM Series WHERE id = ?";
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, seriesId);
+            try ( ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check series", ex);
+        }
+    }
+
+    public void replaceCsvEntries(long periodId, long adminUserId, List<RankingCsvRow> rows) {
+        String statusSql = "SELECT status FROM RankingPeriod WHERE id = ?";
+        String deleteSql = "DELETE FROM VoteEntry WHERE periodId = ? AND boardMemberId = ?";
+        String insertSql = "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt)"
+                + " VALUES (?, ?, ?, ?, ?, GETDATE())";
+
+        try ( Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                try ( PreparedStatement ps = conn.prepareStatement(statusSql)) {
+                    ps.setLong(1, periodId);
+                    try ( ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            throw new IllegalArgumentException("Ranking period not found");
+                        }
+                        if (!"OPEN".equalsIgnoreCase(rs.getString("status"))) {
+                            throw new IllegalArgumentException("CSV upload is only allowed for OPEN ranking periods");
+                        }
+                    }
+                }
+
+                try ( PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                    ps.setLong(1, periodId);
+                    ps.setLong(2, adminUserId);
+                    ps.executeUpdate();
+                }
+
+                try ( PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                    for (RankingCsvRow row : rows) {
+                        ps.setLong(1, periodId);
+                        ps.setLong(2, row.getSeriesId());
+                        ps.setLong(3, adminUserId);
+                        ps.setInt(4, row.getVoteCount());
+                        ps.setInt(5, row.getReaderCount());
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot import ranking CSV", ex);
         }
     }
 

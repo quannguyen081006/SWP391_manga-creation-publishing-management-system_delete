@@ -17,6 +17,7 @@ import manga.repository.UserAdminRepository;
 import manga.service.AuditLogService;
 import manga.service.NotificationService;
 import manga.service.ProposalService;
+import manga.service.RankingCsvImportService;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Date;
@@ -73,6 +74,9 @@ public class ModuleWebController {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private RankingCsvImportService rankingCsvImportService;
 
     @RequestMapping(value = "/proposals/{id}/edit", method = RequestMethod.GET)
     public String proposalEditPage(@PathVariable("id") long id, HttpSession session, Model model) {
@@ -575,14 +579,34 @@ public class ModuleWebController {
     public String rankingCreate(
             HttpSession session,
             @RequestParam("name") String name,
-            @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
             requireAdmin(user);
-            rankingRepository.createPeriod(name, Date.valueOf(startDate), Date.valueOf(endDate));
+            Date startDate = new Date(System.currentTimeMillis());
+            rankingRepository.createPeriod(name, startDate, Date.valueOf(endDate));
             return "redirect:/main/ranking/periods";
+        } catch (RuntimeException ex) {
+            rankingPeriods(session, model);
+            model.addAttribute("error", ex.getMessage());
+            return "ranking/period";
+        }
+    }
+
+    @RequestMapping(value = "/ranking/periods/{id}/upload", method = RequestMethod.POST)
+    public String rankingUploadCsv(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam("csvFile") org.springframework.web.multipart.MultipartFile csvFile,
+            Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            requireAdmin(user);
+            int count = rankingCsvImportService.importCsv(id, csvFile, user);
+            model.addAttribute("success", "CSV imported successfully. " + count + " ranking rows imported.");
+            rankingPeriods(session, model);
+            return "ranking/period";
         } catch (RuntimeException ex) {
             rankingPeriods(session, model);
             model.addAttribute("error", ex.getMessage());

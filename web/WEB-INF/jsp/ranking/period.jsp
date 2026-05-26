@@ -14,13 +14,13 @@
 <p class="page-sub">Manage ranking cycles and vote entries</p>
 
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
+<c:if test="${not empty success}"><div class="alert success">${success}</div></c:if>
 
 <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN')}">
 <div class="section-card">
     <h3 class="section-title">Create Period (Admin)</h3>
-    <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/create" style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">
+    <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/create" style="display:grid;grid-template-columns:2fr 1fr auto;gap:10px;align-items:end;">
         <div><label>Name</label><input type="text" name="name" required /></div>
-        <div><label>Start</label><input type="date" name="startDate" required /></div>
         <div><label>End</label><input type="date" name="endDate" required /></div>
         <div><button class="btn primary" type="submit">Create</button></div>
     </form>
@@ -41,6 +41,12 @@
                     <td>
                         <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/results">Results</a>
                         <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN')}">
+                            <c:if test="${p.status == 'OPEN'}">
+                                <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/upload" enctype="multipart/form-data" style="display:inline-block;">
+                                    <input type="file" name="csvFile" accept=".csv" required style="display:inline-block; margin-right:4px;" />
+                                    <button class="btn small" type="submit">Upload CSV</button>
+                                </form>
+                            </c:if>
                             <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/close" style="display:inline-block;">
                                 <button class="btn small" type="submit">Close</button>
                             </form>

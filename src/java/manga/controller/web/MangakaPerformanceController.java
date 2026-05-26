@@ -51,8 +51,8 @@ public class MangakaPerformanceController {
     private MangakaPerformanceRepository mangakaPerformanceRepository;
 
     private void requireAdminOrEditorialBoard(AuthenticatedUser user) {
-        if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
-            throw new IllegalArgumentException("Only ADMIN and EDITORIAL_BOARD can access analytics");
+        if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD") && !user.hasRole("TANTOU_EDITOR")) {
+            throw new IllegalArgumentException("Only ADMIN, EDITORIAL_BOARD and TANTOU_EDITOR can access analytics");
         }
     }
 

@@ -75,13 +75,16 @@ public class AuthInterceptor implements HandlerInterceptor {
             return user.hasRole("ADMIN") || user.hasRole("EDITORIAL_BOARD");
         }
         if (path.startsWith("/main/ranking")) {
-            return user.hasRole("ADMIN") || user.hasRole("EDITORIAL_BOARD");
+            return true;
         }
         if (path.startsWith("/main/tasks")) {
             return user.hasRole("ADMIN") || user.hasRole("MANGAKA") || user.hasRole("ASSISTANT") || user.hasRole("TANTOU_EDITOR");
         }
         if (path.startsWith("/main/manuscripts")) {
             return user.hasRole("ADMIN") || user.hasRole("MANGAKA") || user.hasRole("TANTOU_EDITOR");
+        }
+        if (path.startsWith("/main/analytics")) {
+            return user.hasRole("ADMIN") || user.hasRole("EDITORIAL_BOARD") || user.hasRole("TANTOU_EDITOR");
         }
         return true;
     }

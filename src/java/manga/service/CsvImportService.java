@@ -9,8 +9,10 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class CsvImportService {
@@ -19,6 +21,7 @@ public class CsvImportService {
     private PerformanceImportRecordRepository importRecordRepository;
 
     public static class CsvRow {
+        public long mangakaId;
         public String mangakaName;
         public double popularityScore;
         public double reliabilityScore;
@@ -45,13 +48,15 @@ public class CsvImportService {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
             String line;
             int lineNumber = 0;
+            Set<Long> seenMangakaIds = new HashSet<>();
 
             // Skip header
             String header = reader.readLine();
             lineNumber++;
 
-            if (header == null || !header.trim().equalsIgnoreCase("mangakaName,popularity,reliability,quality")) {
-                result.errors.add("Invalid CSV header. Expected: mangakaName,popularity,reliability,quality");
+            if (header == null || !header.trim().equalsIgnoreCase("mangakaId,mangakaName,popularity,reliability,quality")) {
+                result.errors.add("Invalid CSV header. Expected: mangakaId,mangakaName,popularity,reliability,quality");
+                result.failureCount++;
                 return result;
             }
 
@@ -64,8 +69,13 @@ public class CsvImportService {
 
                 try {
                     CsvRow row = parseCsvRow(line, lineNumber, mangakaNameToIdMap);
-                    result.validRows.add(row);
-                    result.successCount++;
+                    if (!seenMangakaIds.add(row.mangakaId)) {
+                        result.errors.add("Line " + lineNumber + ": duplicate mangakaId " + row.mangakaId);
+                        result.failureCount++;
+                    } else {
+                        result.validRows.add(row);
+                        result.successCount++;
+                    }
                 } catch (IllegalArgumentException e) {
                     result.errors.add("Line " + lineNumber + ": " + e.getMessage());
                     result.failureCount++;
@@ -73,6 +83,12 @@ public class CsvImportService {
             }
         } catch (Exception e) {
             result.errors.add("Failed to read CSV file: " + e.getMessage());
+            result.failureCount++;
+        }
+
+        if (result.successCount == 0 && result.failureCount == 0) {
+            result.errors.add("CSV must contain at least one performance row");
+            result.failureCount++;
         }
 
         return result;
@@ -80,21 +96,33 @@ public class CsvImportService {
 
     private CsvRow parseCsvRow(String line, int lineNumber, Map<String, Long> mangakaNameToIdMap) {
         String[] parts = line.split(",");
-        if (parts.length != 4) {
-            throw new IllegalArgumentException("Invalid row format. Expected 4 columns: mangakaName,popularity,reliability,quality");
+        if (parts.length != 5) {
+            throw new IllegalArgumentException("Invalid row format. Expected 5 columns: mangakaId,mangakaName,popularity,reliability,quality");
         }
 
-        String mangakaName = parts[0].trim();
-        String popularityStr = parts[1].trim();
-        String reliabilityStr = parts[2].trim();
-        String qualityStr = parts[3].trim();
+        String mangakaIdStr = parts[0].trim();
+        String mangakaName = parts[1].trim();
+        String popularityStr = parts[2].trim();
+        String reliabilityStr = parts[3].trim();
+        String qualityStr = parts[4].trim();
 
         if (mangakaName.isEmpty()) {
             throw new IllegalArgumentException("Mangaka name cannot be empty");
         }
 
-        if (!mangakaNameToIdMap.containsKey(mangakaName)) {
+        long mangakaId;
+        try {
+            mangakaId = Long.parseLong(mangakaIdStr);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid mangakaId");
+        }
+
+        Long expectedMangakaId = mangakaNameToIdMap.get(mangakaName);
+        if (expectedMangakaId == null) {
             throw new IllegalArgumentException("Mangaka '" + mangakaName + "' not found in database");
+        }
+        if (expectedMangakaId.longValue() != mangakaId) {
+            throw new IllegalArgumentException("Mangaka ID does not match mangaka name");
         }
 
         double popularityScore;
@@ -122,6 +150,7 @@ public class CsvImportService {
         }
 
         CsvRow row = new CsvRow();
+        row.mangakaId = mangakaId;
         row.mangakaName = mangakaName;
         row.popularityScore = popularityScore;
         row.reliabilityScore = reliabilityScore;
@@ -132,16 +161,13 @@ public class CsvImportService {
 
     public void importValidRows(long periodId, List<CsvRow> validRows, Map<String, Long> mangakaNameToIdMap) {
         for (CsvRow row : validRows) {
-            Long mangakaId = mangakaNameToIdMap.get(row.mangakaName);
-            if (mangakaId != null) {
-                importRecordRepository.saveImportRecord(
-                    periodId,
-                    mangakaId,
-                    row.popularityScore,
-                    row.reliabilityScore,
-                    row.qualityScore
-                );
-            }
+            importRecordRepository.saveImportRecord(
+                periodId,
+                row.mangakaId,
+                row.popularityScore,
+                row.reliabilityScore,
+                row.qualityScore
+            );
         }
     }
 
