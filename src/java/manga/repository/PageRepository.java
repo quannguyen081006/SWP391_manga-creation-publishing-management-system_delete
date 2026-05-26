@@ -197,6 +197,29 @@ public class PageRepository {
         }
     }
 
+    public void upsertUploadedByPageNumber(long chapterId, int pageNumber, String imageUrl, long uploadedBy) {
+        requirePageTableReady();
+        if (imageUrl == null || imageUrl.trim().isEmpty()) {
+            return;
+        }
+        String findSql = "SELECT id FROM " + TABLE_PAGE + " WHERE chapterId = ? AND pageNumber = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement find = conn.prepareStatement(findSql)) {
+            find.setLong(1, chapterId);
+            find.setInt(2, pageNumber);
+            try (ResultSet rs = find.executeQuery()) {
+                if (rs.next()) {
+                    markUploaded(rs.getLong("id"), imageUrl.trim(), uploadedBy);
+                    return;
+                }
+            }
+            long pageId = create(chapterId, pageNumber);
+            markUploaded(pageId, imageUrl.trim(), uploadedBy);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot sync approved task image to chapter page", ex);
+        }
+    }
+
     public void markUploaded(long pageId, String imageUrl, long uploadedBy) {
         requirePageTableReady();
         String sql = "UPDATE " + TABLE_PAGE + " SET imageUrl = ?, uploadedBy = ?, uploadedAt = GETDATE(), status = 'UPLOADED' WHERE id = ?";

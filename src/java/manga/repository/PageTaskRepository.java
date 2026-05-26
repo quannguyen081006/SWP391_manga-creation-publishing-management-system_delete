@@ -1,6 +1,7 @@
 package manga.repository;
 
 import manga.model.AuthenticatedUser;
+import manga.model.ChapterImageItem;
 import manga.model.TaskSummary;
 import java.sql.Connection;
 import java.sql.Date;
@@ -34,6 +35,12 @@ public class PageTaskRepository {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private ChapterImageRepository chapterImageRepository;
+
+    @Autowired
+    private PageRepository pageRepository;
 
     private String taskSelectColumns() {
         if (isTaskSchemaExtended()) {
@@ -524,6 +531,7 @@ public class PageTaskRepository {
             }
 
             refreshChapterProgress(chapterId);
+            promoteTaskImagesToChapter(taskId, chapterId, mangakaId);
 
             if (comment != null && !comment.trim().isEmpty()) {
                 createNotification(
@@ -535,6 +543,20 @@ public class PageTaskRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot approve task", ex);
+        }
+    }
+
+    private void promoteTaskImagesToChapter(long taskId, long chapterId, long approvedBy) {
+        List<ChapterImageItem> images = chapterImageRepository.listByTask(taskId);
+        for (ChapterImageItem image : images) {
+            if (image.getPageNumber() == null || !"PAGE".equalsIgnoreCase(image.getImageType())) {
+                continue;
+            }
+            pageRepository.upsertUploadedByPageNumber(
+                    chapterId,
+                    image.getPageNumber().intValue(),
+                    image.getFileUrl(),
+                    approvedBy);
         }
     }
 

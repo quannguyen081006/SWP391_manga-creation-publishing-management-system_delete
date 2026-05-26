@@ -207,8 +207,10 @@ public class ModuleWebController {
         if (task == null) {
             throw new IllegalArgumentException("Task not found");
         }
-        boolean canAssistantUpdate = user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId();
-        boolean canAssistantSubmit = canAssistantUpdate
+        boolean isAssignedAssistant = user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId();
+        boolean canAssistantUpdate = isAssignedAssistant
+                && !"APPROVED".equalsIgnoreCase(task.getStatus());
+        boolean canAssistantSubmit = isAssignedAssistant
                 && ("IN_PROGRESS".equalsIgnoreCase(task.getStatus())
                 || "REJECTED".equalsIgnoreCase(task.getStatus())
                 || "OVERDUE".equalsIgnoreCase(task.getStatus()));
@@ -216,7 +218,7 @@ public class ModuleWebController {
         boolean canMangakaReview = isOwnerMangaka
                 && "SUBMITTED".equalsIgnoreCase(task.getStatus());
         boolean canTantouView = user.hasRole("TANTOU_EDITOR") && pageTaskRepository.getTaskTantouEditor(id) == user.getId();
-        if (!user.hasRole("ADMIN") && !canAssistantUpdate && !isOwnerMangaka && !canTantouView) {
+        if (!user.hasRole("ADMIN") && !isAssignedAssistant && !isOwnerMangaka && !canTantouView) {
             throw new IllegalArgumentException("You can only view tasks assigned to your role");
         }
         model.addAttribute("task", task);
