@@ -1,11 +1,12 @@
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@taglib uri="http://java.sun.com/jsp/jstl/fmt" prefix="fmt" %>
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Proposals</title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css" />
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=board-vote-ui-2" />
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
@@ -31,7 +32,7 @@
                 <th>Genre</th>
                 <th>Approx. Chapter</th>
                 <th>Status</th>
-                <th>Board Votes</th>
+                <th>Board Voting</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -46,16 +47,37 @@
                     </td>
                     <td>
                         <c:choose>
-                            <c:when test="${p.status == 'BOARD_REVIEW'}">
-                                <strong>${p.boardTotalVotes}/3</strong>
-                                <span style="color:#6b7280;font-size:12px;">(${p.boardApproveVotes} approve, ${p.boardReviseVotes} revise, ${p.boardRejectVotes} reject)</span>
+                            <c:when test="${not empty p.boardRoundId}">
+                                <div class="proposal-vote-compact ${p.boardRoundStatus == 'OPEN' ? 'is-open' : 'is-closed'}">
+                                    <div class="compact-vote-head">
+                                        <strong>${p.boardTotalVotes}/${p.boardEligibleVoterCount} cast</strong>
+                                        <span class="compact-round ${p.boardRoundStatus == 'OPEN' ? 'is-open' : ''}">${p.boardRoundStatus}</span>
+                                    </div>
+                                    <div class="compact-vote-track">
+                                        <span style="width:${p.boardEligibleVoterCount > 0 ? (p.boardTotalVotes * 100 / p.boardEligibleVoterCount) : 0}%"></span>
+                                    </div>
+                                    <div class="compact-vote-meta">
+                                        <span>Round #${p.boardRoundNumber}</span>
+                                        <span>Min quorum 3</span>
+                                    </div>
+                                    <c:if test="${p.boardRoundStatus == 'OPEN'}">
+                                        <div class="compact-vote-deadline">
+                                            Closes <fmt:formatDate value="${p.boardVotingClosesAt}" pattern="yyyy-MM-dd HH:mm" />
+                                        </div>
+                                    </c:if>
+                                    <div class="compact-vote-counts">
+                                        <span class="vote-breakdown-approve">A ${p.boardApproveVotes}</span>
+                                        <span class="vote-breakdown-revise">R ${p.boardReviseVotes}</span>
+                                        <span class="vote-breakdown-reject">X ${p.boardRejectVotes}</span>
+                                    </div>
+                                </div>
                             </c:when>
                             <c:when test="${p.boardTotalVotes > 0}">
-                                <strong>${p.boardTotalVotes}/3</strong>
+                                <strong>${p.boardTotalVotes} cast</strong>
                                 <span style="color:#6b7280;font-size:12px;">(${p.boardApproveVotes} approve, ${p.boardReviseVotes} revise, ${p.boardRejectVotes} reject)</span>
                             </c:when>
                             <c:otherwise>
-                                <span style="color:#9ca3af;">Not started</span>
+                                <span class="proposal-vote-not-started">Not started</span>
                             </c:otherwise>
                         </c:choose>
                     </td>

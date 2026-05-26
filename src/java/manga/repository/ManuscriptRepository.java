@@ -166,7 +166,7 @@ public class ManuscriptRepository {
     }
 
     public void submitForReview(long manuscriptId) {
-        String sql = "UPDATE Manuscript SET status='SUBMITTED', submittedAt=GETDATE(), reviewDeadline=DATEADD(HOUR,48,GETDATE()) WHERE id = ? AND status IN ('DRAFT','REJECTED')";
+        String sql = "UPDATE Manuscript SET status='SUBMITTED', submittedAt=GETDATE() WHERE id = ? AND status IN ('DRAFT','REJECTED')";
         try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, manuscriptId);
             if (ps.executeUpdate() == 0) {

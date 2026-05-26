@@ -20,6 +20,13 @@ public class Proposal {
     private int boardReviseVotes;
     private int boardRejectVotes;
     private int boardTotalVotes;
+    private Long boardRoundId;
+    private Integer boardRoundNumber;
+    private String boardRoundStatus;
+    private Timestamp boardVotingOpenedAt;
+    private Timestamp boardVotingClosesAt;
+    private Timestamp boardVotingClosedAt;
+    private int boardEligibleVoterCount;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -71,4 +78,25 @@ public class Proposal {
 
     public int getBoardTotalVotes() { return boardTotalVotes; }
     public void setBoardTotalVotes(int boardTotalVotes) { this.boardTotalVotes = boardTotalVotes; }
+
+    public Long getBoardRoundId() { return boardRoundId; }
+    public void setBoardRoundId(Long boardRoundId) { this.boardRoundId = boardRoundId; }
+
+    public Integer getBoardRoundNumber() { return boardRoundNumber; }
+    public void setBoardRoundNumber(Integer boardRoundNumber) { this.boardRoundNumber = boardRoundNumber; }
+
+    public String getBoardRoundStatus() { return boardRoundStatus; }
+    public void setBoardRoundStatus(String boardRoundStatus) { this.boardRoundStatus = boardRoundStatus; }
+
+    public Timestamp getBoardVotingOpenedAt() { return boardVotingOpenedAt; }
+    public void setBoardVotingOpenedAt(Timestamp boardVotingOpenedAt) { this.boardVotingOpenedAt = boardVotingOpenedAt; }
+
+    public Timestamp getBoardVotingClosesAt() { return boardVotingClosesAt; }
+    public void setBoardVotingClosesAt(Timestamp boardVotingClosesAt) { this.boardVotingClosesAt = boardVotingClosesAt; }
+
+    public Timestamp getBoardVotingClosedAt() { return boardVotingClosedAt; }
+    public void setBoardVotingClosedAt(Timestamp boardVotingClosedAt) { this.boardVotingClosedAt = boardVotingClosedAt; }
+
+    public int getBoardEligibleVoterCount() { return boardEligibleVoterCount; }
+    public void setBoardEligibleVoterCount(int boardEligibleVoterCount) { this.boardEligibleVoterCount = boardEligibleVoterCount; }
 }

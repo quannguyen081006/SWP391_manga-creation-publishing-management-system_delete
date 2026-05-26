@@ -68,6 +68,9 @@ public class ProposalService {
             String sampleFilePath, String originalFileName, Integer approximateChapter) {
         requireRole(user, "MANGAKA", "Only MANGAKA can create proposals");
         validateProposalContent(title, genre, synopsis, sampleFilePath, approximateChapter, true);
+        if (proposalRepository.hasActiveDraft(user.getId(), 0L)) {
+            throw new IllegalArgumentException("You already have an active draft proposal");
+        }
         return proposalRepository.createDraft(user, title.trim(), genre.trim(), synopsis.trim(),
                 sampleFilePath, safeTrim(originalFileName), approximateChapter.intValue());
     }
@@ -125,6 +128,15 @@ public class ProposalService {
             throw new IllegalArgumentException("A note is required when requesting revisions or rejecting");
         }
         proposalRepository.voteByEditorialBoard(user, proposalId, normalized, safeTrim(note));
+    }
+
+    public boolean canVoteProposalAsBoard(AuthenticatedUser user, Proposal proposal) {
+        return user != null
+                && proposal != null
+                && user.hasRole("EDITORIAL_BOARD")
+                && "BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())
+                && "OPEN".equalsIgnoreCase(proposal.getBoardRoundStatus())
+                && proposalRepository.canVoteInCurrentBoardRound(proposal.getId(), user.getId());
     }
 
     public List<ProposalHistory> listHistory(AuthenticatedUser user, long proposalId) {

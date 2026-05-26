@@ -25,7 +25,7 @@ public class PageRepository {
     private void requirePageTableReady() {
         if (!isPageTableReady()) {
             throw new IllegalArgumentException(
-                    "Bảng Page chưa có. Chạy database/migration_add_page_table.sql trên MangaEditorialDB trước.");
+                    "Page table is missing. Run database/schema.sql and database/seed_v5.sql on MangaEditorialDB first.");
         }
     }
 
@@ -249,7 +249,7 @@ public class PageRepository {
             if (isMissingPageTable(ex)) {
                 pageTableReady = Boolean.FALSE;
                 throw new IllegalArgumentException(
-                        "Bảng Page chưa có. Chạy database/migration_add_page_table.sql trên MangaEditorialDB trước.");
+                        "Page table is missing. Run database/schema.sql and database/seed_v5.sql on MangaEditorialDB first.");
             }
             throw new RuntimeException("Cannot resolve next page number", ex);
         }

@@ -8,6 +8,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
@@ -21,31 +22,39 @@ public class ProposalRepository {
     private DataSource dataSource;
 
     private static final String BOARD_REVOTE_NOTE = "Board vote tied across approve, revise, and reject. Revote requested.";
+    private static final String BOARD_QUORUM_NOT_MET_NOTE = "Board voting round closed without the minimum 3 valid votes. A new round was opened.";
     private static final String BOARD_VOTE_ACTIONS = "'APPROVED','REVISE_REQUESTED','REJECTED'";
-    private static final String CURRENT_BOARD_ROUND_FILTER =
-            "AND h.id > ISNULL((SELECT MAX(rv.id) FROM ProposalHistory rv WHERE rv.proposalId = p.id "
-            + "AND rv.actorRole = 'SYSTEM' AND rv.submitAttemptNumber = p.submitAttemptCount "
-            + "AND rv.actionType = 'UPDATED' AND rv.note = '" + BOARD_REVOTE_NOTE + "'), 0) ";
+    private static final String CURRENT_BOARD_ROUND_ID =
+            "(SELECT TOP 1 br.id FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC)";
 
     private static final String SELECT_COLUMNS =
             "p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.sampleFilePath, p.originalFileName, "
             + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount, "
             + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
-            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
-            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.boardRoundId = " + CURRENT_BOARD_ROUND_ID + " "
             + "AND h.actionType = 'APPROVED') AS boardApproveVotes, "
             + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
-            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
-            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.boardRoundId = " + CURRENT_BOARD_ROUND_ID + " "
             + "AND h.actionType = 'REVISE_REQUESTED') AS boardReviseVotes, "
             + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
-            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
-            + CURRENT_BOARD_ROUND_FILTER
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.boardRoundId = " + CURRENT_BOARD_ROUND_ID + " "
             + "AND h.actionType = 'REJECTED') AS boardRejectVotes, "
             + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
-            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = p.submitAttemptCount "
-            + CURRENT_BOARD_ROUND_FILTER
-            + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ")) AS boardTotalVotes ";
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.boardRoundId = " + CURRENT_BOARD_ROUND_ID + " "
+            + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ")) AS boardTotalVotes, "
+            + CURRENT_BOARD_ROUND_ID + " AS boardRoundId, "
+            + "(SELECT TOP 1 br.roundNumber FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardRoundNumber, "
+            + "(SELECT TOP 1 br.status FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardRoundStatus, "
+            + "(SELECT TOP 1 br.openedAt FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardVotingOpenedAt, "
+            + "(SELECT TOP 1 br.closesAt FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardVotingClosesAt, "
+            + "(SELECT TOP 1 br.closedAt FROM ProposalBoardRound br WHERE br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardVotingClosedAt, "
+            + "(SELECT COUNT(1) FROM ProposalBoardRoundVoter bv WHERE bv.roundId = " + CURRENT_BOARD_ROUND_ID + ") AS boardEligibleVoterCount ";
 
     public List<Proposal> findForMangaka(long mangakaId) {
         String sql = "SELECT " + SELECT_COLUMNS
@@ -82,7 +91,11 @@ public class ProposalRepository {
             + "VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', GETDATE(), GETDATE())";
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
-            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            try {
+                if (hasActiveDraft(conn, actor.getId(), 0L)) {
+                    throw new IllegalArgumentException("You already have an active draft proposal");
+                }
+                try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 ps.setLong(1, actor.getId());
                 ps.setString(2, title);
                 ps.setString(3, genre);
@@ -99,6 +112,7 @@ public class ProposalRepository {
                     insertHistory(conn, id, actor, "CREATED", "Draft proposal created.", 0);
                     conn.commit();
                     return id;
+                }
                 }
             } catch (Exception ex) {
                 conn.rollback();
@@ -166,7 +180,7 @@ public class ProposalRepository {
                 String action = p.getSubmitAttemptCount() == 0 ? "SUBMITTED" : "RESUBMITTED";
                 String sql =
                     "UPDATE Proposal SET status = 'UNDER_REVIEW', submittedAt = GETDATE(), assignedEditorId = ?, "
-                    + "submitAttemptCount = ?, updatedAt = GETDATE() WHERE id = ?";
+                    + "submitAttemptCount = ?, tantouReviewOverdue = 0, updatedAt = GETDATE() WHERE id = ?";
                 try (PreparedStatement ps = conn.prepareStatement(sql)) {
                     ps.setLong(1, editorId);
                     ps.setInt(2, nextAttempt);
@@ -201,6 +215,7 @@ public class ProposalRepository {
                 if ("APPROVE".equals(decision)) {
                     updateProposalStatus(conn, proposalId, "BOARD_REVIEW", false);
                     insertHistory(conn, proposalId, actor, "APPROVED", note, p.getSubmitAttemptCount());
+                    openBoardVotingRound(conn, proposalId, p.getSubmitAttemptCount());
                     notifyBoardReviewOpened(conn, p);
                 } else if ("REJECT".equals(decision)) {
                     updateProposalStatus(conn, proposalId, "REJECTED", true);
@@ -231,15 +246,28 @@ public class ProposalRepository {
                 if (!"BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
                     throw new IllegalArgumentException("Proposal is not waiting for Editorial Board review");
                 }
-                if (hasBoardVote(conn, proposalId, actor.getId(), p.getSubmitAttemptCount())) {
+                Long roundId = findOpenBoardRoundId(conn, proposalId, p.getSubmitAttemptCount());
+                if (roundId == null) {
+                    throw new IllegalArgumentException("Proposal does not have an open Editorial Board voting round");
+                }
+                if (isBoardRoundExpired(conn, roundId.longValue())) {
+                    closeBoardRoundAndResolveOrReopen(conn, p, roundId.longValue(), "EXPIRED");
+                    throw new IllegalArgumentException("The voting window expired. A new voting round has been opened.");
+                }
+                if (!isEligibleBoardVoter(conn, roundId.longValue(), actor.getId())) {
+                    throw new IllegalArgumentException("You are not eligible to vote in this voting round");
+                }
+                if (hasBoardVote(conn, roundId.longValue(), actor.getId())) {
                     throw new IllegalArgumentException("You have already voted on this proposal");
                 }
 
                 String action = "APPROVE".equals(decision)
                         ? "APPROVED"
                         : ("REJECT".equals(decision) ? "REJECTED" : "REVISE_REQUESTED");
-                insertHistory(conn, proposalId, actor, action, note, p.getSubmitAttemptCount());
-                resolveBoardReviewIfReady(conn, p);
+                insertHistory(conn, proposalId, actor, action, note, p.getSubmitAttemptCount(), roundId);
+                if (allEligibleBoardMembersVoted(conn, roundId.longValue())) {
+                    closeBoardRoundAndResolveOrReopen(conn, p, roundId.longValue(), "ALL_VOTED");
+                }
                 conn.commit();
             } catch (Exception ex) {
                 conn.rollback();
@@ -249,6 +277,104 @@ public class ProposalRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot vote on proposal", ex);
+        }
+    }
+
+    public void closeExpiredBoardVotingRounds() {
+        String sql =
+            "SELECT br.id, br.proposalId FROM ProposalBoardRound br "
+            + "JOIN Proposal p ON p.id = br.proposalId "
+            + "WHERE br.status = 'OPEN' AND br.closesAt <= GETDATE() AND p.status = 'BOARD_REVIEW'";
+        List<Long> roundIds = new ArrayList<Long>();
+        List<Long> proposalIds = new ArrayList<Long>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                roundIds.add(Long.valueOf(rs.getLong("id")));
+                proposalIds.add(Long.valueOf(rs.getLong("proposalId")));
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find expired board voting rounds", ex);
+        }
+
+        for (int i = 0; i < roundIds.size(); i++) {
+            try (Connection conn = dataSource.getConnection()) {
+                conn.setAutoCommit(false);
+                try {
+                    Proposal p = lockProposal(conn, proposalIds.get(i).longValue());
+                    if ("BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
+                        closeBoardRoundAndResolveOrReopen(conn, p, roundIds.get(i).longValue(), "EXPIRED");
+                    }
+                    conn.commit();
+                } catch (Exception ex) {
+                    conn.rollback();
+                    throw ex;
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            } catch (SQLException ex) {
+                throw new RuntimeException("Cannot close expired board voting round", ex);
+            }
+        }
+    }
+
+    public void notifyBoardVotingClosingSoon() {
+        String sql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "SELECT bv.voterId, 'PROPOSAL_BOARD_VOTE_CLOSING_SOON', 'Board vote closing soon', "
+            + "'Proposal \"' + p.title + '\" board voting round #' + CAST(br.roundNumber AS VARCHAR(10)) "
+            + "+ ' closes within 24 hours. Please cast your vote if you have not voted yet.', "
+            + "'/main/proposals/' + CAST(p.id AS VARCHAR(20)) + '/vote', p.id, 'PROPOSAL', 0, GETDATE() "
+            + "FROM ProposalBoardRound br "
+            + "JOIN Proposal p ON p.id = br.proposalId "
+            + "JOIN ProposalBoardRoundVoter bv ON bv.roundId = br.id "
+            + "WHERE p.status = 'BOARD_REVIEW' AND br.status = 'OPEN' "
+            + "AND br.closesAt > GETDATE() AND br.closesAt <= DATEADD(HOUR, 24, GETDATE()) "
+            + "AND NOT EXISTS (SELECT 1 FROM ProposalHistory h WHERE h.boardRoundId = br.id "
+            + "AND h.actorId = bv.voterId AND h.actorRole = 'EDITORIAL_BOARD' "
+            + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ")) "
+            + "AND NOT EXISTS (SELECT 1 FROM Notification n WHERE n.userId = bv.voterId "
+            + "AND n.type = 'PROPOSAL_BOARD_VOTE_CLOSING_SOON' AND n.referenceId = p.id "
+            + "AND CAST(n.createdAt AS DATE) = CAST(GETDATE() AS DATE))";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot notify board voting closing soon", ex);
+        }
+    }
+
+    public void markOverdueTantouReviews() {
+        if (!isTantouReviewOverdueSchemaReady()) {
+            return;
+        }
+        String sql =
+            "UPDATE p SET tantouReviewOverdue = 1, updatedAt = GETDATE() "
+            + "OUTPUT inserted.assignedEditorId, inserted.id, inserted.title "
+            + "INTO #OverdueProposalReviewNotifications(editorId, proposalId, proposalTitle) "
+            + "FROM Proposal p "
+            + "WHERE p.status = 'UNDER_REVIEW' AND p.assignedEditorId IS NOT NULL "
+            + "AND p.submittedAt <= DATEADD(HOUR, -48, GETDATE()) "
+            + "AND ISNULL(p.tantouReviewOverdue, 0) = 0";
+        String createTemp =
+            "CREATE TABLE #OverdueProposalReviewNotifications (editorId BIGINT, proposalId BIGINT, proposalTitle VARCHAR(255))";
+        String notifySql =
+            "INSERT INTO Notification (userId, type, title, message, viewUrl, referenceId, referenceType, isRead, createdAt) "
+            + "SELECT editorId, 'PROPOSAL_TANTOU_REVIEW_OVERDUE', 'Proposal review overdue', "
+            + "'Proposal \"' + proposalTitle + '\" has been waiting for Tantou review for more than 48 hours.', "
+            + "'/main/proposals/' + CAST(proposalId AS VARCHAR(20)), proposalId, 'PROPOSAL', 0, GETDATE() "
+            + "FROM #OverdueProposalReviewNotifications o "
+            + "WHERE NOT EXISTS (SELECT 1 FROM Notification n WHERE n.userId = o.editorId "
+            + "AND n.type = 'PROPOSAL_TANTOU_REVIEW_OVERDUE' AND n.referenceId = o.proposalId "
+            + "AND CAST(n.createdAt AS DATE) = CAST(GETDATE() AS DATE))";
+        try (Connection conn = dataSource.getConnection();
+             Statement st = conn.createStatement()) {
+            st.execute(createTemp);
+            st.executeUpdate(sql);
+            st.executeUpdate(notifySql);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot mark overdue Tantou proposal reviews", ex);
         }
     }
 
@@ -295,6 +421,49 @@ public class ProposalRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot check active proposal", ex);
+        }
+    }
+
+    public boolean hasActiveDraft(long mangakaId, long excludingProposalId) {
+        try (Connection conn = dataSource.getConnection()) {
+            return hasActiveDraft(conn, mangakaId, excludingProposalId);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check active draft proposal", ex);
+        }
+    }
+
+    private boolean hasActiveDraft(Connection conn, long mangakaId, long excludingProposalId) throws SQLException {
+        String sql = "SELECT COUNT(1) FROM Proposal WHERE mangakaId = ? AND id <> ? AND status = 'DRAFT'";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, mangakaId);
+            ps.setLong(2, excludingProposalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    public boolean canVoteInCurrentBoardRound(long proposalId, long actorId) {
+        String sql =
+            "SELECT COUNT(1) FROM Proposal p "
+            + "JOIN ProposalBoardRound br ON br.proposalId = p.id AND br.submitAttemptNumber = p.submitAttemptCount "
+            + "JOIN ProposalBoardRoundVoter bv ON bv.roundId = br.id AND bv.voterId = ? "
+            + "WHERE p.id = ? AND p.status = 'BOARD_REVIEW' AND br.status = 'OPEN' AND br.closesAt > GETDATE() "
+            + "AND br.id = (SELECT TOP 1 br2.id FROM ProposalBoardRound br2 WHERE br2.proposalId = p.id "
+            + "AND br2.submitAttemptNumber = p.submitAttemptCount ORDER BY br2.roundNumber DESC, br2.id DESC) "
+            + "AND NOT EXISTS (SELECT 1 FROM ProposalHistory h WHERE h.boardRoundId = br.id "
+            + "AND h.actorId = ? AND h.actorRole = 'EDITORIAL_BOARD' AND h.actionType IN (" + BOARD_VOTE_ACTIONS + "))";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, actorId);
+            ps.setLong(2, proposalId);
+            ps.setLong(3, actorId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check board voting eligibility", ex);
         }
     }
 
@@ -369,17 +538,24 @@ public class ProposalRepository {
         throw new IllegalStateException("Cannot resolve approved series");
     }
 
-    private boolean hasBoardVote(Connection conn, long proposalId, long actorId, int attempt) throws SQLException {
+    private Long findOpenBoardRoundId(Connection conn, long proposalId, int attempt) throws SQLException {
         String sql =
-            "SELECT COUNT(1) FROM ProposalHistory "
-            + "WHERE proposalId = ? AND actorId = ? AND actorRole = 'EDITORIAL_BOARD' "
-            + "AND submitAttemptNumber = ? AND actionType IN (" + BOARD_VOTE_ACTIONS + ") "
-            + "AND id > ?";
+            "SELECT TOP 1 id FROM ProposalBoardRound "
+            + "WHERE proposalId = ? AND submitAttemptNumber = ? AND status = 'OPEN' "
+            + "ORDER BY roundNumber DESC, id DESC";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
-            ps.setLong(2, actorId);
-            ps.setInt(3, attempt);
-            ps.setLong(4, findCurrentBoardRoundStartId(conn, proposalId, attempt));
+            ps.setInt(2, attempt);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Long.valueOf(rs.getLong("id")) : null;
+            }
+        }
+    }
+
+    private boolean isBoardRoundExpired(Connection conn, long roundId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT COUNT(1) FROM ProposalBoardRound WHERE id = ? AND status = 'OPEN' AND closesAt <= GETDATE()")) {
+            ps.setLong(1, roundId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getInt(1) > 0;
@@ -387,7 +563,110 @@ public class ProposalRepository {
         }
     }
 
-    private void resolveBoardReviewIfReady(Connection conn, Proposal proposal) throws SQLException {
+    private boolean isEligibleBoardVoter(Connection conn, long roundId, long voterId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT COUNT(1) FROM ProposalBoardRoundVoter WHERE roundId = ? AND voterId = ?")) {
+            ps.setLong(1, roundId);
+            ps.setLong(2, voterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private boolean hasBoardVote(Connection conn, long roundId, long actorId) throws SQLException {
+        String sql =
+            "SELECT COUNT(1) FROM ProposalHistory "
+            + "WHERE boardRoundId = ? AND actorId = ? AND actorRole = 'EDITORIAL_BOARD' "
+            + "AND actionType IN (" + BOARD_VOTE_ACTIONS + ")";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, roundId);
+            ps.setLong(2, actorId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private boolean allEligibleBoardMembersVoted(Connection conn, long roundId) throws SQLException {
+        String sql =
+            "SELECT "
+            + "(SELECT COUNT(1) FROM ProposalBoardRoundVoter WHERE roundId = ?) AS eligibleCount, "
+            + "(SELECT COUNT(1) FROM ProposalHistory WHERE boardRoundId = ? AND actorRole = 'EDITORIAL_BOARD' "
+            + "AND actionType IN (" + BOARD_VOTE_ACTIONS + ")) AS voteCount";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, roundId);
+            ps.setLong(2, roundId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                int eligibleCount = rs.getInt("eligibleCount");
+                int voteCount = rs.getInt("voteCount");
+                return eligibleCount > 0 && voteCount >= eligibleCount;
+            }
+        }
+    }
+
+    private long openBoardVotingRound(Connection conn, long proposalId, int attempt) throws SQLException {
+        int roundNumber = 1;
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT ISNULL(MAX(roundNumber), 0) + 1 FROM ProposalBoardRound WHERE proposalId = ? AND submitAttemptNumber = ?")) {
+            ps.setLong(1, proposalId);
+            ps.setInt(2, attempt);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                roundNumber = rs.getInt(1);
+            }
+        }
+
+        long roundId;
+        String insertRound =
+            "INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt) "
+            + "VALUES (?, ?, ?, 'OPEN', GETDATE(), DATEADD(DAY, 3, GETDATE()))";
+        try (PreparedStatement ps = conn.prepareStatement(insertRound, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setLong(1, proposalId);
+            ps.setInt(2, attempt);
+            ps.setInt(3, roundNumber);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (!rs.next()) {
+                    throw new IllegalStateException("Cannot create board voting round");
+                }
+                roundId = rs.getLong(1);
+            }
+        }
+
+        String insertVoters =
+            "INSERT INTO ProposalBoardRoundVoter (roundId, voterId) "
+            + "SELECT ?, u.id FROM [User] u "
+            + "JOIN UserRole ur ON ur.userId = u.id "
+            + "JOIN Role r ON r.id = ur.roleId "
+            + "WHERE u.status = 'ACTIVE' AND r.name = 'EDITORIAL_BOARD'";
+        try (PreparedStatement ps = conn.prepareStatement(insertVoters)) {
+            ps.setLong(1, roundId);
+            ps.executeUpdate();
+        }
+
+        insertSystemHistory(conn, proposalId, "UPDATED",
+                "Editorial Board voting round #" + roundNumber + " opened for 3 days. Minimum quorum is 3 valid votes.",
+                attempt);
+        return roundId;
+    }
+
+    private void closeBoardRoundAndResolveOrReopen(Connection conn, Proposal proposal, long roundId, String closeReason) throws SQLException {
+        String closeSql =
+            "UPDATE ProposalBoardRound SET status = 'CLOSED', closedAt = GETDATE(), closeReason = ? "
+            + "WHERE id = ? AND status = 'OPEN'";
+        try (PreparedStatement ps = conn.prepareStatement(closeSql)) {
+            ps.setString(1, closeReason);
+            ps.setLong(2, roundId);
+            ps.executeUpdate();
+        }
+        resolveClosedBoardRound(conn, proposal, roundId);
+    }
+
+    private void resolveClosedBoardRound(Connection conn, Proposal proposal, long roundId) throws SQLException {
         String countSql =
             "SELECT "
             + "SUM(CASE WHEN actionType = 'APPROVED' THEN 1 ELSE 0 END) AS approveVotes, "
@@ -395,17 +674,14 @@ public class ProposalRepository {
             + "SUM(CASE WHEN actionType = 'REJECTED' THEN 1 ELSE 0 END) AS rejectVotes, "
             + "COUNT(1) AS totalVotes "
             + "FROM ProposalHistory "
-            + "WHERE proposalId = ? AND actorRole = 'EDITORIAL_BOARD' "
-            + "AND submitAttemptNumber = ? AND actionType IN (" + BOARD_VOTE_ACTIONS + ") "
-            + "AND id > ?";
+            + "WHERE boardRoundId = ? AND actorRole = 'EDITORIAL_BOARD' "
+            + "AND actionType IN (" + BOARD_VOTE_ACTIONS + ")";
         int approveVotes;
         int reviseVotes;
         int rejectVotes;
         int totalVotes;
         try (PreparedStatement ps = conn.prepareStatement(countSql)) {
-            ps.setLong(1, proposal.getId());
-            ps.setInt(2, proposal.getSubmitAttemptCount());
-            ps.setLong(3, findCurrentBoardRoundStartId(conn, proposal.getId(), proposal.getSubmitAttemptCount()));
+            ps.setLong(1, roundId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 approveVotes = rs.getInt("approveVotes");
@@ -415,11 +691,14 @@ public class ProposalRepository {
             }
         }
         if (totalVotes < 3) {
+            insertSystemHistory(conn, proposal.getId(), "UPDATED", BOARD_QUORUM_NOT_MET_NOTE, proposal.getSubmitAttemptCount());
+            openBoardVotingRound(conn, proposal.getId(), proposal.getSubmitAttemptCount());
             return;
         }
 
         if (approveVotes == 1 && reviseVotes == 1 && rejectVotes == 1) {
             insertSystemHistory(conn, proposal.getId(), "UPDATED", BOARD_REVOTE_NOTE, proposal.getSubmitAttemptCount());
+            openBoardVotingRound(conn, proposal.getId(), proposal.getSubmitAttemptCount());
             return;
         }
 
@@ -437,22 +716,7 @@ public class ProposalRepository {
             insertSystemHistory(conn, proposal.getId(), "REJECTED", "Editorial Board rejected publication.", proposal.getSubmitAttemptCount());
         } else {
             insertSystemHistory(conn, proposal.getId(), "UPDATED", BOARD_REVOTE_NOTE, proposal.getSubmitAttemptCount());
-        }
-    }
-
-    private long findCurrentBoardRoundStartId(Connection conn, long proposalId, int attempt) throws SQLException {
-        String sql =
-            "SELECT ISNULL(MAX(id), 0) FROM ProposalHistory "
-            + "WHERE proposalId = ? AND actorRole = 'SYSTEM' AND submitAttemptNumber = ? "
-            + "AND actionType = 'UPDATED' AND note = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, proposalId);
-            ps.setInt(2, attempt);
-            ps.setString(3, BOARD_REVOTE_NOTE);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getLong(1);
-            }
+            openBoardVotingRound(conn, proposal.getId(), proposal.getSubmitAttemptCount());
         }
     }
 
@@ -542,14 +806,23 @@ public class ProposalRepository {
         insertHistory(conn, proposalId, Long.valueOf(actor.getId()), role, actionType, note, attempt);
     }
 
+    private void insertHistory(Connection conn, long proposalId, AuthenticatedUser actor, String actionType, String note, int attempt, Long boardRoundId) throws SQLException {
+        String role = actor.getRoles().isEmpty() ? "USER" : actor.getRoles().iterator().next();
+        insertHistory(conn, proposalId, Long.valueOf(actor.getId()), role, actionType, note, attempt, boardRoundId);
+    }
+
     private void insertSystemHistory(Connection conn, long proposalId, String actionType, String note, int attempt) throws SQLException {
         insertHistory(conn, proposalId, null, "SYSTEM", actionType, note, attempt);
     }
 
     private void insertHistory(Connection conn, long proposalId, Long actorId, String actorRole, String actionType, String note, int attempt) throws SQLException {
+        insertHistory(conn, proposalId, actorId, actorRole, actionType, note, attempt, null);
+    }
+
+    private void insertHistory(Connection conn, long proposalId, Long actorId, String actorRole, String actionType, String note, int attempt, Long boardRoundId) throws SQLException {
         String sql =
-            "INSERT INTO ProposalHistory (proposalId, actorId, actorRole, actionType, note, submitAttemptNumber, createdAt) "
-            + "VALUES (?, ?, ?, ?, ?, ?, GETDATE())";
+            "INSERT INTO ProposalHistory (proposalId, actorId, actorRole, actionType, note, submitAttemptNumber, boardRoundId, createdAt) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
             if (actorId == null) {
@@ -561,6 +834,11 @@ public class ProposalRepository {
             ps.setString(4, actionType);
             ps.setString(5, note);
             ps.setInt(6, attempt);
+            if (boardRoundId == null) {
+                ps.setNull(7, java.sql.Types.BIGINT);
+            } else {
+                ps.setLong(7, boardRoundId.longValue());
+            }
             ps.executeUpdate();
         }
     }
@@ -603,6 +881,13 @@ public class ProposalRepository {
         p.setBoardReviseVotes(readOptionalInt(rs, "boardReviseVotes"));
         p.setBoardRejectVotes(readOptionalInt(rs, "boardRejectVotes"));
         p.setBoardTotalVotes(readOptionalInt(rs, "boardTotalVotes"));
+        p.setBoardRoundId(readOptionalLong(rs, "boardRoundId"));
+        p.setBoardRoundNumber(readOptionalInteger(rs, "boardRoundNumber"));
+        p.setBoardRoundStatus(readOptionalString(rs, "boardRoundStatus"));
+        p.setBoardVotingOpenedAt(readOptionalTimestamp(rs, "boardVotingOpenedAt"));
+        p.setBoardVotingClosesAt(readOptionalTimestamp(rs, "boardVotingClosesAt"));
+        p.setBoardVotingClosedAt(readOptionalTimestamp(rs, "boardVotingClosedAt"));
+        p.setBoardEligibleVoterCount(readOptionalInt(rs, "boardEligibleVoterCount"));
         return p;
     }
 
@@ -611,6 +896,51 @@ public class ProposalRepository {
             return rs.getInt(columnName);
         } catch (SQLException ex) {
             return 0;
+        }
+    }
+
+    private Integer readOptionalInteger(ResultSet rs, String columnName) throws SQLException {
+        try {
+            int value = rs.getInt(columnName);
+            return rs.wasNull() ? null : Integer.valueOf(value);
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private Long readOptionalLong(ResultSet rs, String columnName) throws SQLException {
+        try {
+            long value = rs.getLong(columnName);
+            return rs.wasNull() ? null : Long.valueOf(value);
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private String readOptionalString(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getString(columnName);
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private Timestamp readOptionalTimestamp(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getTimestamp(columnName);
+        } catch (SQLException ex) {
+            return null;
+        }
+    }
+
+    private boolean isTantouReviewOverdueSchemaReady() {
+        String sql = "SELECT CASE WHEN COL_LENGTH('dbo.Proposal', 'tantouReviewOverdue') IS NOT NULL THEN 1 ELSE 0 END";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() && rs.getInt(1) == 1;
+        } catch (SQLException ex) {
+            return false;
         }
     }
 }

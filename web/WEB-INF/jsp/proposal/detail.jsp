@@ -6,7 +6,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Proposal Detail</title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css" />
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css?v=board-vote-ui-2" />
 </head>
 <body>
 <jsp:include page="../common/header.jsp" />
@@ -24,15 +24,67 @@
         <p><strong>Approximate Chapter:</strong> ${proposal.approximateChapter}</p>
         <p><strong>Submit Attempts:</strong> ${proposal.submitAttemptCount}/2</p>
         <p><strong>Assigned Tantou Editor:</strong> <c:out value="${proposal.assignedEditorId}" default="Not assigned" /></p>
-        <p><strong>Board Votes:</strong>
+        <div class="proposal-vote-summary ${proposal.boardRoundStatus == 'OPEN' ? 'is-open' : ''}">
+            <div class="proposal-vote-summary-head">
+                <div>
+                    <strong>Editorial Board Voting</strong>
+                    <c:if test="${not empty proposal.boardRoundId}">
+                        <span class="vote-round-subtitle">Round #${proposal.boardRoundNumber}</span>
+                    </c:if>
+                </div>
+                <c:if test="${not empty proposal.boardRoundStatus}">
+                    <span class="status-chip ${proposal.boardRoundStatus == 'OPEN' ? 'status-review' : 'status-draft'}">${proposal.boardRoundStatus}</span>
+                </c:if>
+            </div>
             <c:choose>
-                <c:when test="${proposal.status == 'BOARD_REVIEW' || proposal.boardTotalVotes > 0}">
-                    ${proposal.boardTotalVotes}/3 total
-                    <span style="color:#6b7280;">(${proposal.boardApproveVotes} approve, ${proposal.boardReviseVotes} request revision, ${proposal.boardRejectVotes} reject)</span>
+                <c:when test="${not empty proposal.boardRoundId}">
+                    <div class="proposal-vote-grid">
+                        <div>
+                            <span class="vote-label">Round Status</span>
+                            <strong>${proposal.boardRoundStatus}</strong>
+                            <small>
+                                Opened
+                                <fmt:formatDate value="${proposal.boardVotingOpenedAt}" pattern="yyyy-MM-dd HH:mm" />
+                            </small>
+                        </div>
+                        <div>
+                            <span class="vote-label">Votes Cast</span>
+                            <strong>${proposal.boardTotalVotes}/${proposal.boardEligibleVoterCount}</strong>
+                            <small>Minimum quorum: 3</small>
+                        </div>
+                        <div>
+                            <span class="vote-label">Window</span>
+                            <strong>3 days</strong>
+                            <small>
+                                Closes
+                                <fmt:formatDate value="${proposal.boardVotingClosesAt}" pattern="yyyy-MM-dd HH:mm" />
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="proposal-quorum-track" aria-label="Voting progress">
+                        <span class="proposal-quorum-fill"
+                              style="width:${proposal.boardEligibleVoterCount > 0 ? (proposal.boardTotalVotes * 100 / proposal.boardEligibleVoterCount) : 0}%"></span>
+                    </div>
+                    <div class="proposal-quorum-meta">
+                        <span>${proposal.boardTotalVotes} vote(s) submitted</span>
+                        <span>Decision waits for all voters or window close</span>
+                    </div>
+
+                    <div class="proposal-vote-breakdown board-breakdown">
+                        <span class="vote-breakdown-approve">Approve <strong>${proposal.boardApproveVotes}</strong></span>
+                        <span class="vote-breakdown-revise">Request Revision <strong>${proposal.boardReviseVotes}</strong></span>
+                        <span class="vote-breakdown-reject">Reject <strong>${proposal.boardRejectVotes}</strong></span>
+                    </div>
+                    <p class="proposal-vote-note">
+                        3 votes is only the minimum quorum. The result is decided when the 3-day window closes or when every eligible board member in this round has voted.
+                    </p>
                 </c:when>
-                <c:otherwise>Not started</c:otherwise>
+                <c:otherwise>
+                    <span style="color:#9ca3af;">Board voting has not started.</span>
+                </c:otherwise>
             </c:choose>
-        </p>
+        </div>
         <p><strong>File Upload:</strong>
             <c:choose>
                 <c:when test="${not empty proposal.originalFileName}">
@@ -89,30 +141,66 @@
     </c:if>
 
     <c:if test="${canBoardVote}">
-        <div class="panel">
-            <h2>Editorial Board Vote</h2>
-            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/board-vote" class="form-grid">
-                <label>Decision</label>
-                <select name="decision">
-                    <option value="APPROVE">APPROVE FOR PUBLICATION</option>
-                    <option value="REVISE">REQUEST REVISION</option>
-                    <option value="REJECT">REJECT</option>
-                </select>
+        <div class="panel board-vote-panel">
+            <div class="board-vote-panel-head">
+                <div>
+                    <h2>Cast Editorial Board Vote</h2>
+                    <p>Choose one decision for this proposal round. Votes are final after submission.</p>
+                </div>
+                <span class="status-chip status-review">Eligible</span>
+            </div>
+            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/board-vote" class="board-vote-form">
+                <div class="board-decision-options">
+                    <label class="board-decision-card is-approve">
+                        <input type="radio" name="decision" value="APPROVE" checked />
+                        <span class="decision-title">Approve</span>
+                        <span class="decision-copy">Move the proposal toward publication if approval wins.</span>
+                    </label>
+                    <label class="board-decision-card is-revise">
+                        <input type="radio" name="decision" value="REVISE" />
+                        <span class="decision-title">Request Revision</span>
+                        <span class="decision-copy">Send it back with notes before publication can proceed.</span>
+                    </label>
+                    <label class="board-decision-card is-reject">
+                        <input type="radio" name="decision" value="REJECT" />
+                        <span class="decision-title">Reject</span>
+                        <span class="decision-copy">Reject the proposal for this submission attempt.</span>
+                    </label>
+                </div>
 
-                <label>Reason / Revision Notes</label>
-                <textarea id="boardVoteNote" name="note" rows="4" placeholder="Required when requesting revision or rejecting"></textarea>
+                <div class="board-vote-note-field">
+                    <label for="boardVoteNote">Reason / Revision Notes</label>
+                    <textarea id="boardVoteNote" name="note" rows="5" placeholder="Required when requesting revision or rejecting"></textarea>
+                    <small id="boardVoteHint">Optional for approval. Required for revision or rejection.</small>
+                </div>
 
-                <button type="submit" class="btn primary">Submit Vote</button>
+                <div class="board-vote-submit-row">
+                    <span>Round closes <fmt:formatDate value="${proposal.boardVotingClosesAt}" pattern="yyyy-MM-dd HH:mm" /></span>
+                    <button type="submit" class="btn primary">Submit Vote</button>
+                </div>
             </form>
         </div>
         <script>
             (function () {
-                var decision = document.querySelector('form[action$="/board-vote"] select[name="decision"]');
+                var decisions = document.querySelectorAll('form[action$="/board-vote"] input[name="decision"]');
                 var note = document.getElementById('boardVoteNote');
+                var hint = document.getElementById('boardVoteHint');
+                var cards = document.querySelectorAll('.board-decision-card');
                 function syncNoteRequired() {
-                    note.required = decision.value === 'REVISE' || decision.value === 'REJECT';
+                    var selected = document.querySelector('form[action$="/board-vote"] input[name="decision"]:checked');
+                    var needsNote = selected && (selected.value === 'REVISE' || selected.value === 'REJECT');
+                    note.required = needsNote;
+                    hint.textContent = needsNote ? 'Required for this decision.' : 'Optional for approval. Required for revision or rejection.';
+                    for (var j = 0; j < cards.length; j++) {
+                        cards[j].classList.remove('is-selected');
+                    }
+                    if (selected) {
+                        selected.closest('.board-decision-card').classList.add('is-selected');
+                    }
                 }
-                decision.addEventListener('change', syncNoteRequired);
+                for (var i = 0; i < decisions.length; i++) {
+                    decisions[i].addEventListener('change', syncNoteRequired);
+                }
                 syncNoteRequired();
             }());
         </script>

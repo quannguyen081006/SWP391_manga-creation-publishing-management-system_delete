@@ -23,6 +23,229 @@ SET NOCOUNT ON;
 GO
 
 -- ============================================================
+--  BƯỚC 0: ĐẢM BẢO SCHEMA PROPOSAL BOARD VOTING
+--  Cho phép chạy seed_v5 trên DB cũ chưa có bảng vote round.
+-- ============================================================
+
+IF COL_LENGTH('dbo.ProposalHistory', 'boardRoundId') IS NULL
+BEGIN
+    ALTER TABLE dbo.ProposalHistory ADD boardRoundId BIGINT NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Proposal', 'tantouReviewOverdue') IS NULL
+BEGIN
+    ALTER TABLE dbo.Proposal
+        ADD tantouReviewOverdue BIT NOT NULL CONSTRAINT DF_Proposal_tantouReviewOverdue DEFAULT (0);
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'UX_Proposal_one_draft_per_mangaka' AND object_id = OBJECT_ID('dbo.Proposal')
+)
+AND NOT EXISTS (
+    SELECT 1 FROM dbo.Proposal WHERE status = 'DRAFT' GROUP BY mangakaId HAVING COUNT(1) > 1
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_Proposal_one_draft_per_mangaka
+        ON dbo.Proposal(mangakaId)
+        WHERE status = 'DRAFT';
+END
+GO
+
+IF OBJECT_ID('dbo.ProposalBoardRound', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProposalBoardRound (
+        id BIGINT IDENTITY(1,1) NOT NULL,
+        proposalId BIGINT NOT NULL,
+        submitAttemptNumber INT NOT NULL,
+        roundNumber INT NOT NULL,
+        status VARCHAR(10) NOT NULL,
+        openedAt DATETIME NOT NULL,
+        closesAt DATETIME NOT NULL,
+        closedAt DATETIME NULL,
+        closeReason VARCHAR(30) NULL,
+        CONSTRAINT PK_ProposalBoardRound PRIMARY KEY CLUSTERED (id ASC)
+    );
+END
+GO
+
+IF OBJECT_ID('dbo.ProposalBoardRoundVoter', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProposalBoardRoundVoter (
+        roundId BIGINT NOT NULL,
+        voterId BIGINT NOT NULL,
+        CONSTRAINT PK_ProposalBoardRoundVoter PRIMARY KEY CLUSTERED (roundId ASC, voterId ASC)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_PBR_Proposal')
+BEGIN
+    ALTER TABLE dbo.ProposalBoardRound
+        ADD CONSTRAINT FK_PBR_Proposal FOREIGN KEY (proposalId) REFERENCES dbo.Proposal(id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_PBRV_Round')
+BEGIN
+    ALTER TABLE dbo.ProposalBoardRoundVoter
+        ADD CONSTRAINT FK_PBRV_Round FOREIGN KEY (roundId) REFERENCES dbo.ProposalBoardRound(id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_PBRV_Voter')
+BEGIN
+    ALTER TABLE dbo.ProposalBoardRoundVoter
+        ADD CONSTRAINT FK_PBRV_Voter FOREIGN KEY (voterId) REFERENCES dbo.[User](id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_PH_BoardRound')
+BEGIN
+    ALTER TABLE dbo.ProposalHistory
+        ADD CONSTRAINT FK_PH_BoardRound FOREIGN KEY (boardRoundId) REFERENCES dbo.ProposalBoardRound(id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_PBR_status')
+BEGIN
+    ALTER TABLE dbo.ProposalBoardRound
+        ADD CONSTRAINT CK_PBR_status CHECK (status IN ('OPEN', 'CLOSED'));
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'IX_PBR_proposal_status' AND object_id = OBJECT_ID('dbo.ProposalBoardRound')
+)
+BEGIN
+    CREATE INDEX IX_PBR_proposal_status
+        ON dbo.ProposalBoardRound(proposalId, submitAttemptNumber, status, roundNumber);
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'IX_PH_boardRound' AND object_id = OBJECT_ID('dbo.ProposalHistory')
+)
+BEGIN
+    CREATE INDEX IX_PH_boardRound
+        ON dbo.ProposalHistory(boardRoundId, actorRole, actionType);
+END
+GO
+
+IF COL_LENGTH('dbo.Chapter', 'totalPages') IS NULL
+BEGIN
+    ALTER TABLE dbo.Chapter ADD totalPages INT NULL;
+END
+GO
+
+IF OBJECT_ID(N'dbo.Page', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Page (
+        id BIGINT IDENTITY(1,1) NOT NULL,
+        chapterId BIGINT NOT NULL,
+        pageNumber INT NOT NULL,
+        imageUrl NVARCHAR(512) NULL,
+        uploadedBy BIGINT NULL,
+        uploadedAt DATETIME NULL,
+        status VARCHAR(20) NOT NULL CONSTRAINT DF_Page_status DEFAULT ('EMPTY'),
+        createdAt DATETIME NOT NULL CONSTRAINT DF_Page_createdAt DEFAULT (GETDATE()),
+        CONSTRAINT PK_Page PRIMARY KEY CLUSTERED (id),
+        CONSTRAINT FK_Page_Chapter FOREIGN KEY (chapterId) REFERENCES dbo.Chapter(id),
+        CONSTRAINT UQ_Page_chapter_page UNIQUE (chapterId, pageNumber)
+    );
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'IX_Page_chapterId' AND object_id = OBJECT_ID('dbo.Page')
+)
+BEGIN
+    CREATE INDEX IX_Page_chapterId ON dbo.Page(chapterId);
+END
+GO
+
+IF COL_LENGTH('dbo.ChapterImage', 'pageId') IS NULL
+BEGIN
+    ALTER TABLE dbo.ChapterImage ADD pageId BIGINT NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.PageTask', 'pageId') IS NULL
+BEGIN
+    ALTER TABLE dbo.PageTask ADD pageId BIGINT NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.PageTask', 'rejectionReason') IS NULL
+BEGIN
+    ALTER TABLE dbo.PageTask ADD rejectionReason NVARCHAR(300) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.PageTask', 'approvalComment') IS NULL
+BEGIN
+    ALTER TABLE dbo.PageTask ADD approvalComment NVARCHAR(300) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.PageTask', 'priority') IS NULL
+BEGIN
+    ALTER TABLE dbo.PageTask ADD priority VARCHAR(20) NULL CONSTRAINT DF_PageTask_priority DEFAULT ('NORMAL');
+END
+GO
+
+IF COL_LENGTH('dbo.PageTask', 'notes') IS NULL
+BEGIN
+    ALTER TABLE dbo.PageTask ADD notes NVARCHAR(500) NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_ChapterImage_Page')
+BEGIN
+    ALTER TABLE dbo.ChapterImage WITH CHECK
+        ADD CONSTRAINT FK_ChapterImage_Page FOREIGN KEY (pageId) REFERENCES dbo.Page(id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_PageTask_Page')
+BEGIN
+    ALTER TABLE dbo.PageTask WITH CHECK
+        ADD CONSTRAINT FK_PageTask_Page FOREIGN KEY (pageId) REFERENCES dbo.Page(id);
+END
+GO
+
+IF COL_LENGTH('dbo.Manuscript', 'revisionDeadline') IS NULL
+BEGIN
+    ALTER TABLE dbo.Manuscript ADD revisionDeadline DATETIME NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Manuscript', 'feedback') IS NULL
+BEGIN
+    ALTER TABLE dbo.Manuscript ADD feedback NVARCHAR(MAX) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Manuscript', 'seriesTitle') IS NULL
+BEGIN
+    ALTER TABLE dbo.Manuscript ADD seriesTitle NVARCHAR(255) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Manuscript', 'chapterTitle') IS NULL
+BEGIN
+    ALTER TABLE dbo.Manuscript ADD chapterTitle NVARCHAR(255) NULL;
+END
+GO
+
+IF COL_LENGTH('dbo.Manuscript', 'chapterNumber') IS NULL
+BEGIN
+    ALTER TABLE dbo.Manuscript ADD chapterNumber INT NULL;
+END
+GO
+
+-- ============================================================
 --  BƯỚC 1: XÓA TOÀN BỘ DỮ LIỆU CŨ
 -- ============================================================
 
@@ -41,10 +264,13 @@ DELETE FROM Annotation;
 DELETE FROM Manuscript;
 DELETE FROM ChapterImage;
 DELETE FROM PageTask;
+IF OBJECT_ID('dbo.Page', 'U') IS NOT NULL DELETE FROM [Page];
 DELETE FROM Chapter;
 DELETE FROM SeriesAssistant;
 DELETE FROM Series;
+IF OBJECT_ID('dbo.ProposalBoardRoundVoter', 'U') IS NOT NULL DELETE FROM ProposalBoardRoundVoter;
 DELETE FROM ProposalHistory;
+IF OBJECT_ID('dbo.ProposalBoardRound', 'U') IS NOT NULL DELETE FROM ProposalBoardRound;
 DELETE FROM Proposal;
 DELETE FROM MangakaAssistant;
 DELETE FROM UserRole;
@@ -61,9 +287,11 @@ DBCC CHECKIDENT ('Annotation',      RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('Manuscript',      RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('ChapterImage',    RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('PageTask',        RESEED, 0) WITH NO_INFOMSGS;
+IF OBJECT_ID('dbo.Page', 'U') IS NOT NULL DBCC CHECKIDENT ('Page', RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('Chapter',         RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('Series',          RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('ProposalHistory', RESEED, 0) WITH NO_INFOMSGS;
+IF OBJECT_ID('dbo.ProposalBoardRound', 'U') IS NOT NULL DBCC CHECKIDENT ('ProposalBoardRound', RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('Proposal',        RESEED, 0) WITH NO_INFOMSGS;
 DBCC CHECKIDENT ('[User]',          RESEED, 0) WITH NO_INFOMSGS;
 
@@ -102,6 +330,8 @@ INSERT INTO [User] (username, passwordHash, fullName, email, status) VALUES
     ('board1',      '12345', 'Board Member Keiko',     'board1@mangaflow.local',   'ACTIVE'),
     ('board2',      '12345', 'Board Member Sato',      'board2@mangaflow.local',   'ACTIVE'),
     ('board3',      '12345', 'Board Member Natsuki',   'board3@mangaflow.local',   'ACTIVE'),
+    ('board4',      '12345', 'Board Member Minori',    'board4@mangaflow.local',   'ACTIVE'),
+    ('board5',      '12345', 'Board Member Akira',     'board5@mangaflow.local',   'ACTIVE'),
     ('mangaka2',    '12345', 'Mai Nguyen',             'mangaka2@mangaflow.local', 'ACTIVE'),
     ('mangaka3',    '12345', 'Kenji Ito',              'mangaka3@mangaflow.local', 'ACTIVE'),
     ('mangaka4',    '12345', 'Hiroto Suzuki',          'mangaka4@mangaflow.local', 'ACTIVE'),
@@ -129,7 +359,7 @@ FROM (VALUES
     ('assistant5',   3), ('assistant6', 3), ('assistant7',3), ('assistant8',3),
     ('assistant9',   3), ('assistant10',3),
     ('tantou1',      4), ('tantou2',    4), ('tantou3',   4),
-    ('board1',       5), ('board2',     5), ('board3',    5)
+    ('board1',       5), ('board2',     5), ('board3',    5), ('board4', 5), ('board5', 5)
 ) AS v(username, roleId)
 JOIN [User] u ON u.username = v.username;
 GO
@@ -179,12 +409,12 @@ VALUES (@mk1, 'Shadows of Edo', 'Action',
     '/uploads/proposals/sample-shadows-of-edo.pdf', 'sample-shadows-of-edo.pdf',
     1, 'APPROVED', DATEADD(DAY,-20,GETDATE()), @t1, 1, DATEADD(DAY,-25,GETDATE()), DATEADD(DAY,-20,GETDATE()));
 
--- 2. Cyber Ronin — UNDER_REVIEW
+-- 2. Cyber Ronin — BOARD_REVIEW (active 3-day board voting window)
 INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)
 VALUES (@mk1, 'Cyber Ronin', 'Action',
     'In 2157, a cybernetic warrior hunts rogue AIs across neon-lit megacities.',
     '/uploads/proposals/sample-cyber-ronin.pdf', 'sample-cyber-ronin.pdf',
-    1, 'UNDER_REVIEW', DATEADD(DAY,-3,GETDATE()), @t1, 1, DATEADD(DAY,-5,GETDATE()), DATEADD(DAY,-3,GETDATE()));
+    1, 'BOARD_REVIEW', DATEADD(DAY,-3,GETDATE()), @t1, 1, DATEADD(DAY,-5,GETDATE()), DATEADD(HOUR,-8,GETDATE()));
 
 -- 3. Celestial Kitchen — APPROVED
 INSERT INTO Proposal (mangakaId, title, genre, synopsis, sampleFilePath, originalFileName, approximateChapter, status, submittedAt, assignedEditorId, submitAttemptCount, createdAt, updatedAt)
@@ -280,20 +510,21 @@ VALUES
     (@pEdo, @mk1, 'MANGAKA',       'CREATED',            'Seed draft proposal created.',                     0, DATEADD(DAY,-25,GETDATE())),
     (@pEdo, @mk1, 'MANGAKA',       'SUBMITTED',          'Seed proposal submitted for Tantou review.',       1, DATEADD(DAY,-24,GETDATE())),
     (@pEdo, NULL, 'SYSTEM',        'ASSIGNED_EDITOR',    'Assigned to Tantou Editor tantou1.',               1, DATEADD(DAY,-24,GETDATE())),
-    (@pEdo, @t1,  'TANTOU_EDITOR', 'APPROVED',           'Seed proposal approved.',                          1, DATEADD(DAY,-20,GETDATE())),
+    (@pEdo, @t1,  'TANTOU_EDITOR', 'APPROVED',           'Seed proposal approved.',                          1, DATEADD(DAY,-23,GETDATE())),
     (@pCyber, @mk1,'MANGAKA',      'CREATED',            'Seed draft proposal created.',                     0, DATEADD(DAY,-5,GETDATE())),
     (@pCyber, @mk1,'MANGAKA',      'SUBMITTED',          'Seed proposal submitted for Tantou review.',       1, DATEADD(DAY,-3,GETDATE())),
     (@pCyber, NULL,'SYSTEM',       'ASSIGNED_EDITOR',    'Assigned to Tantou Editor tantou1.',               1, DATEADD(DAY,-3,GETDATE())),
+    (@pCyber, @t1, 'TANTOU_EDITOR','APPROVED',           'Approved for Editorial Board voting.',             1, DATEADD(HOUR,-8,GETDATE())),
     (@pKitchen,@mk2,'MANGAKA',     'CREATED',            'Extended seed proposal created.',                  0, DATEADD(DAY,-22,GETDATE())),
     (@pKitchen,@mk2,'MANGAKA',     'SUBMITTED',          'Submitted with menu-board character samples.',     1, DATEADD(DAY,-18,GETDATE())),
     (@pKitchen,NULL,'SYSTEM',      'ASSIGNED_EDITOR',    'Assigned to Tantou Editor tantou2.',               1, DATEADD(DAY,-18,GETDATE())),
-    (@pKitchen,@t2,'TANTOU_EDITOR','APPROVED',           'Approved for short pilot serialization.',          1, DATEADD(DAY,-16,GETDATE())),
+    (@pKitchen,@t2,'TANTOU_EDITOR','APPROVED',           'Approved for short pilot serialization.',          1, DATEADD(DAY,-17,GETDATE())),
     (@pLotus, @mk3,'MANGAKA',      'CREATED',            'Extended seed proposal created.',                  0, DATEADD(DAY,-25,GETDATE())),
     (@pLotus, @mk3,'MANGAKA',      'SUBMITTED',          'Resubmitted after tone revision.',                 2, DATEADD(DAY,-14,GETDATE())),
     (@pLotus, @t1,'TANTOU_EDITOR', 'APPROVED',           'Approved after second attempt.',                   2, DATEADD(DAY,-10,GETDATE())),
     (@pBakery,@mk2,'MANGAKA',      'CREATED',            'Extended seed proposal created.',                  0, DATEADD(DAY,-8,GETDATE())),
     (@pBakery,@mk2,'MANGAKA',      'SUBMITTED',          'Submitted cozy drama concept.',                    1, DATEADD(DAY,-6,GETDATE())),
-    (@pBakery,@t2,'TANTOU_EDITOR', 'REVISE_REQUESTED',   'Please sharpen the main conflict in chapter one.', 1, DATEADD(DAY,-2,GETDATE())),
+    (@pBakery,@t2,'TANTOU_EDITOR', 'APPROVED',           'Approved for Editorial Board voting.',             1, DATEADD(DAY,-5,GETDATE())),
     (@pSteam, @mk2,'MANGAKA',      'CREATED',            'Initial draft created.',                           0, DATEADD(DAY,-10,GETDATE())),
     (@pMoon,  @mk3,'MANGAKA',      'CREATED',            'Initial draft created.',                           0, DATEADD(DAY,-8,GETDATE())),
     (@pMoon,  @mk3,'MANGAKA',      'SUBMITTED',          'Submitted for Tantou review.',                     1, DATEADD(DAY,-7,GETDATE())),
@@ -309,11 +540,110 @@ VALUES
     (@pAlien, NULL,'SYSTEM',       'ASSIGNED_EDITOR',    'Assigned to Tantou Editor tantou1.',               1, DATEADD(DAY,-20,GETDATE())),
     (@pAlien, @t1,'TANTOU_EDITOR', 'REVISE_REQUESTED',   'Concept needs significant refinement.',            1, DATEADD(DAY,-18,GETDATE())),
     (@pAlien, @mk3,'MANGAKA',      'RESUBMITTED',        'Resubmitted with revisions.',                      2, DATEADD(DAY,-16,GETDATE())),
-    (@pAlien, @t1,'TANTOU_EDITOR', 'REJECTED',           'Concept too similar to existing works.',           2, DATEADD(DAY,-15,GETDATE())),
+    (@pAlien, @t1,'TANTOU_EDITOR', 'APPROVED',           'Approved for final Editorial Board decision.',     2, DATEADD(DAY,-15,GETDATE())),
     (@pTokyo, @mk2,'MANGAKA',      'CREATED',            'Initial draft created.',                           0, DATEADD(DAY,-35,GETDATE())),
     (@pTokyo, @mk2,'MANGAKA',      'SUBMITTED',          'Submitted for review.',                            1, DATEADD(DAY,-30,GETDATE())),
     (@pTokyo, NULL,'SYSTEM',       'ASSIGNED_EDITOR',    'Assigned to Tantou Editor tantou2.',               1, DATEADD(DAY,-30,GETDATE())),
     (@pTokyo, @t2,'TANTOU_EDITOR', 'APPROVED',           'Excellent concept. Approved for series.',          1, DATEADD(DAY,-28,GETDATE()));
+GO
+
+-- ============================================================
+--  BƯỚC 7B: PROPOSAL BOARD VOTING ROUNDS
+--  Seed đủ flow: mở vòng 3 ngày, snapshot eligible board, vote tối thiểu 3,
+--  chỉ kết thúc khi hết hạn hoặc tất cả board đã vote.
+-- ============================================================
+
+DECLARE
+    @b1 BIGINT = (SELECT id FROM [User] WHERE username = 'board1'),
+    @b2 BIGINT = (SELECT id FROM [User] WHERE username = 'board2'),
+    @b3 BIGINT = (SELECT id FROM [User] WHERE username = 'board3'),
+    @pEdo BIGINT = (SELECT id FROM Proposal WHERE title = 'Shadows of Edo'),
+    @pCyber BIGINT = (SELECT id FROM Proposal WHERE title = 'Cyber Ronin'),
+    @pKitchen BIGINT = (SELECT id FROM Proposal WHERE title = 'Celestial Kitchen'),
+    @pLotus BIGINT = (SELECT id FROM Proposal WHERE title = 'Neon Lotus High'),
+    @pBakery BIGINT = (SELECT id FROM Proposal WHERE title = 'Rainfall Bakery'),
+    @pAlien BIGINT = (SELECT id FROM Proposal WHERE title = 'Alien Overlords'),
+    @pTokyo BIGINT = (SELECT id FROM Proposal WHERE title = 'Shadows of Tokyo'),
+    @rEdo BIGINT,
+    @rCyber BIGINT,
+    @rKitchen BIGINT,
+    @rLotus BIGINT,
+    @rBakery BIGINT,
+    @rAlien BIGINT,
+    @rTokyo BIGINT;
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pEdo, 1, 1, 'CLOSED', DATEADD(DAY,-23,GETDATE()), DATEADD(DAY,-20,GETDATE()), DATEADD(DAY,-20,GETDATE()), 'EXPIRED');
+SET @rEdo = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pCyber, 1, 1, 'OPEN', DATEADD(HOUR,-8,GETDATE()), DATEADD(HOUR,64,GETDATE()), NULL, NULL);
+SET @rCyber = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pKitchen, 1, 1, 'CLOSED', DATEADD(DAY,-17,GETDATE()), DATEADD(DAY,-14,GETDATE()), DATEADD(DAY,-14,GETDATE()), 'EXPIRED');
+SET @rKitchen = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pLotus, 2, 1, 'CLOSED', DATEADD(DAY,-10,GETDATE()), DATEADD(DAY,-7,GETDATE()), DATEADD(DAY,-7,GETDATE()), 'EXPIRED');
+SET @rLotus = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pBakery, 1, 1, 'CLOSED', DATEADD(DAY,-5,GETDATE()), DATEADD(DAY,-2,GETDATE()), DATEADD(DAY,-2,GETDATE()), 'EXPIRED');
+SET @rBakery = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pAlien, 2, 1, 'CLOSED', DATEADD(DAY,-15,GETDATE()), DATEADD(DAY,-12,GETDATE()), DATEADD(DAY,-12,GETDATE()), 'EXPIRED');
+SET @rAlien = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRound (proposalId, submitAttemptNumber, roundNumber, status, openedAt, closesAt, closedAt, closeReason)
+VALUES (@pTokyo, 1, 1, 'CLOSED', DATEADD(DAY,-28,GETDATE()), DATEADD(DAY,-25,GETDATE()), DATEADD(DAY,-25,GETDATE()), 'EXPIRED');
+SET @rTokyo = SCOPE_IDENTITY();
+
+INSERT INTO ProposalBoardRoundVoter (roundId, voterId)
+SELECT r.roundId, u.id
+FROM (VALUES
+    (@rEdo), (@rCyber), (@rKitchen), (@rLotus), (@rBakery), (@rAlien), (@rTokyo)
+) AS r(roundId)
+JOIN [User] u ON u.status = 'ACTIVE'
+JOIN UserRole ur ON ur.userId = u.id
+JOIN [Role] ro ON ro.id = ur.roleId AND ro.name = 'EDITORIAL_BOARD';
+
+INSERT INTO ProposalHistory (proposalId, actorId, actorRole, actionType, note, submitAttemptNumber, boardRoundId, createdAt)
+VALUES
+    (@pEdo, @b1, 'EDITORIAL_BOARD', 'APPROVED', 'Strong premise and production plan.', 1, @rEdo, DATEADD(DAY,-22,GETDATE())),
+    (@pEdo, @b2, 'EDITORIAL_BOARD', 'APPROVED', 'Clear audience fit.', 1, @rEdo, DATEADD(DAY,-21,GETDATE())),
+    (@pEdo, @b3, 'EDITORIAL_BOARD', 'APPROVED', 'Ready for serialization.', 1, @rEdo, DATEADD(DAY,-20,GETDATE())),
+    (@pEdo, NULL, 'SYSTEM', 'APPROVED', 'Editorial Board approved publication after quorum.', 1, @rEdo, DATEADD(DAY,-20,GETDATE())),
+
+    (@pCyber, @b1, 'EDITORIAL_BOARD', 'APPROVED', 'Visual hook is strong.', 1, @rCyber, DATEADD(HOUR,-7,GETDATE())),
+    (@pCyber, @b2, 'EDITORIAL_BOARD', 'APPROVED', 'Good fit for action readers.', 1, @rCyber, DATEADD(HOUR,-6,GETDATE())),
+    (@pCyber, @b3, 'EDITORIAL_BOARD', 'REVISE_REQUESTED', 'Clarify the AI antagonist before launch.', 1, @rCyber, DATEADD(HOUR,-5,GETDATE())),
+
+    (@pKitchen, @b1, 'EDITORIAL_BOARD', 'APPROVED', 'Distinctive world and gentle pacing.', 1, @rKitchen, DATEADD(DAY,-16,GETDATE())),
+    (@pKitchen, @b2, 'EDITORIAL_BOARD', 'APPROVED', 'Strong pilot appeal.', 1, @rKitchen, DATEADD(DAY,-15,GETDATE())),
+    (@pKitchen, @b3, 'EDITORIAL_BOARD', 'APPROVED', 'Approve for short pilot serialization.', 1, @rKitchen, DATEADD(DAY,-14,GETDATE())),
+    (@pKitchen, NULL, 'SYSTEM', 'APPROVED', 'Editorial Board approved publication after quorum.', 1, @rKitchen, DATEADD(DAY,-14,GETDATE())),
+
+    (@pLotus, @b1, 'EDITORIAL_BOARD', 'APPROVED', 'Revision addressed the tone issue.', 2, @rLotus, DATEADD(DAY,-9,GETDATE())),
+    (@pLotus, @b2, 'EDITORIAL_BOARD', 'APPROVED', 'Characters are now clearer.', 2, @rLotus, DATEADD(DAY,-8,GETDATE())),
+    (@pLotus, @b3, 'EDITORIAL_BOARD', 'APPROVED', 'Approve after second attempt.', 2, @rLotus, DATEADD(DAY,-7,GETDATE())),
+    (@pLotus, NULL, 'SYSTEM', 'APPROVED', 'Editorial Board approved publication after quorum.', 2, @rLotus, DATEADD(DAY,-7,GETDATE())),
+
+    (@pBakery, @b1, 'EDITORIAL_BOARD', 'REVISE_REQUESTED', 'Main conflict needs sharper stakes.', 1, @rBakery, DATEADD(DAY,-4,GETDATE())),
+    (@pBakery, @b2, 'EDITORIAL_BOARD', 'REVISE_REQUESTED', 'Please clarify chapter one escalation.', 1, @rBakery, DATEADD(DAY,-3,GETDATE())),
+    (@pBakery, @b3, 'EDITORIAL_BOARD', 'APPROVED', 'Cozy tone is promising.', 1, @rBakery, DATEADD(DAY,-2,GETDATE())),
+    (@pBakery, NULL, 'SYSTEM', 'REVISE_REQUESTED', 'Editorial Board requested revisions before publication.', 1, @rBakery, DATEADD(DAY,-2,GETDATE())),
+
+    (@pAlien, @b1, 'EDITORIAL_BOARD', 'REJECTED', 'Too similar to current catalogue works.', 2, @rAlien, DATEADD(DAY,-14,GETDATE())),
+    (@pAlien, @b2, 'EDITORIAL_BOARD', 'REJECTED', 'Second attempt did not separate the premise enough.', 2, @rAlien, DATEADD(DAY,-13,GETDATE())),
+    (@pAlien, @b3, 'EDITORIAL_BOARD', 'REJECTED', 'Reject after final review.', 2, @rAlien, DATEADD(DAY,-12,GETDATE())),
+    (@pAlien, NULL, 'SYSTEM', 'REJECTED', 'Editorial Board rejected publication.', 2, @rAlien, DATEADD(DAY,-12,GETDATE())),
+
+    (@pTokyo, @b1, 'EDITORIAL_BOARD', 'APPROVED', 'Strong thriller engine.', 1, @rTokyo, DATEADD(DAY,-27,GETDATE())),
+    (@pTokyo, @b2, 'EDITORIAL_BOARD', 'APPROVED', 'Commercially clear and polished.', 1, @rTokyo, DATEADD(DAY,-26,GETDATE())),
+    (@pTokyo, @b3, 'EDITORIAL_BOARD', 'APPROVED', 'Approve for series.', 1, @rTokyo, DATEADD(DAY,-25,GETDATE())),
+    (@pTokyo, NULL, 'SYSTEM', 'APPROVED', 'Editorial Board approved publication after quorum.', 1, @rTokyo, DATEADD(DAY,-25,GETDATE()));
 GO
 
 -- ============================================================
@@ -871,6 +1201,16 @@ GO
 --  DONE
 -- ============================================================
 
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes WHERE name = 'UX_Proposal_one_draft_per_mangaka' AND object_id = OBJECT_ID('dbo.Proposal')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_Proposal_one_draft_per_mangaka
+        ON dbo.Proposal(mangakaId)
+        WHERE status = 'DRAFT';
+END
+GO
+
 PRINT '';
 PRINT '========================================================';
 PRINT '  FULL SEED v5 (FIXED) — IMPORTED SUCCESSFULLY';
@@ -881,10 +1221,12 @@ PRINT '  admin                          — ADMIN';
 PRINT '  mangaka1/2/3/4/5               — MANGAKA';
 PRINT '  assistant1..10                 — ASSISTANT';
 PRINT '  tantou1/2/3                    — TANTOU_EDITOR';
-PRINT '  board1/2/3                     — EDITORIAL_BOARD';
+PRINT '  board1/2/3/4/5                 — EDITORIAL_BOARD';
 PRINT '';
 PRINT 'DATA:';
-PRINT '  11 Proposals (DRAFT/UNDER_REVIEW/REVISION_REQUESTED/APPROVED/REJECTED)';
+PRINT '  11 Proposals with full proposal flow samples';
+PRINT '     - Cyber Ronin: BOARD_REVIEW with open round, 3/5 votes cast';
+PRINT '     - Approved/rejected/revision examples include closed board rounds';
 PRINT '  4 Series (Shadows of Edo, Celestial Kitchen, Neon Lotus High, Shadows of Tokyo)';
 PRINT '  14 Chapters (PLANNING/IN_PROGRESS/EDITORIAL_REVIEW/COMPLETE/APPROVED/REJECTED)';
 PRINT '  20+ Page Tasks (IN_PROGRESS/SUBMITTED/APPROVED/REJECTED)';

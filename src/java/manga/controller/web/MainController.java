@@ -230,7 +230,7 @@ public class MainController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
-        model.addAttribute("canBoardVote", user.hasRole("EDITORIAL_BOARD") && "BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus()));
+        model.addAttribute("canBoardVote", proposalService.canVoteProposalAsBoard(user, proposal));
         return "proposal/detail";
     }
 
