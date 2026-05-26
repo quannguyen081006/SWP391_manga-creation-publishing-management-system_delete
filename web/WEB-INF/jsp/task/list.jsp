@@ -739,7 +739,8 @@
                     + '<label class="field-label" for="taskViewNotes">Notes / progress update</label>'
                     + '<textarea id="taskViewNotes" name="notes" rows="4" placeholder="Ghi chú tiến độ cho assistant...">' + escapeHtml(task.notes || '') + '</textarea>'
                     + '</form>')
-                : '<p class="section-desc">You can view this task but only the series owner Mangaka can update it.</p>');
+                : '<p class="section-desc">You can view this task but only the series owner Mangaka can update it.</p>')
+            + renderImageForm(task);
     }
 
     function renderTaskRowActions(task) {
@@ -888,6 +889,7 @@
         document.getElementById('taskViewSubtitle').textContent = (task.seriesTitle || '') + ' - Ch. ' + task.chapterNumber + ' - ' + (task.chapterTitle || '');
         document.getElementById('taskViewContent').innerHTML = renderViewModalContent(task);
         openModal('taskViewModal');
+        await loadTaskImages(taskId);
     }
 
     async function loadData() {
@@ -973,6 +975,21 @@
         if (viewButton) {
             closePopovers();
             await openTaskView(viewButton.getAttribute('data-task-view'));
+            return;
+        }
+
+        var deleteImageBtn = e.target.closest ? e.target.closest('[data-task-image-delete]') : null;
+        if (deleteImageBtn) {
+            if (!confirm('Delete this image?')) return;
+            try {
+                var imageId = deleteImageBtn.getAttribute('data-task-image-delete');
+                var reloadTaskId = deleteImageBtn.getAttribute('data-task-id');
+                await callApi('DELETE', '/api/v1/images/' + imageId);
+                showMessage('Image deleted.', false);
+                await loadTaskImages(reloadTaskId);
+            } catch (err) {
+                showMessage(err.message, true);
+            }
             return;
         }
 
