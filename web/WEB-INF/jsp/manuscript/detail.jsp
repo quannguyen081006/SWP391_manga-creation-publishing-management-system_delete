@@ -16,10 +16,14 @@
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
 
 <div class="section-card detail-grid">
+    <div><span class="detail-label">Current Version</span><strong>v${manuscript.version} ${isCurrentVersion ? '(current)' : '(history)'}</strong></div>
+    <div><span class="detail-label">Mangaka</span><strong>${manuscript.mangakaName}</strong></div>
     <div><span class="detail-label">Version</span><strong>v${manuscript.version}</strong></div>
     <div><span class="detail-label">Submitted</span><strong>${manuscript.submittedAt}</strong></div>
     <div><span class="detail-label">SLA Deadline</span><strong>${manuscript.reviewDeadline}</strong></div>
     <div><span class="detail-label">Status</span><span class="status-chip ${manuscript.status=='APPROVED' ? 'status-approved' : (manuscript.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${manuscript.status}</span></div>
+    <div><span class="detail-label">File / Path</span><strong>${manuscript.fileUrl}</strong></div>
+    <div><span class="detail-label">Synopsis</span><strong>${manuscript.synopsis}</strong></div>
     <c:if test="${not empty manuscript.revisionDeadline}">
         <div><span class="detail-label">Revision Deadline</span><strong>${manuscript.revisionDeadline}</strong></div>
     </c:if>
@@ -32,14 +36,15 @@
 <div class="section-card">
     <h3 class="section-title compact-title">Version History</h3>
     <table class="data-table">
-        <thead><tr><th>Version</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead>
+        <thead><tr><th>Version</th><th>Status</th><th>Submitted</th><th>Reviewer</th><th>Action</th></tr></thead>
         <tbody>
             <c:forEach items="${versionHistory}" var="v">
                 <tr class="${v.id == manuscript.id ? 'row-current' : ''}">
-                    <td>v${v.version}</td>
+                    <td>v${v.version} ${v.id == manuscript.id ? '(current)' : ''}</td>
                     <td><span class="status-chip ${v.status=='APPROVED' ? 'status-approved' : (v.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${v.status}</span></td>
                     <td>${v.submittedAt}</td>
-                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${v.id}">View</a></td>
+                    <td>${v.reviewerName}</td>
+                    <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${v.id}">View Detail</a></td>
                 </tr>
             </c:forEach>
         </tbody>
@@ -67,12 +72,8 @@
                     <button class="btn small danger-soft" type="submit" onclick="return confirm('Delete this manuscript? This cannot be undone.');">Delete</button>
                 </form>
             </c:if>
-            <!-- RESUBMIT button -->
-            <c:if test="${canResubmit}">
-                <form method="post" action="${pageContext.request.contextPath}/main/chapters/${manuscript.chapterId}/manuscripts" style="display: inline;">
-                    <input type="hidden" name="fileUrl" value="${manuscript.fileUrl}" />
-                    <button class="btn small primary" type="submit">Resubmit</button>
-                </form>
+            <c:if test="${canCreateNextVersion}">
+                <a class="btn small primary" href="${pageContext.request.contextPath}/main/manuscripts/create?chapterId=${manuscript.chapterId}">Create Next Version</a>
             </c:if>
         </div>
     </div>
@@ -102,6 +103,10 @@
                 <input type="text" name="feedback" placeholder="Feedback (required)" required style="margin-right: 5px; padding: 4px 8px;" />
                 <button class="btn small danger-soft" type="submit" onclick="return confirm('Reject this manuscript?');">Reject</button>
             </form>
+            <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/request-revision" style="display: inline;">
+                <input type="text" name="feedback" placeholder="Revision note (required)" required style="margin-right: 5px; padding: 4px 8px;" />
+                <button class="btn small" type="submit">Request Revision</button>
+            </form>
         </div>
     </div>
 </c:if>
@@ -130,6 +135,19 @@
                 <tr><td>${a.pageNumber}</td><td>${a.content}</td><td>${a.createdAt}</td></tr>
             </c:forEach>
             <c:if test="${empty annotations}"><tr><td colspan="3" class="muted">No annotations yet.</td></tr></c:if>
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <h3 class="section-title compact-title">Review History</h3>
+    <table class="data-table">
+        <thead><tr><th>Action</th><th>Actor</th><th>Detail</th><th>Performed</th></tr></thead>
+        <tbody>
+            <c:forEach items="${reviewHistory}" var="h">
+                <tr><td>${h.action}</td><td>${h.actorId}</td><td>${h.detail}</td><td>${h.performedAt}</td></tr>
+            </c:forEach>
+            <c:if test="${empty reviewHistory}"><tr><td colspan="4" class="muted">No review history yet.</td></tr></c:if>
         </tbody>
     </table>
 </div>

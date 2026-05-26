@@ -31,10 +31,15 @@ public class AnnotationService {
             throw new BusinessRuleException("Only assigned Tantou Editor can add annotations");
         }
 
-        // Validate manuscript status - only allow annotations on active manuscripts
+        // Validate manuscript status - annotations are part of the active Tantou review only.
         String status = manuscriptRepository.getStatus(manuscriptId);
-        if (ManuscriptStatus.APPROVED.name().equals(status) || ManuscriptStatus.ARCHIVED.name().equals(status)) {
-            throw new BusinessRuleException("Cannot annotate finalized manuscript (BR-41)");
+        if (!ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
+            throw new BusinessRuleException("Can only annotate the current UNDER_REVIEW manuscript version");
+        }
+        long chapterId = manuscriptRepository.findById(manuscriptId).getChapterId();
+        if (!manuscriptRepository.listByChapter(chapterId).isEmpty()
+                && manuscriptRepository.listByChapter(chapterId).get(0).getId() != manuscriptId) {
+            throw new BusinessRuleException("Can only annotate the current manuscript version");
         }
 
         // Validate pageNumber

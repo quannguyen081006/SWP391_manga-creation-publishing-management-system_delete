@@ -30,14 +30,24 @@
 
 <div class="section-card">
     <h3 class="section-title">Pending Review</h3>
+    <form method="get" action="${pageContext.request.contextPath}/main/manuscripts" class="form-grid" style="margin-bottom: 16px;">
+        <label>Filter by Series</label>
+        <select name="seriesId">
+            <option value="">All series</option>
+            <c:forEach items="${seriesList}" var="s">
+                <option value="${s.id}" ${selectedSeriesId == s.id ? 'selected' : ''}>${s.title}</option>
+            </c:forEach>
+        </select>
+        <button class="btn small primary" type="submit">Filter</button>
+    </form>
     <table class="data-table">
         <thead>
             <tr>
+                <th>Manuscript</th>
                 <th>Series</th>
-                <th>Chapter</th>
+                <th>Mangaka</th>
                 <th>Version</th>
                 <th>Submitted</th>
-                <th>SLA Deadline</th>
                 <th>Status</th>
                 <th>Action</th>
             </tr>
@@ -45,11 +55,11 @@
         <tbody>
             <c:forEach items="${manuscripts}" var="m">
                 <tr>
-                    <td>${m.seriesTitle}</td>
                     <td>Ch. ${m.chapterNumber} - ${m.chapterTitle}</td>
+                    <td>${m.seriesTitle}</td>
+                    <td>${m.mangakaName}</td>
                     <td>v${m.version}</td>
                     <td>${m.submittedAt}</td>
-                    <td>${m.reviewDeadline}</td>
                     <td><span class="status-chip ${m.status=='APPROVED' ? 'status-approved' : (m.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${m.status}</span></td>
                     <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${m.id}">View</a></td>
                 </tr>

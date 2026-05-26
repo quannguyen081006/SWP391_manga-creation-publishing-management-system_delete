@@ -15,6 +15,8 @@ import manga.repository.ProductionRepository;
 import manga.repository.RankingRepository;
 import manga.repository.UserAdminRepository;
 import manga.service.AuditLogService;
+import manga.service.AnnotationService;
+import manga.service.ManuscriptService;
 import manga.service.NotificationService;
 import manga.service.ProposalService;
 import manga.service.RankingCsvImportService;
@@ -56,6 +58,12 @@ public class ModuleWebController {
 
     @Autowired
     private ManuscriptRepository manuscriptRepository;
+
+    @Autowired
+    private ManuscriptService manuscriptService;
+
+    @Autowired
+    private AnnotationService annotationService;
 
     @Autowired
     private RankingRepository rankingRepository;
@@ -297,9 +305,11 @@ public class ModuleWebController {
         boolean isApproved = "APPROVED".equals(status);
         boolean isDraft = "DRAFT".equals(status);
         boolean isSubmitted = "SUBMITTED".equals(status);
+        boolean isRevisionRequired = "REVISION_REQUIRED".equals(status);
 
         // Get version history
         List<ManuscriptSummary> versionHistory = manuscriptRepository.listByChapter(chapterId);
+        boolean isCurrentVersion = !versionHistory.isEmpty() && versionHistory.get(0).getId() == manuscript.getId();
         
         // Check if there's an active review cycle (any manuscript in SUBMITTED or UNDER_REVIEW)
         boolean hasActiveReviewCycle = versionHistory.stream()
@@ -315,6 +325,7 @@ public class ModuleWebController {
         model.addAttribute("manuscript", manuscript);
         model.addAttribute("annotations", manuscriptRepository.listAnnotations(id));
         model.addAttribute("versionHistory", versionHistory);
+        model.addAttribute("reviewHistory", auditLogRepository.listByEntity("MANUSCRIPT", id));
         model.addAttribute("currentUser", user);
         model.addAttribute("isMangakaOwner", isMangakaOwner);
         model.addAttribute("isAssignedTantou", isAssignedTantou);
@@ -323,31 +334,33 @@ public class ModuleWebController {
         model.addAttribute("isApproved", isApproved);
         model.addAttribute("isDraft", isDraft);
         model.addAttribute("isSubmitted", isSubmitted);
+        model.addAttribute("isRevisionRequired", isRevisionRequired);
+        model.addAttribute("isCurrentVersion", isCurrentVersion);
         model.addAttribute("hasActiveReviewCycle", hasActiveReviewCycle);
         model.addAttribute("chapterStatus", chapterStatus);
         model.addAttribute("seriesStatus", seriesStatus);
         
         // START REVIEW button: TANTOU_EDITOR assigned + SUBMITTED
-        model.addAttribute("canStartReview", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isSubmitted);
+        model.addAttribute("canStartReview", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isSubmitted && isCurrentVersion);
         
         // Annotation button: TANTOU_EDITOR assigned + not approved
-        model.addAttribute("canAddAnnotation", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && !isApproved);
+        model.addAttribute("canAddAnnotation", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview && isCurrentVersion);
         
         // Approve/Reject buttons: TANTOU_EDITOR assigned + UNDER_REVIEW
-        model.addAttribute("canApproveReject", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview);
+        model.addAttribute("canApproveReject", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview && isCurrentVersion);
         
         // SUBMIT TO EDITOR button: MANGAKA owner + DRAFT/REJECTED + chapter COMPLETE + no active review cycle + series not CANCELLED
-        model.addAttribute("canSubmitToEditor", isMangakaOwner && (isDraft || isRejected) 
+        model.addAttribute("canSubmitToEditor", isMangakaOwner && isDraft && isCurrentVersion
             && "COMPLETE".equals(chapterStatus) && !hasActiveReviewCycle && !"CANCELLED".equals(seriesStatus));
         
         // EDIT button: MANGAKA owner + DRAFT or REJECTED
-        model.addAttribute("canEdit", isMangakaOwner && (isDraft || isRejected));
+        model.addAttribute("canEdit", isMangakaOwner && isDraft && isCurrentVersion);
         
-        // DELETE button: MANGAKA owner + not APPROVED + not UNDER_REVIEW
-        model.addAttribute("canDelete", isMangakaOwner && !isApproved && !isUnderReview);
+        // DELETE button: only current draft can be removed
+        model.addAttribute("canDelete", isMangakaOwner && isDraft && isCurrentVersion);
         
-        // RESUBMIT button: MANGAKA owner + REJECTED + revisionDeadline not expired
-        model.addAttribute("canResubmit", isMangakaOwner && isRejected && manuscript.getRevisionDeadline() != null);
+        // NEXT VERSION button: MANGAKA owner + latest version requires revision
+        model.addAttribute("canCreateNextVersion", isMangakaOwner && isRevisionRequired && isCurrentVersion);
         
         return "manuscript/detail";
     }
@@ -364,7 +377,7 @@ public class ModuleWebController {
             if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
                 throw new IllegalArgumentException("Only assigned Tantou can approve");
             }
-            manuscriptRepository.approve(id);
+            manuscriptService.approveManuscript(id, new manga.dto.ApproveManuscriptRequest(), user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -387,17 +400,27 @@ public class ModuleWebController {
             if (feedback == null || feedback.trim().isEmpty()) {
                 throw new IllegalArgumentException("Feedback is required for rejection (BR-40)");
             }
-            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-            manuscriptRepository.reject(id, feedback.trim());
-            if (manuscript != null) {
-                long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
-                notificationService.notifyUser(
-                        mangakaId,
-                        "MANUSCRIPT_REJECTED",
-                        "Manuscript rejected for chapter #" + manuscript.getChapterId() + ". Feedback: " + feedback.trim(),
-                        id,
-                        "MANUSCRIPT");
-            }
+            manga.dto.RejectManuscriptRequest request = new manga.dto.RejectManuscriptRequest();
+            request.setFeedback(feedback.trim());
+            manuscriptService.rejectManuscript(id, request, user);
+            return "redirect:/main/manuscripts/" + id;
+        } catch (RuntimeException ex) {
+            manuscriptDetail(id, session, model);
+            model.addAttribute("error", ex.getMessage());
+            return "manuscript/detail";
+        }
+    }
+
+    @RequestMapping(value = "/manuscripts/{id}/request-revision", method = RequestMethod.POST)
+    public String manuscriptRequestRevision(
+            @PathVariable("id") long id,
+            @RequestParam("feedback") String feedback,
+            HttpSession session,
+            Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can request revision");
+            manuscriptService.requestRevision(id, feedback, user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -418,7 +441,10 @@ public class ModuleWebController {
             if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
                 throw new IllegalArgumentException("Only assigned Tantou can annotate");
             }
-            manuscriptRepository.addAnnotation(id, user.getId(), pageNumber, content);
+            manga.dto.AddAnnotationRequest request = new manga.dto.AddAnnotationRequest();
+            request.setPageNumber(pageNumber);
+            request.setContent(content);
+            annotationService.addAnnotation(id, request, user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -435,7 +461,7 @@ public class ModuleWebController {
             if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
                 throw new IllegalArgumentException("Only assigned Tantou can start review");
             }
-            manuscriptRepository.startReview(id);
+            manuscriptService.startReview(id, user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -457,11 +483,7 @@ public class ModuleWebController {
             if (user.getId() != mangakaId) {
                 throw new IllegalArgumentException("Only owner can submit manuscript");
             }
-            String status = manuscript.getStatus();
-            if (!("DRAFT".equals(status) || "REJECTED".equals(status))) {
-                throw new IllegalArgumentException("Manuscript must be DRAFT or REJECTED to submit");
-            }
-            manuscriptRepository.submitForReview(id);
+            manuscriptService.submitDraft(id, user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -482,8 +504,8 @@ public class ModuleWebController {
             throw new IllegalArgumentException("Only owner can edit manuscript");
         }
         String status = manuscript.getStatus();
-        if (!("DRAFT".equals(status) || "REJECTED".equals(status))) {
-            throw new IllegalArgumentException("Manuscript must be DRAFT or REJECTED to edit");
+        if (!"DRAFT".equals(status)) {
+            throw new IllegalArgumentException("Only DRAFT manuscript versions can be edited");
         }
         model.addAttribute("manuscript", manuscript);
         return "manuscript/edit";
@@ -505,11 +527,7 @@ public class ModuleWebController {
             if (user.getId() != mangakaId) {
                 throw new IllegalArgumentException("Only owner can edit manuscript");
             }
-            String status = manuscript.getStatus();
-            if (!("DRAFT".equals(status) || "REJECTED".equals(status))) {
-                throw new IllegalArgumentException("Manuscript must be DRAFT or REJECTED to edit");
-            }
-            manuscriptRepository.updateFileUrl(id, fileUrl);
+            manuscriptService.updateDraft(id, fileUrl, user);
             return "redirect:/main/manuscripts/" + id;
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -530,11 +548,7 @@ public class ModuleWebController {
             if (user.getId() != mangakaId) {
                 throw new IllegalArgumentException("Only owner can delete manuscript");
             }
-            String status = manuscript.getStatus();
-            if ("APPROVED".equals(status) || "UNDER_REVIEW".equals(status)) {
-                throw new IllegalArgumentException("Cannot delete APPROVED or UNDER_REVIEW manuscript");
-            }
-            manuscriptRepository.delete(id);
+            manuscriptService.deleteDraft(id, user);
             return "redirect:/main/manuscripts";
         } catch (RuntimeException ex) {
             manuscriptDetail(id, session, model);
@@ -544,10 +558,14 @@ public class ModuleWebController {
     }
 
     @RequestMapping(value = "/manuscripts/create", method = RequestMethod.GET)
-    public String manuscriptCreate(HttpSession session, Model model) {
+    public String manuscriptCreate(
+            HttpSession session,
+            @RequestParam(value = "chapterId", required = false) Long chapterId,
+            Model model) {
         AuthenticatedUser user = requireUser(session);
         requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-        model.addAttribute("chapters", chapterRepository.listAll());
+        model.addAttribute("chapters", chapterRepository.listAll(user));
+        model.addAttribute("selectedChapterId", chapterId);
         return "manuscript/create";
     }
 
@@ -560,11 +578,11 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         try {
             requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-            manuscriptRepository.submit(chapterId, fileUrl);
-            return "redirect:/main/manuscripts";
+            ManuscriptSummary manuscript = manuscriptService.createDraft(chapterId, fileUrl, user);
+            return "redirect:/main/manuscripts/" + manuscript.getId();
         } catch (RuntimeException ex) {
             model.addAttribute("error", ex.getMessage());
-            model.addAttribute("chapters", chapterRepository.listAll());
+            model.addAttribute("chapters", chapterRepository.listAll(user));
             return "manuscript/create";
         }
     }

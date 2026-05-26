@@ -1,4 +1,3 @@
-tôi muốn chỗ url đổi thành trích dẫn file
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <!DOCTYPE html>
@@ -12,7 +11,7 @@ tôi muốn chỗ url đổi thành trích dẫn file
 <jsp:include page="../common/header.jsp" />
 
 <h2 class="page-title">Create Manuscript</h2>
-<p class="page-sub">Submit a new manuscript for editorial review</p>
+<p class="page-sub">Create a draft manuscript version</p>
 
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
 <c:if test="${not empty success}"><div class="alert success">${success}</div></c:if>
@@ -23,7 +22,7 @@ tôi muốn chỗ url đổi thành trích dẫn file
         <select name="chapterId" required>
             <option value="">Select a chapter</option>
             <c:forEach items="${chapters}" var="ch">
-                <option value="${ch.id}">
+                <option value="${ch.id}" ${selectedChapterId == ch.id ? 'selected' : ''}>
                     Series #${ch.seriesId} | Ch. ${ch.chapterNumber} - ${ch.title}
                 </option>
             </c:forEach>
@@ -32,7 +31,7 @@ tôi muốn chỗ url đổi thành trích dẫn file
         <label>File URL</label>
         <input type="text" name="fileUrl" placeholder="Enter manuscript file URL" required />
 
-        <button class="btn primary" type="submit">Submit Manuscript</button>
+        <button class="btn primary" type="submit">Create Draft</button>
     </form>
 </div>
 

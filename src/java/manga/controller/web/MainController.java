@@ -131,9 +131,12 @@ public class MainController {
     }
 
     @RequestMapping(value = "/manuscripts", method = RequestMethod.GET)
-    public String manuscripts(HttpSession session, Model model) {
+    public String manuscripts(
+            HttpSession session,
+            @RequestParam(value = "seriesId", required = false) Long seriesId,
+            Model model) {
         AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
-        List<ManuscriptSummary> manuscripts = productionRepository.listManuscripts();
+        List<ManuscriptSummary> manuscripts = productionRepository.listManuscripts(user, seriesId);
         int pendingReview = 0;
         int urgent = 0;
         int breached = 0;
@@ -159,6 +162,8 @@ public class MainController {
         model.addAttribute("slaBreached", breached);
         model.addAttribute("currentUser", user);
         model.addAttribute("isMangaka", user != null && user.hasRole("MANGAKA"));
+        model.addAttribute("seriesList", productionRepository.listSeries(user));
+        model.addAttribute("selectedSeriesId", seriesId);
         return "manuscript/list";
     }
 

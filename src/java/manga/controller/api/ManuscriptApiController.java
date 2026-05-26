@@ -81,6 +81,15 @@ public class ManuscriptApiController {
         return ApiResponse.ok(null, "Manuscript rejected");
     }
 
+    @RequestMapping(value = "/manuscripts/{id}/request-revision", method = RequestMethod.POST)
+    public ApiResponse<Object> requestRevision(@PathVariable("id") long id, HttpSession session, @RequestBody RejectManuscriptRequest request) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can request revision");
+
+        manuscriptService.requestRevision(id, request.getFeedback(), user);
+        return ApiResponse.ok(null, "Revision requested");
+    }
+
     @RequestMapping(value = "/manuscripts/{id}/annotations", method = RequestMethod.POST)
     public ApiResponse<Object> annotate(
             @PathVariable("id") long id,

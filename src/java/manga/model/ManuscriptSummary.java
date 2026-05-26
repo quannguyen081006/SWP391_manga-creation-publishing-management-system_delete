@@ -15,6 +15,9 @@ public class ManuscriptSummary {
     private String seriesTitle;
     private String chapterTitle;
     private Integer chapterNumber;
+    private String synopsis;
+    private String mangakaName;
+    private String reviewerName;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -40,4 +43,10 @@ public class ManuscriptSummary {
     public void setChapterTitle(String chapterTitle) { this.chapterTitle = chapterTitle; }
     public Integer getChapterNumber() { return chapterNumber; }
     public void setChapterNumber(Integer chapterNumber) { this.chapterNumber = chapterNumber; }
+    public String getSynopsis() { return synopsis; }
+    public void setSynopsis(String synopsis) { this.synopsis = synopsis; }
+    public String getMangakaName() { return mangakaName; }
+    public void setMangakaName(String mangakaName) { this.mangakaName = mangakaName; }
+    public String getReviewerName() { return reviewerName; }
+    public void setReviewerName(String reviewerName) { this.reviewerName = reviewerName; }
 }

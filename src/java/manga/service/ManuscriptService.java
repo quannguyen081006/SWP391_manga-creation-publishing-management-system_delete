@@ -39,8 +39,15 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptSummary submitManuscript(long chapterId, SubmitManuscriptRequest request, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = createDraft(chapterId, request.getFileUrl(), user);
+        submitDraft(manuscript.getId(), user);
+        return manuscriptRepository.findById(manuscript.getId());
+    }
+
+    @Transactional
+    public ManuscriptSummary createDraft(long chapterId, String fileUrl, AuthenticatedUser user) {
         // Validate file URL
-        if (request.getFileUrl() == null || request.getFileUrl().trim().isEmpty()) {
+        if (fileUrl == null || fileUrl.trim().isEmpty()) {
             throw new BusinessRuleException("File URL cannot be empty");
         }
 
@@ -55,21 +62,36 @@ public class ManuscriptService {
             throw new BusinessRuleException("Chapter must be COMPLETE before submitting manuscript (BR-23)");
         }
 
-        // BR-46: Cannot submit new manuscript while current review cycle unfinished
-        if (hasActiveReviewCycle(chapterId)) {
-            throw new BusinessRuleException("Cannot submit manuscript while active review cycle exists (BR-46)");
+        if (hasOpenManuscriptVersion(chapterId)) {
+            throw new BusinessRuleException("Cannot create manuscript while a draft or active review version exists");
         }
 
-        // Create new manuscript version
-        long manuscriptId = manuscriptRepository.submit(chapterId, request.getFileUrl().trim());
-        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
+        long manuscriptId = manuscriptRepository.createDraft(chapterId, fileUrl.trim());
+        return manuscriptRepository.findById(manuscriptId);
+    }
+
+    @Transactional
+    public void submitDraft(long manuscriptId, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
+        long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+        if (ownerId != user.getId()) {
+            throw new BusinessRuleException("Only chapter owner can submit manuscript");
+        }
+        if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
+            throw new BusinessRuleException("Only DRAFT manuscript versions can be submitted");
+        }
+        if (hasActiveReviewCycleExcept(manuscript.getChapterId(), manuscriptId)) {
+            throw new BusinessRuleException("Cannot submit manuscript while another version is under review");
+        }
+
+        manuscriptRepository.submitForReview(manuscriptId);
 
         // Notify Tantou Editor
-        long tantouId = manuscriptRepository.getChapterTantou(chapterId);
+        long tantouId = manuscriptRepository.getChapterTantou(manuscript.getChapterId());
         notificationService.notifyUser(
             tantouId,
             "MANUSCRIPT_SUBMITTED",
-            "New manuscript submitted for chapter #" + chapterId,
+            "New manuscript submitted for chapter #" + manuscript.getChapterId(),
             manuscriptId,
             "MANUSCRIPT"
         );
@@ -80,29 +102,27 @@ public class ManuscriptService {
             "MANUSCRIPT_SUBMITTED",
             "MANUSCRIPT",
             manuscriptId,
-            auditLogService.jsonPair("chapterId", String.valueOf(chapterId))
+            auditLogService.jsonPair("chapterId", String.valueOf(manuscript.getChapterId()))
         );
-
-        return manuscript;
     }
 
     @Transactional
     public void approveManuscript(long manuscriptId, ApproveManuscriptRequest request, AuthenticatedUser user) {
-        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
-        if (manuscript == null) {
-            throw new BusinessRuleException("Manuscript not found");
-        }
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
 
         // Validate user is assigned Tantou Editor
         long tantouId = manuscriptRepository.getManuscriptTantou(manuscriptId);
         if (tantouId != user.getId()) {
             throw new BusinessRuleException("Only assigned Tantou Editor can approve manuscript");
         }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be approved");
+        }
 
         // Validate manuscript status
         String status = manuscriptRepository.getStatus(manuscriptId);
-        if (ManuscriptStatus.APPROVED.name().equals(status) || ManuscriptStatus.ARCHIVED.name().equals(status)) {
-            throw new BusinessRuleException("Cannot approve finalized manuscript (BR-45)");
+        if (!ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
+            throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can be approved");
         }
 
         // Approve manuscript
@@ -131,10 +151,7 @@ public class ManuscriptService {
 
     @Transactional
     public void rejectManuscript(long manuscriptId, RejectManuscriptRequest request, AuthenticatedUser user) {
-        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
-        if (manuscript == null) {
-            throw new BusinessRuleException("Manuscript not found");
-        }
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
 
         // BR-40: Reject manuscript REQUIRES feedback
         if (request.getFeedback() == null || request.getFeedback().trim().isEmpty()) {
@@ -146,11 +163,14 @@ public class ManuscriptService {
         if (tantouId != user.getId()) {
             throw new BusinessRuleException("Only assigned Tantou Editor can reject manuscript");
         }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be rejected");
+        }
 
         // Validate manuscript status
         String status = manuscriptRepository.getStatus(manuscriptId);
-        if (ManuscriptStatus.APPROVED.name().equals(status) || ManuscriptStatus.ARCHIVED.name().equals(status)) {
-            throw new BusinessRuleException("Cannot reject finalized manuscript (BR-45)");
+        if (!ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
+            throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can be rejected");
         }
 
         // Reject manuscript
@@ -178,16 +198,53 @@ public class ManuscriptService {
     }
 
     @Transactional
-    public void startReview(long manuscriptId, AuthenticatedUser user) {
-        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
-        if (manuscript == null) {
-            throw new BusinessRuleException("Manuscript not found");
+    public void requestRevision(long manuscriptId, String feedback, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
+        if (feedback == null || feedback.trim().isEmpty()) {
+            throw new BusinessRuleException("Feedback is required when requesting revision");
         }
+        long tantouId = manuscriptRepository.getManuscriptTantou(manuscriptId);
+        if (tantouId != user.getId()) {
+            throw new BusinessRuleException("Only assigned Tantou Editor can request revision");
+        }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can require revision");
+        }
+        if (!ManuscriptStatus.UNDER_REVIEW.name().equals(manuscript.getStatus())) {
+            throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can require revision");
+        }
+
+        manuscriptRepository.requestRevision(manuscriptId, feedback.trim());
+
+        long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+        notificationService.notifyUser(
+            mangakaId,
+            "MANUSCRIPT_REVISION_REQUESTED",
+            "Revision requested for chapter #" + manuscript.getChapterId() + ". Feedback: " + feedback.trim(),
+            manuscriptId,
+            "MANUSCRIPT"
+        );
+
+        auditLogService.append(
+            user,
+            "MANUSCRIPT_REVISION_REQUESTED",
+            "MANUSCRIPT",
+            manuscriptId,
+            auditLogService.jsonTwoPairs("chapterId", String.valueOf(manuscript.getChapterId()), "feedback", feedback.trim())
+        );
+    }
+
+    @Transactional
+    public void startReview(long manuscriptId, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
 
         // Validate user is assigned Tantou Editor
         long tantouId = manuscriptRepository.getManuscriptTantou(manuscriptId);
         if (tantouId != user.getId()) {
             throw new BusinessRuleException("Only assigned Tantou Editor can start review");
+        }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be reviewed");
         }
 
         // BR-38: Cannot enter editorial review if chapter still has unapproved pages
@@ -198,6 +255,15 @@ public class ManuscriptService {
 
         // Start review with 48h deadline (BR-43)
         manuscriptRepository.startReview(manuscriptId);
+
+        long mangakaId = manuscriptRepository.getChapterMangaka(chapterId);
+        notificationService.notifyUser(
+            mangakaId,
+            "MANUSCRIPT_REVIEW_STARTED",
+            "Review started for chapter #" + chapterId,
+            manuscriptId,
+            "MANUSCRIPT"
+        );
 
         // Audit log
         auditLogService.append(
@@ -231,6 +297,35 @@ public class ManuscriptService {
         return manuscriptRepository.findById(manuscriptId);
     }
 
+    @Transactional
+    public void updateDraft(long manuscriptId, String fileUrl, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
+        if (fileUrl == null || fileUrl.trim().isEmpty()) {
+            throw new BusinessRuleException("File URL cannot be empty");
+        }
+        long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+        if (ownerId != user.getId()) {
+            throw new BusinessRuleException("Only owner can edit manuscript");
+        }
+        if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
+            throw new BusinessRuleException("Only DRAFT manuscript versions can be edited");
+        }
+        manuscriptRepository.updateFileUrl(manuscriptId, fileUrl.trim());
+    }
+
+    @Transactional
+    public void deleteDraft(long manuscriptId, AuthenticatedUser user) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
+        long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+        if (ownerId != user.getId()) {
+            throw new BusinessRuleException("Only owner can delete manuscript");
+        }
+        if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
+            throw new BusinessRuleException("Only DRAFT manuscript versions can be deleted");
+        }
+        manuscriptRepository.delete(manuscriptId);
+    }
+
     private boolean isChapterComplete(long chapterId) {
         // BR-22: Chapter only COMPLETE when all page tasks are APPROVED
         return pageTaskRepository.areAllTasksApproved(chapterId);
@@ -246,5 +341,46 @@ public class ManuscriptService {
             }
         }
         return false;
+    }
+
+    private boolean hasOpenManuscriptVersion(long chapterId) {
+        List<ManuscriptSummary> manuscripts = manuscriptRepository.listByChapter(chapterId);
+        for (ManuscriptSummary m : manuscripts) {
+            String status = m.getStatus();
+            if (ManuscriptStatus.DRAFT.name().equals(status)
+                    || ManuscriptStatus.SUBMITTED.name().equals(status)
+                    || ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasActiveReviewCycleExcept(long chapterId, long manuscriptId) {
+        List<ManuscriptSummary> manuscripts = manuscriptRepository.listByChapter(chapterId);
+        for (ManuscriptSummary m : manuscripts) {
+            if (m.getId() == manuscriptId) {
+                continue;
+            }
+            String status = m.getStatus();
+            if (ManuscriptStatus.SUBMITTED.name().equals(status)
+                    || ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ManuscriptSummary requireManuscript(long manuscriptId) {
+        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
+        if (manuscript == null) {
+            throw new BusinessRuleException("Manuscript not found");
+        }
+        return manuscript;
+    }
+
+    private boolean isCurrentVersion(ManuscriptSummary manuscript) {
+        List<ManuscriptSummary> versions = manuscriptRepository.listByChapter(manuscript.getChapterId());
+        return !versions.isEmpty() && versions.get(0).getId() == manuscript.getId();
     }
 }

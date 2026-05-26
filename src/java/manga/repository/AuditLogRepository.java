@@ -110,6 +110,26 @@ public class AuditLogRepository {
         }
     }
 
+    public List<AuditLogItem> listByEntity(String entityType, long entityId) {
+        String sql = "SELECT id, actorId, action, entityType, entityId, detail, performedAt "
+                + "FROM AuditLog WHERE entityType = ? AND entityId = ? ORDER BY performedAt DESC";
+        List<AuditLogItem> rows = new ArrayList<AuditLogItem>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, entityType);
+            ps.setLong(2, entityId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(map(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot load audit logs by entity", ex);
+        }
+        return rows;
+    }
+
+
     public List<String> listActions() {
         String sql = "SELECT DISTINCT action FROM AuditLog WHERE action IS NOT NULL ORDER BY action";
         List<String> actions = new ArrayList<String>();

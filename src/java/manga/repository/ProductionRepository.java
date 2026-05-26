@@ -344,37 +344,76 @@ public class ProductionRepository {
     }
 
     public List<ManuscriptSummary> listManuscripts() {
+        return listManuscripts(null, null);
+    }
+
+    public List<ManuscriptSummary> listManuscripts(AuthenticatedUser user, Long seriesId) {
         String sql =
             "SELECT m.id, m.chapterId, m.version, m.status, m.submittedAt, m.reviewDeadline, m.fileUrl, m.revisionDeadline, "
-            + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle "
+            + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, mangaka.fullName AS mangakaName "
             + "FROM Manuscript m "
             + "JOIN Chapter c ON c.id = m.chapterId "
             + "JOIN Series s ON s.id = c.seriesId "
-            + "ORDER BY m.submittedAt DESC";
+            + "LEFT JOIN [User] mangaka ON mangaka.id = s.mangakaId ";
+
+        List<Object> params = new ArrayList<Object>();
+        List<String> where = new ArrayList<String>();
+        if (user != null && user.hasRole("MANGAKA") && !user.hasRole("ADMIN")) {
+            where.add("s.mangakaId = ?");
+            params.add(Long.valueOf(user.getId()));
+        } else if (user != null && user.hasRole("TANTOU_EDITOR") && !user.hasRole("ADMIN")) {
+            where.add("s.tantouEditorId = ?");
+            params.add(Long.valueOf(user.getId()));
+            where.add("m.status IN ('SUBMITTED','UNDER_REVIEW')");
+        }
+        if (seriesId != null && seriesId.longValue() > 0) {
+            where.add("s.id = ?");
+            params.add(seriesId);
+        }
+        if (!where.isEmpty()) {
+            sql += "WHERE " + joinWhere(where) + " ";
+        }
+        sql += "ORDER BY m.submittedAt DESC";
 
         List<ManuscriptSummary> rows = new ArrayList<ManuscriptSummary>();
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                ManuscriptSummary m = new ManuscriptSummary();
-                m.setId(rs.getLong("id"));
-                m.setChapterId(rs.getLong("chapterId"));
-                m.setVersion(rs.getInt("version"));
-                m.setStatus(rs.getString("status"));
-                m.setSubmittedAt(rs.getTimestamp("submittedAt"));
-                m.setReviewDeadline(rs.getTimestamp("reviewDeadline"));
-                m.setFileUrl(rs.getString("fileUrl"));
-                m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
-                m.setChapterTitle(rs.getString("chapterTitle"));
-                m.setChapterNumber(rs.getInt("chapterNumber"));
-                m.setSeriesTitle(rs.getString("seriesTitle"));
-                rows.add(m);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setLong(i + 1, ((Long) params.get(i)).longValue());
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ManuscriptSummary m = new ManuscriptSummary();
+                    m.setId(rs.getLong("id"));
+                    m.setChapterId(rs.getLong("chapterId"));
+                    m.setVersion(rs.getInt("version"));
+                    m.setStatus(rs.getString("status"));
+                    m.setSubmittedAt(rs.getTimestamp("submittedAt"));
+                    m.setReviewDeadline(rs.getTimestamp("reviewDeadline"));
+                    m.setFileUrl(rs.getString("fileUrl"));
+                    m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
+                    m.setChapterTitle(rs.getString("chapterTitle"));
+                    m.setChapterNumber(rs.getInt("chapterNumber"));
+                    m.setSeriesTitle(rs.getString("seriesTitle"));
+                    m.setMangakaName(rs.getString("mangakaName"));
+                    rows.add(m);
+                }
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot load manuscripts", ex);
         }
         return rows;
+    }
+
+    private String joinWhere(List<String> where) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < where.size(); i++) {
+            if (i > 0) {
+                sb.append(" AND ");
+            }
+            sb.append(where.get(i));
+        }
+        return sb.toString();
     }
 }
 
