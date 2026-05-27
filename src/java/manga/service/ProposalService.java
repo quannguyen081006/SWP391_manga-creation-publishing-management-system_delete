@@ -2,7 +2,9 @@ package manga.service;
 
 import java.util.Arrays;
 import java.util.List;
+import manga.common.exception.ForbiddenException;
 import manga.model.AuthenticatedUser;
+import manga.model.BoardVoteUndoInfo;
 import manga.model.Proposal;
 import manga.model.ProposalHistory;
 import manga.repository.ProposalRepository;
@@ -120,6 +122,11 @@ public class ProposalService {
 
     public void voteProposalAsBoard(AuthenticatedUser user, long proposalId, String decision, String note) {
         requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can vote on proposals");
+        Proposal proposal = proposalRepository.findById(proposalId);
+        if (proposal == null) {
+            throw new IllegalArgumentException("Proposal not found");
+        }
+        assertCanCastBoardVote(user, proposal);
         String normalized = decision == null ? "" : decision.trim().toUpperCase();
         if (!"APPROVE".equals(normalized) && !"REVISE".equals(normalized) && !"REJECT".equals(normalized)) {
             throw new IllegalArgumentException("Board decision must be APPROVE, REVISE, or REJECT");
@@ -130,6 +137,7 @@ public class ProposalService {
         proposalRepository.voteByEditorialBoard(user, proposalId, normalized, safeTrim(note));
     }
 
+<<<<<<< Updated upstream
     public boolean canVoteProposalAsBoard(AuthenticatedUser user, Proposal proposal) {
         return user != null
                 && proposal != null
@@ -137,6 +145,76 @@ public class ProposalService {
                 && "BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())
                 && "OPEN".equalsIgnoreCase(proposal.getBoardRoundStatus())
                 && proposalRepository.canVoteInCurrentBoardRound(proposal.getId(), user.getId());
+=======
+    public void undoBoardVote(AuthenticatedUser user, long proposalId) {
+        requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can undo board votes");
+        proposalRepository.undoBoardVote(user, proposalId);
+    }
+
+    public boolean canCastBoardVote(AuthenticatedUser user, Proposal proposal) {
+        if (user == null || proposal == null || !user.hasRole("EDITORIAL_BOARD")) {
+            return false;
+        }
+        if (!"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
+            return false;
+        }
+        if (isManagingTantouForProposal(user, proposal)) {
+            return false;
+        }
+        return !proposalRepository.hasBoardVote(proposal.getId(), user.getId());
+    }
+
+    public String boardVoteBlockMessage(AuthenticatedUser user, Proposal proposal) {
+        if (user == null || proposal == null || !user.hasRole("EDITORIAL_BOARD")) {
+            return null;
+        }
+        if (isManagingTantouForProposal(user, proposal)) {
+            return "Tantou Editor cannot vote on a Proposal they manage.";
+        }
+        return null;
+    }
+
+    public BoardVoteUndoInfo getBoardVoteUndoInfo(AuthenticatedUser user, long proposalId) {
+        if (user == null || !user.hasRole("EDITORIAL_BOARD")) {
+            return null;
+        }
+        Proposal proposal = proposalRepository.findById(proposalId);
+        if (proposal == null || !"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
+            return null;
+        }
+        ProposalHistory vote = proposalRepository.findLatestBoardVote(proposalId, user.getId());
+        if (vote == null || vote.getCreatedAt() == null) {
+            return null;
+        }
+        long elapsedMs = System.currentTimeMillis() - vote.getCreatedAt().getTime();
+        int remaining = (int) Math.max(0L, (60_000L - elapsedMs + 999L) / 1000L);
+        if (remaining <= 0) {
+            return null;
+        }
+        BoardVoteUndoInfo info = new BoardVoteUndoInfo();
+        info.setHistoryId(vote.getId());
+        info.setDecision(vote.getActionType());
+        info.setRemainingSeconds(remaining);
+        return info;
+    }
+
+    private void assertCanCastBoardVote(AuthenticatedUser user, Proposal proposal) {
+        String blockMessage = boardVoteBlockMessage(user, proposal);
+        if (blockMessage != null) {
+            throw new ForbiddenException(blockMessage);
+        }
+        if (!"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
+            throw new IllegalArgumentException("Proposal is not waiting for Editorial Board review");
+        }
+        if (proposalRepository.hasBoardVote(proposal.getId(), user.getId())) {
+            throw new IllegalArgumentException("You have already voted on this proposal");
+        }
+    }
+
+    private boolean isManagingTantouForProposal(AuthenticatedUser user, Proposal proposal) {
+        return proposal.getAssignedEditorId() != null
+                && proposal.getAssignedEditorId().longValue() == user.getId();
+>>>>>>> Stashed changes
     }
 
     public List<ProposalHistory> listHistory(AuthenticatedUser user, long proposalId) {

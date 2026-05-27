@@ -1,5 +1,6 @@
 package manga.repository;
 
+import manga.common.util.RoleCombinationValidator;
 import manga.model.AuthenticatedUser;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -135,6 +136,9 @@ public class UserAdminRepository {
         try (Connection conn = dataSource.getConnection();
              PreparedStatement rolePs = conn.prepareStatement(roleSql)) {
             ensureAdminRoleCanBeAssigned(conn, userId, normalizedRole);
+            List<String> nextRoles = new ArrayList<String>(listRoles(conn, userId));
+            nextRoles.add(normalizedRole);
+            RoleCombinationValidator.validate(nextRoles);
             rolePs.setString(1, normalizedRole);
             long roleId;
             try (ResultSet rs = rolePs.executeQuery()) {

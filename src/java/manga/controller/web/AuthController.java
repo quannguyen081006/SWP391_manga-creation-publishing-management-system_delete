@@ -60,7 +60,7 @@ public class AuthController {
         if (session != null) {
             session.invalidate();
         }
-        return "redirect:/main/login";
+        return "redirect:/login";
     }
 
     private String resolveBackTarget(String back, HttpServletRequest request) {

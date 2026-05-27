@@ -3,6 +3,8 @@
 <%@taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
 <c:set var="uri" value="${pageContext.request.requestURI}" />
 <c:set var="ctx" value="${pageContext.request.contextPath}" />
+<script>window.MANGA_CTX = '${ctx}';</script>
+<script src="${ctx}/assets/auth-session.js"></script>
 <c:set var="backUri" value="${fn:substringAfter(uri, ctx)}" />
 <c:if test="${empty backUri or backUri eq '/' or fn:contains(backUri, '/main/switch-role')}">
     <c:set var="backUri" value="/main/dashboard" />

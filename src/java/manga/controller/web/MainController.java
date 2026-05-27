@@ -1,5 +1,6 @@
 package manga.controller.web;
 
+import manga.common.exception.ForbiddenException;
 import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptSummary;
 import manga.model.Proposal;
@@ -235,8 +236,18 @@ public class MainController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
+<<<<<<< Updated upstream
         model.addAttribute("canBoardVote", proposalService.canVoteProposalAsBoard(user, proposal));
+=======
+        addBoardVoteAttributes(user, proposal, model);
+>>>>>>> Stashed changes
         return "proposal/detail";
+    }
+
+    private void addBoardVoteAttributes(AuthenticatedUser user, Proposal proposal, Model model) {
+        model.addAttribute("canBoardVote", proposalService.canCastBoardVote(user, proposal));
+        model.addAttribute("boardVoteBlockMessage", proposalService.boardVoteBlockMessage(user, proposal));
+        model.addAttribute("boardVoteUndo", proposalService.getBoardVoteUndoInfo(user, proposal.getId()));
     }
 
     @RequestMapping(value = "/proposals/{id}/vote", method = RequestMethod.GET)
@@ -307,6 +318,21 @@ public class MainController {
         try {
             proposalService.voteProposalAsBoard(user, id, decision, note);
             return "redirect:/main/proposals/" + id;
+        } catch (ForbiddenException ex) {
+            return proposalDetailWithError(id, session, model, ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            return proposalDetailWithError(id, session, model, ex.getMessage());
+        }
+    }
+
+    @RequestMapping(value = "/proposals/{id}/board-vote/undo", method = RequestMethod.POST)
+    public String undoBoardVote(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        try {
+            proposalService.undoBoardVote(user, id);
+            return "redirect:/main/proposals/" + id;
+        } catch (ForbiddenException ex) {
+            return proposalDetailWithError(id, session, model, ex.getMessage());
         } catch (IllegalArgumentException ex) {
             return proposalDetailWithError(id, session, model, ex.getMessage());
         }

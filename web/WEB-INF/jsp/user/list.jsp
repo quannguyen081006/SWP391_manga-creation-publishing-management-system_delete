@@ -93,6 +93,7 @@
     </table>
 </div>
 
+<script src="${pageContext.request.contextPath}/assets/role-assignment.js"></script>
 <jsp:include page="../common/footer.jsp" />
 </body>
 </html>

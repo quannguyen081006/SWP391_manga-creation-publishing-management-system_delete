@@ -93,7 +93,13 @@ public class ProposalController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
+<<<<<<< Updated upstream
         model.addAttribute("canBoardVote", proposalService.canVoteProposalAsBoard(user, proposal));
+=======
+        model.addAttribute("canBoardVote", proposalService.canCastBoardVote(user, proposal));
+        model.addAttribute("boardVoteBlockMessage", proposalService.boardVoteBlockMessage(user, proposal));
+        model.addAttribute("boardVoteUndo", proposalService.getBoardVoteUndoInfo(user, proposal.getId()));
+>>>>>>> Stashed changes
         return "proposal/detail";
     }
 
@@ -135,6 +141,21 @@ public class ProposalController {
         try {
             proposalService.voteProposalAsBoard(user, id, decision, note);
             return "redirect:/main/proposals/" + id;
+        } catch (manga.common.exception.ForbiddenException ex) {
+            return detailWithError(id, session, model, ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            return detailWithError(id, session, model, ex.getMessage());
+        }
+    }
+
+    @RequestMapping(value = "/proposals/{id}/board-vote/undo", method = RequestMethod.POST)
+    public String undoBoardVote(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = (AuthenticatedUser) session.getAttribute("AUTH_USER");
+        try {
+            proposalService.undoBoardVote(user, id);
+            return "redirect:/main/proposals/" + id;
+        } catch (manga.common.exception.ForbiddenException ex) {
+            return detailWithError(id, session, model, ex.getMessage());
         } catch (IllegalArgumentException ex) {
             return detailWithError(id, session, model, ex.getMessage());
         }

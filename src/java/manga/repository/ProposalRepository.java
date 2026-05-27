@@ -1,5 +1,6 @@
 package manga.repository;
 
+import manga.common.exception.ForbiddenException;
 import manga.model.AuthenticatedUser;
 import manga.model.Proposal;
 import manga.model.ProposalHistory;
@@ -238,6 +239,132 @@ public class ProposalRepository {
         }
     }
 
+    public boolean hasBoardVote(long proposalId, long actorId) {
+        try (Connection conn = dataSource.getConnection()) {
+            Proposal p = findById(conn, proposalId);
+            if (p == null) {
+                return false;
+            }
+            return hasBoardVote(conn, proposalId, actorId, p.getSubmitAttemptCount());
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check board vote", ex);
+        }
+    }
+
+    public ProposalHistory findLatestBoardVote(long proposalId, long actorId) {
+        try (Connection conn = dataSource.getConnection()) {
+            Proposal p = findById(conn, proposalId);
+            if (p == null) {
+                return null;
+            }
+            long roundStartId = findCurrentBoardRoundStartId(conn, proposalId, p.getSubmitAttemptCount());
+            String sql =
+                "SELECT TOP 1 h.id, h.proposalId, h.actorId, u.fullName AS actorName, h.actorRole, h.actionType, "
+                + "h.note, h.createdAt, h.submitAttemptNumber "
+                + "FROM ProposalHistory h LEFT JOIN [User] u ON u.id = h.actorId "
+                + "WHERE h.proposalId = ? AND h.actorId = ? AND h.actorRole = 'EDITORIAL_BOARD' "
+                + "AND h.submitAttemptNumber = ? AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") "
+                + "AND h.id > ? ORDER BY h.id DESC";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, proposalId);
+                ps.setLong(2, actorId);
+                ps.setInt(3, p.getSubmitAttemptCount());
+                ps.setLong(4, roundStartId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return null;
+                    }
+                    ProposalHistory h = new ProposalHistory();
+                    h.setId(rs.getLong("id"));
+                    h.setProposalId(rs.getLong("proposalId"));
+                    long historyActorId = rs.getLong("actorId");
+                    h.setActorId(rs.wasNull() ? null : Long.valueOf(historyActorId));
+                    h.setActorName(rs.getString("actorName"));
+                    h.setActorRole(rs.getString("actorRole"));
+                    h.setActionType(rs.getString("actionType"));
+                    h.setNote(rs.getString("note"));
+                    h.setCreatedAt(rs.getTimestamp("createdAt"));
+                    h.setSubmitAttemptNumber(rs.getInt("submitAttemptNumber"));
+                    return h;
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot load board vote", ex);
+        }
+    }
+
+    public void undoBoardVote(AuthenticatedUser actor, long proposalId) {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                Proposal p = lockProposal(conn, proposalId);
+                if (!"BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
+                    throw new ForbiddenException("Undo window has expired. Vote is final.");
+                }
+                ProposalHistory vote = findLatestBoardVote(conn, proposalId, actor.getId(), p.getSubmitAttemptCount());
+                if (vote == null) {
+                    throw new IllegalArgumentException("No vote to undo");
+                }
+                long elapsedMs = System.currentTimeMillis() - vote.getCreatedAt().getTime();
+                if (elapsedMs > 60_000L) {
+                    throw new ForbiddenException("Undo window has expired. Vote is final.");
+                }
+                String deleteSql = "DELETE FROM ProposalHistory WHERE id = ? AND proposalId = ? AND actorId = ?";
+                try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                    ps.setLong(1, vote.getId());
+                    ps.setLong(2, proposalId);
+                    ps.setLong(3, actor.getId());
+                    if (ps.executeUpdate() == 0) {
+                        throw new IllegalArgumentException("No vote to undo");
+                    }
+                }
+                conn.commit();
+            } catch (Exception ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot undo board vote", ex);
+        }
+    }
+
+    private ProposalHistory findLatestBoardVote(Connection conn, long proposalId, long actorId, int attempt)
+            throws SQLException {
+        long roundStartId = findCurrentBoardRoundStartId(conn, proposalId, attempt);
+        String sql =
+            "SELECT TOP 1 h.id, h.proposalId, h.actorId, u.fullName AS actorName, h.actorRole, h.actionType, "
+            + "h.note, h.createdAt, h.submitAttemptNumber "
+            + "FROM ProposalHistory h LEFT JOIN [User] u ON u.id = h.actorId "
+            + "WHERE h.proposalId = ? AND h.actorId = ? AND h.actorRole = 'EDITORIAL_BOARD' "
+            + "AND h.submitAttemptNumber = ? AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") "
+            + "AND h.id > ? ORDER BY h.id DESC";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            ps.setLong(2, actorId);
+            ps.setInt(3, attempt);
+            ps.setLong(4, roundStartId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                ProposalHistory h = new ProposalHistory();
+                h.setId(rs.getLong("id"));
+                h.setProposalId(rs.getLong("proposalId"));
+                long historyActorId = rs.getLong("actorId");
+                h.setActorId(rs.wasNull() ? null : Long.valueOf(historyActorId));
+                h.setActorName(rs.getString("actorName"));
+                h.setActorRole(rs.getString("actorRole"));
+                h.setActionType(rs.getString("actionType"));
+                h.setNote(rs.getString("note"));
+                h.setCreatedAt(rs.getTimestamp("createdAt"));
+                h.setSubmitAttemptNumber(rs.getInt("submitAttemptNumber"));
+                return h;
+            }
+        }
+    }
+
     public void voteByEditorialBoard(AuthenticatedUser actor, long proposalId, String decision, String note) {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
@@ -246,6 +373,7 @@ public class ProposalRepository {
                 if (!"BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
                     throw new IllegalArgumentException("Proposal is not waiting for Editorial Board review");
                 }
+<<<<<<< Updated upstream
                 Long roundId = findOpenBoardRoundId(conn, proposalId, p.getSubmitAttemptCount());
                 if (roundId == null) {
                     throw new IllegalArgumentException("Proposal does not have an open Editorial Board voting round");
@@ -258,6 +386,12 @@ public class ProposalRepository {
                     throw new IllegalArgumentException("You are not eligible to vote in this voting round");
                 }
                 if (hasBoardVote(conn, roundId.longValue(), actor.getId())) {
+=======
+                if (p.getAssignedEditorId() != null && p.getAssignedEditorId().longValue() == actor.getId()) {
+                    throw new ForbiddenException("Tantou Editor cannot vote on a Proposal they manage.");
+                }
+                if (hasBoardVote(conn, proposalId, actor.getId(), p.getSubmitAttemptCount())) {
+>>>>>>> Stashed changes
                     throw new IllegalArgumentException("You have already voted on this proposal");
                 }
 

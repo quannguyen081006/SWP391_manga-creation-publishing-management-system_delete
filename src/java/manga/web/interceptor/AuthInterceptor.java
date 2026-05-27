@@ -37,6 +37,9 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
+        request.setAttribute("AUTH_USER_CHECKED", user);
+        preventCachedAuthenticatedPage(response, uri);
+
         if (!isAllowed(user, uri, context)) {
             if (uri.contains("/api/v1/")) {
                 writeJsonError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden");
@@ -47,6 +50,15 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    private void preventCachedAuthenticatedPage(HttpServletResponse response, String uri) {
+        if (uri.contains("/assets/")) {
+            return;
+        }
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        response.setDateHeader("Expires", 0);
     }
 
     private void writeJsonError(HttpServletResponse response, int status, String message) throws Exception {

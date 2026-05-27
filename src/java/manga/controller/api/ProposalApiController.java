@@ -88,7 +88,20 @@ public class ProposalApiController {
             @RequestParam(value = "note", required = false) String note) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         proposalService.voteProposalAsBoard(user, id, decision, note);
-        return ApiResponse.ok(null, "Proposal board vote submitted");
+        return ApiResponse.ok(proposalService.getBoardVoteUndoInfo(user, id), "Proposal board vote submitted");
+    }
+
+    @RequestMapping(value = "/{id}/board-vote/undo", method = RequestMethod.PATCH)
+    public ApiResponse<Object> undoBoardVote(@PathVariable("id") long id, HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        proposalService.undoBoardVote(user, id);
+        return ApiResponse.ok(null, "Board vote undone");
+    }
+
+    @RequestMapping(value = "/{id}/my-board-vote", method = RequestMethod.GET)
+    public ApiResponse<Object> myBoardVote(@PathVariable("id") long id, HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        return ApiResponse.ok(proposalService.getBoardVoteUndoInfo(user, id), "Current board vote undo window");
     }
 }
 

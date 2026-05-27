@@ -1012,6 +1012,11 @@ public class ModuleWebController {
         if (containsRole(roles, "ADMIN") && userAdminRepository.hasAnyAdmin()) {
             throw new IllegalArgumentException("Only one ADMIN account is allowed");
         }
+        List<String> selected = new ArrayList<String>();
+        for (String role : roles) {
+            addSelectedRole(selected, role);
+        }
+        manga.common.util.RoleCombinationValidator.validate(selected);
     }
 
     private boolean isBlank(String value) {
@@ -1024,6 +1029,11 @@ public class ModuleWebController {
                 && userAdminRepository.hasAnyAdmin()) {
             throw new IllegalArgumentException("Only one ADMIN account is allowed");
         }
+        List<String> merged = new ArrayList<String>(userAdminRepository.listRoles(userId));
+        for (String role : roles) {
+            addSelectedRole(merged, role);
+        }
+        manga.common.util.RoleCombinationValidator.validate(merged);
     }
 
     private boolean containsRole(String[] roles, String roleName) {
