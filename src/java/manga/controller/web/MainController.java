@@ -236,11 +236,7 @@ public class MainController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
-<<<<<<< Updated upstream
-        model.addAttribute("canBoardVote", proposalService.canVoteProposalAsBoard(user, proposal));
-=======
         addBoardVoteAttributes(user, proposal, model);
->>>>>>> Stashed changes
         return "proposal/detail";
     }
 

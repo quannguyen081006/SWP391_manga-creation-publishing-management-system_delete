@@ -140,45 +140,6 @@
         </script>
     </c:if>
 
-    <c:if test="${not empty boardVoteBlockMessage}">
-        <div class="alert error">${boardVoteBlockMessage}</div>
-    </c:if>
-
-    <c:if test="${not empty boardVoteUndo}">
-        <div class="panel board-vote-undo-panel" id="boardVoteUndoPanel">
-            <p>
-                Vote submitted (<strong>${boardVoteUndo.decision}</strong>).
-                You have <strong><span id="boardVoteUndoSeconds">${boardVoteUndo.remainingSeconds}</span>s</strong> to undo.
-            </p>
-            <form method="post" action="${pageContext.request.contextPath}/main/proposals/${proposal.id}/board-vote/undo" class="inline-form">
-                <button type="submit" class="btn danger-soft" id="boardVoteUndoBtn">Undo vote</button>
-            </form>
-        </div>
-        <script>
-            (function () {
-                var remaining = ${boardVoteUndo.remainingSeconds};
-                var secondsEl = document.getElementById('boardVoteUndoSeconds');
-                var undoBtn = document.getElementById('boardVoteUndoBtn');
-                var panel = document.getElementById('boardVoteUndoPanel');
-                var timer = window.setInterval(function () {
-                    remaining -= 1;
-                    if (secondsEl) {
-                        secondsEl.textContent = String(Math.max(remaining, 0));
-                    }
-                    if (remaining <= 0) {
-                        window.clearInterval(timer);
-                        if (undoBtn) {
-                            undoBtn.disabled = true;
-                        }
-                        if (panel) {
-                            panel.style.opacity = '0.6';
-                        }
-                    }
-                }, 1000);
-            }());
-        </script>
-    </c:if>
-
     <c:if test="${canBoardVote}">
         <div class="panel board-vote-panel">
             <div class="board-vote-panel-head">

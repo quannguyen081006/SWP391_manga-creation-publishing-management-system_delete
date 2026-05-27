@@ -2716,6 +2716,7 @@ select,
 .nav-ranking .nav-icon::before { content: "\2605"; }
 .nav-analytics .nav-icon::before { content: "\25A5"; }
 .nav-users .nav-icon::before { content: "\1F464"; }
+.nav-users .nav-icon { color: #38bdf8; }
 .nav-audit .nav-icon::before { content: "\25CE"; }
 
 .top-user {
@@ -2782,11 +2783,6 @@ select,
 .page-approved-banner {
     margin-bottom: 16px;
     border-left: 4px solid var(--ok);
-}
-
-.board-vote-undo-panel {
-    border: 1px solid #fbbf24;
-    background: #fffbeb;
 }
 
 .page-submission-grid {

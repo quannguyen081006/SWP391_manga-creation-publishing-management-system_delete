@@ -22,6 +22,8 @@ public class ProposalRepository {
     @Autowired
     private DataSource dataSource;
 
+    private Boolean boardVotingSchemaReady;
+
     private static final String BOARD_REVOTE_NOTE = "Board vote tied across approve, revise, and reject. Revote requested.";
     private static final String BOARD_QUORUM_NOT_MET_NOTE = "Board voting round closed without the minimum 3 valid votes. A new round was opened.";
     private static final String BOARD_VOTE_ACTIONS = "'APPROVED','REVISE_REQUESTED','REJECTED'";
@@ -29,10 +31,12 @@ public class ProposalRepository {
             "(SELECT TOP 1 br.id FROM ProposalBoardRound br WHERE br.proposalId = p.id "
             + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC)";
 
-    private static final String SELECT_COLUMNS =
+    private static final String BASE_SELECT_COLUMNS =
             "p.id, p.mangakaId, p.title, p.genre, p.synopsis, p.sampleFilePath, p.originalFileName, "
-            + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount, "
-            + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
+            + "p.approximateChapter, p.status, p.submittedAt, p.rejectedAt, p.assignedEditorId, p.submitAttemptCount, ";
+
+    private static final String BOARD_SELECT_COLUMNS =
+            "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
             + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.boardRoundId = " + CURRENT_BOARD_ROUND_ID + " "
             + "AND h.actionType = 'APPROVED') AS boardApproveVotes, "
             + "(SELECT COUNT(1) FROM ProposalHistory h WHERE h.proposalId = p.id "
@@ -57,21 +61,28 @@ public class ProposalRepository {
             + "AND br.submitAttemptNumber = p.submitAttemptCount ORDER BY br.roundNumber DESC, br.id DESC) AS boardVotingClosedAt, "
             + "(SELECT COUNT(1) FROM ProposalBoardRoundVoter bv WHERE bv.roundId = " + CURRENT_BOARD_ROUND_ID + ") AS boardEligibleVoterCount ";
 
+    private static final String LEGACY_BOARD_SELECT_COLUMNS =
+            "0 AS boardApproveVotes, 0 AS boardReviseVotes, 0 AS boardRejectVotes, 0 AS boardTotalVotes, "
+            + "CAST(NULL AS BIGINT) AS boardRoundId, CAST(NULL AS INT) AS boardRoundNumber, "
+            + "CAST(NULL AS VARCHAR(20)) AS boardRoundStatus, CAST(NULL AS DATETIME) AS boardVotingOpenedAt, "
+            + "CAST(NULL AS DATETIME) AS boardVotingClosesAt, CAST(NULL AS DATETIME) AS boardVotingClosedAt, "
+            + "0 AS boardEligibleVoterCount ";
+
     public List<Proposal> findForMangaka(long mangakaId) {
-        String sql = "SELECT " + SELECT_COLUMNS
+        String sql = "SELECT " + selectColumns()
             + "FROM Proposal p WHERE p.mangakaId = ? ORDER BY p.createdAt DESC";
         return queryMany(sql, Long.valueOf(mangakaId));
     }
 
     public List<Proposal> findForBoardAndEditor() {
-        String sql = "SELECT " + SELECT_COLUMNS
+        String sql = "SELECT " + selectColumns()
             + "FROM Proposal p WHERE p.status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
             + "ORDER BY p.createdAt DESC";
         return queryMany(sql, null);
     }
 
     public List<Proposal> findForAssignedEditor(long editorId) {
-        String sql = "SELECT " + SELECT_COLUMNS
+        String sql = "SELECT " + selectColumns()
             + "FROM Proposal p "
             + "WHERE p.assignedEditorId = ? "
             + "AND p.status IN ('UNDER_REVIEW','BOARD_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED') "
@@ -80,7 +91,7 @@ public class ProposalRepository {
     }
 
     public Proposal findById(long id) {
-        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WHERE p.id = ?";
+        String sql = "SELECT " + selectColumns() + "FROM Proposal p WHERE p.id = ?";
         List<Proposal> rows = queryMany(sql, Long.valueOf(id));
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -245,7 +256,8 @@ public class ProposalRepository {
             if (p == null) {
                 return false;
             }
-            return hasBoardVote(conn, proposalId, actorId, p.getSubmitAttemptCount());
+            Long roundId = findCurrentBoardRoundId(conn, proposalId, p.getSubmitAttemptCount());
+            return roundId != null && hasBoardVote(conn, roundId.longValue(), actorId);
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot check board vote", ex);
         }
@@ -257,19 +269,22 @@ public class ProposalRepository {
             if (p == null) {
                 return null;
             }
-            long roundStartId = findCurrentBoardRoundStartId(conn, proposalId, p.getSubmitAttemptCount());
+            Long roundId = findCurrentBoardRoundId(conn, proposalId, p.getSubmitAttemptCount());
+            if (roundId == null) {
+                return null;
+            }
             String sql =
                 "SELECT TOP 1 h.id, h.proposalId, h.actorId, u.fullName AS actorName, h.actorRole, h.actionType, "
                 + "h.note, h.createdAt, h.submitAttemptNumber "
                 + "FROM ProposalHistory h LEFT JOIN [User] u ON u.id = h.actorId "
-                + "WHERE h.proposalId = ? AND h.actorId = ? AND h.actorRole = 'EDITORIAL_BOARD' "
-                + "AND h.submitAttemptNumber = ? AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") "
-                + "AND h.id > ? ORDER BY h.id DESC";
+                + "WHERE h.proposalId = ? AND h.boardRoundId = ? AND h.actorId = ? "
+                + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = ? "
+                + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") ORDER BY h.id DESC";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setLong(1, proposalId);
-                ps.setLong(2, actorId);
-                ps.setInt(3, p.getSubmitAttemptCount());
-                ps.setLong(4, roundStartId);
+                ps.setLong(2, roundId.longValue());
+                ps.setLong(3, actorId);
+                ps.setInt(4, p.getSubmitAttemptCount());
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) {
                         return null;
@@ -332,19 +347,22 @@ public class ProposalRepository {
 
     private ProposalHistory findLatestBoardVote(Connection conn, long proposalId, long actorId, int attempt)
             throws SQLException {
-        long roundStartId = findCurrentBoardRoundStartId(conn, proposalId, attempt);
+        Long roundId = findCurrentBoardRoundId(conn, proposalId, attempt);
+        if (roundId == null) {
+            return null;
+        }
         String sql =
             "SELECT TOP 1 h.id, h.proposalId, h.actorId, u.fullName AS actorName, h.actorRole, h.actionType, "
             + "h.note, h.createdAt, h.submitAttemptNumber "
             + "FROM ProposalHistory h LEFT JOIN [User] u ON u.id = h.actorId "
-            + "WHERE h.proposalId = ? AND h.actorId = ? AND h.actorRole = 'EDITORIAL_BOARD' "
-            + "AND h.submitAttemptNumber = ? AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") "
-            + "AND h.id > ? ORDER BY h.id DESC";
+            + "WHERE h.proposalId = ? AND h.boardRoundId = ? AND h.actorId = ? "
+            + "AND h.actorRole = 'EDITORIAL_BOARD' AND h.submitAttemptNumber = ? "
+            + "AND h.actionType IN (" + BOARD_VOTE_ACTIONS + ") ORDER BY h.id DESC";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
-            ps.setLong(2, actorId);
-            ps.setInt(3, attempt);
-            ps.setLong(4, roundStartId);
+            ps.setLong(2, roundId.longValue());
+            ps.setLong(3, actorId);
+            ps.setInt(4, attempt);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;
@@ -373,7 +391,6 @@ public class ProposalRepository {
                 if (!"BOARD_REVIEW".equalsIgnoreCase(p.getStatus())) {
                     throw new IllegalArgumentException("Proposal is not waiting for Editorial Board review");
                 }
-<<<<<<< Updated upstream
                 Long roundId = findOpenBoardRoundId(conn, proposalId, p.getSubmitAttemptCount());
                 if (roundId == null) {
                     throw new IllegalArgumentException("Proposal does not have an open Editorial Board voting round");
@@ -386,12 +403,6 @@ public class ProposalRepository {
                     throw new IllegalArgumentException("You are not eligible to vote in this voting round");
                 }
                 if (hasBoardVote(conn, roundId.longValue(), actor.getId())) {
-=======
-                if (p.getAssignedEditorId() != null && p.getAssignedEditorId().longValue() == actor.getId()) {
-                    throw new ForbiddenException("Tantou Editor cannot vote on a Proposal they manage.");
-                }
-                if (hasBoardVote(conn, proposalId, actor.getId(), p.getSubmitAttemptCount())) {
->>>>>>> Stashed changes
                     throw new IllegalArgumentException("You have already voted on this proposal");
                 }
 
@@ -602,7 +613,7 @@ public class ProposalRepository {
     }
 
     private Proposal findById(Connection conn, long id) throws SQLException {
-        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WHERE p.id = ?";
+        String sql = "SELECT " + selectColumns() + "FROM Proposal p WHERE p.id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
             try (ResultSet rs = ps.executeQuery()) {
@@ -612,7 +623,7 @@ public class ProposalRepository {
     }
 
     private Proposal lockProposal(Connection conn, long proposalId) throws SQLException {
-        String sql = "SELECT " + SELECT_COLUMNS + "FROM Proposal p WITH (UPDLOCK, ROWLOCK) WHERE p.id = ?";
+        String sql = "SELECT " + selectColumns() + "FROM Proposal p WITH (UPDLOCK, ROWLOCK) WHERE p.id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -676,6 +687,20 @@ public class ProposalRepository {
         String sql =
             "SELECT TOP 1 id FROM ProposalBoardRound "
             + "WHERE proposalId = ? AND submitAttemptNumber = ? AND status = 'OPEN' "
+            + "ORDER BY roundNumber DESC, id DESC";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            ps.setInt(2, attempt);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Long.valueOf(rs.getLong("id")) : null;
+            }
+        }
+    }
+
+    private Long findCurrentBoardRoundId(Connection conn, long proposalId, int attempt) throws SQLException {
+        String sql =
+            "SELECT TOP 1 id FROM ProposalBoardRound "
+            + "WHERE proposalId = ? AND submitAttemptNumber = ? "
             + "ORDER BY roundNumber DESC, id DESC";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, proposalId);
@@ -992,6 +1017,30 @@ public class ProposalRepository {
             throw new RuntimeException("Cannot query proposals", ex);
         }
         return rows;
+    }
+
+    private String selectColumns() {
+        return BASE_SELECT_COLUMNS + (isBoardVotingSchemaReady() ? BOARD_SELECT_COLUMNS : LEGACY_BOARD_SELECT_COLUMNS);
+    }
+
+    private boolean isBoardVotingSchemaReady() {
+        if (boardVotingSchemaReady != null) {
+            return boardVotingSchemaReady.booleanValue();
+        }
+        String sql =
+            "SELECT CASE WHEN OBJECT_ID('dbo.ProposalBoardRound', 'U') IS NOT NULL "
+            + "AND OBJECT_ID('dbo.ProposalBoardRoundVoter', 'U') IS NOT NULL "
+            + "AND COL_LENGTH('dbo.ProposalHistory', 'boardRoundId') IS NOT NULL "
+            + "THEN 1 ELSE 0 END";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            boardVotingSchemaReady = Boolean.valueOf(rs.next() && rs.getInt(1) == 1);
+            return boardVotingSchemaReady.booleanValue();
+        } catch (SQLException ex) {
+            boardVotingSchemaReady = Boolean.FALSE;
+            return false;
+        }
     }
 
     private Proposal mapBaseProposal(ResultSet rs) throws SQLException {

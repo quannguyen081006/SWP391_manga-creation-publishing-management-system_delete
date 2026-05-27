@@ -93,13 +93,10 @@ public class ProposalController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
-<<<<<<< Updated upstream
-        model.addAttribute("canBoardVote", proposalService.canVoteProposalAsBoard(user, proposal));
-=======
+
         model.addAttribute("canBoardVote", proposalService.canCastBoardVote(user, proposal));
         model.addAttribute("boardVoteBlockMessage", proposalService.boardVoteBlockMessage(user, proposal));
         model.addAttribute("boardVoteUndo", proposalService.getBoardVoteUndoInfo(user, proposal.getId()));
->>>>>>> Stashed changes
         return "proposal/detail";
     }
 

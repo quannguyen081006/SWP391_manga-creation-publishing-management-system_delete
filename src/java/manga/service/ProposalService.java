@@ -137,15 +137,6 @@ public class ProposalService {
         proposalRepository.voteByEditorialBoard(user, proposalId, normalized, safeTrim(note));
     }
 
-<<<<<<< Updated upstream
-    public boolean canVoteProposalAsBoard(AuthenticatedUser user, Proposal proposal) {
-        return user != null
-                && proposal != null
-                && user.hasRole("EDITORIAL_BOARD")
-                && "BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())
-                && "OPEN".equalsIgnoreCase(proposal.getBoardRoundStatus())
-                && proposalRepository.canVoteInCurrentBoardRound(proposal.getId(), user.getId());
-=======
     public void undoBoardVote(AuthenticatedUser user, long proposalId) {
         requireRole(user, "EDITORIAL_BOARD", "Only EDITORIAL_BOARD can undo board votes");
         proposalRepository.undoBoardVote(user, proposalId);
@@ -156,6 +147,9 @@ public class ProposalService {
             return false;
         }
         if (!"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
+            return false;
+        }
+        if (proposal.getBoardRoundId() == null) {
             return false;
         }
         if (isManagingTantouForProposal(user, proposal)) {
@@ -179,7 +173,7 @@ public class ProposalService {
             return null;
         }
         Proposal proposal = proposalRepository.findById(proposalId);
-        if (proposal == null || !"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
+        if (proposal == null || proposal.getBoardRoundId() == null || !"BOARD_REVIEW".equalsIgnoreCase(proposal.getStatus())) {
             return null;
         }
         ProposalHistory vote = proposalRepository.findLatestBoardVote(proposalId, user.getId());
@@ -214,7 +208,6 @@ public class ProposalService {
     private boolean isManagingTantouForProposal(AuthenticatedUser user, Proposal proposal) {
         return proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId();
->>>>>>> Stashed changes
     }
 
     public List<ProposalHistory> listHistory(AuthenticatedUser user, long proposalId) {
