@@ -2,6 +2,7 @@ package manga.service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import manga.common.exception.ForbiddenException;
 import manga.model.AuthenticatedUser;
 import manga.model.BoardVoteUndoInfo;
@@ -31,11 +32,11 @@ public class ProposalService {
         if (user.hasRole("MANGAKA")) {
             return proposalRepository.findForMangaka(user.getId());
         }
-        if (user.hasRole("TANTOU_EDITOR")) {
-            return proposalRepository.findForAssignedEditor(user.getId());
-        }
         if (user.hasRole("EDITORIAL_BOARD") || user.hasRole("ADMIN")) {
             return proposalRepository.findForBoardAndEditor();
+        }
+        if (user.hasRole("TANTOU_EDITOR")) {
+            return proposalRepository.findForAssignedEditor(user.getId());
         }
         throw new IllegalArgumentException("You do not have permission to view proposals");
     }
@@ -51,15 +52,15 @@ public class ProposalService {
             }
             return p;
         }
-        if (user.hasRole("TANTOU_EDITOR")) {
-            if (p.getAssignedEditorId() == null || p.getAssignedEditorId().longValue() != user.getId()) {
-                throw new IllegalArgumentException("Only assigned Tantou Editor can view this proposal");
-            }
-            return p;
-        }
         if (user.hasRole("EDITORIAL_BOARD") || user.hasRole("ADMIN")) {
             if ("DRAFT".equalsIgnoreCase(p.getStatus())) {
                 throw new IllegalArgumentException("You do not have access to this proposal");
+            }
+            return p;
+        }
+        if (user.hasRole("TANTOU_EDITOR")) {
+            if (p.getAssignedEditorId() == null || p.getAssignedEditorId().longValue() != user.getId()) {
+                throw new IllegalArgumentException("Only assigned Tantou Editor can view this proposal");
             }
             return p;
         }
@@ -190,6 +191,11 @@ public class ProposalService {
         info.setDecision(vote.getActionType());
         info.setRemainingSeconds(remaining);
         return info;
+    }
+
+    public List<Map<String, Object>> listBoardRoundVoters(AuthenticatedUser user, long proposalId) {
+        getDetail(user, proposalId);
+        return proposalRepository.listBoardRoundVoters(proposalId);
     }
 
     private void assertCanCastBoardVote(AuthenticatedUser user, Proposal proposal) {

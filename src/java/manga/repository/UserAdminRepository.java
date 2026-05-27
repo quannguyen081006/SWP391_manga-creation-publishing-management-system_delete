@@ -37,6 +37,66 @@ public class UserAdminRepository {
         return rows;
     }
 
+    public List<Map<String, Object>> listActiveUsersForSwitch() {
+        String sql = "SELECT id, username, fullName, email, status, createdAt, updatedAt FROM [User] WHERE status = 'ACTIVE' ORDER BY id";
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                Map<String, Object> row = toMap(rs);
+                row.put("roles", listRoles(conn, rs.getLong("id")));
+                rows.add(row);
+            }
+            addSwitchItems(rows);
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list switch users", ex);
+        }
+        return rows;
+    }
+
+    private void addSwitchItems(List<Map<String, Object>> rows) {
+        Map<String, Integer> roleIndexes = new HashMap<String, Integer>();
+        for (Map<String, Object> row : rows) {
+            List<Map<String, Object>> switchItems = new ArrayList<Map<String, Object>>();
+            Object rawRoles = row.get("roles");
+            if (rawRoles instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> roles = (List<String>) rawRoles;
+                for (String role : roles) {
+                    Integer current = roleIndexes.get(role);
+                    int next = current == null ? 1 : current.intValue() + 1;
+                    roleIndexes.put(role, Integer.valueOf(next));
+
+                    Map<String, Object> item = new HashMap<String, Object>();
+                    item.put("role", role);
+                    item.put("label", roleDisplayLabel(role) + " " + next);
+                    switchItems.add(item);
+                }
+            }
+            row.put("switchItems", switchItems);
+        }
+    }
+
+    private String roleDisplayLabel(String role) {
+        if ("ADMIN".equals(role)) {
+            return "Admin";
+        }
+        if ("MANGAKA".equals(role)) {
+            return "Mangaka";
+        }
+        if ("ASSISTANT".equals(role)) {
+            return "Assistant";
+        }
+        if ("TANTOU_EDITOR".equals(role)) {
+            return "Tantou Editor";
+        }
+        if ("EDITORIAL_BOARD".equals(role)) {
+            return "Board Member";
+        }
+        return role;
+    }
+
     public Map<String, Object> getUser(long id) {
         String sql = "SELECT id, username, fullName, email, status, createdAt, updatedAt FROM [User] WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
@@ -190,6 +250,37 @@ public class UserAdminRepository {
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot list user roles", ex);
         }
+    }
+
+    public List<Map<String, Object>> listRoleSwitchItems(long userId) {
+        String sql =
+            "WITH RankedRoles AS ("
+            + "SELECT u.id AS userId, r.id AS roleId, r.name AS roleName, "
+            + "ROW_NUMBER() OVER (PARTITION BY r.name ORDER BY u.id ASC) AS roleIndex "
+            + "FROM [User] u "
+            + "JOIN UserRole ur ON ur.userId = u.id "
+            + "JOIN [Role] r ON r.id = ur.roleId "
+            + "WHERE u.status = 'ACTIVE') "
+            + "SELECT roleId, roleName, roleIndex FROM RankedRoles WHERE userId = ? ORDER BY roleId";
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String roleName = rs.getString("roleName");
+                    int roleIndex = rs.getInt("roleIndex");
+                    Map<String, Object> row = new HashMap<String, Object>();
+                    row.put("roleId", Long.valueOf(rs.getLong("roleId")));
+                    row.put("roleName", roleName);
+                    row.put("displayLabel", roleDisplayLabel(roleName) + " " + roleIndex);
+                    rows.add(row);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list current user roles", ex);
+        }
+        return rows;
     }
 
     public boolean hasAnyAdmin() {

@@ -64,17 +64,25 @@
                         </c:choose>
                     </td>
                     <td class="add-role-cell">
-                        <details class="add-role-panel">
-                            <summary class="btn small add-role-summary">Add</summary>
-                            <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles" class="role-check-form">
-                                <div class="role-check-grid compact">
-                                    <c:forEach items="${availableRoles}" var="r">
-                                        <label class="role-check"><input type="checkbox" name="roles" value="${r}" /> ${r}</label>
-                                    </c:forEach>
-                                </div>
-                                <button class="btn small primary" type="submit">Apply</button>
-                            </form>
-                        </details>
+                        <c:set var="canAddRole" value="false" />
+                        <c:forEach items="${u.roles}" var="existingRole">
+                            <c:if test="${existingRole eq 'TANTOU_EDITOR' || existingRole eq 'EDITORIAL_BOARD'}">
+                                <c:set var="canAddRole" value="true" />
+                            </c:if>
+                        </c:forEach>
+                        <c:if test="${canAddRole}">
+                            <details class="add-role-panel">
+                                <summary class="btn small add-role-summary">Add</summary>
+                                <form method="post" action="${pageContext.request.contextPath}/main/users/${u.id}/roles" class="role-check-form">
+                                    <div class="role-check-grid compact">
+                                        <c:forEach items="${availableRoles}" var="r">
+                                            <label class="role-check"><input type="checkbox" name="roles" value="${r}" /> ${r}</label>
+                                        </c:forEach>
+                                    </div>
+                                    <button class="btn small primary" type="submit">Apply</button>
+                                </form>
+                            </details>
+                        </c:if>
                     </td>
                     <td>
                         <div class="row-actions">

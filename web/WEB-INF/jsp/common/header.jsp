@@ -137,7 +137,21 @@
         <header class="top-shell">
             <div class="page-head">
                 <h1>${displayRole} Dashboard</h1>
-                <span class="role-pill role-${roleKey}">${displayRole}</span>
+                <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('ADMIN')}">
+                    <span class="role-pill role-admin">Admin</span>
+                </c:if>
+                <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('MANGAKA')}">
+                    <span class="role-pill role-mangaka">Mangaka</span>
+                </c:if>
+                <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('ASSISTANT')}">
+                    <span class="role-pill role-assistant">Assistant</span>
+                </c:if>
+                <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('TANTOU_EDITOR')}">
+                    <span class="role-pill role-tantou">Tantou Editor</span>
+                </c:if>
+                <c:if test="${sessionScope.AUTH_USER != null && sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">
+                    <span class="role-pill role-board">Editorial Board</span>
+                </c:if>
             </div>
             <div class="top-user">
                 <details class="notify-switcher">
@@ -184,20 +198,65 @@
                     <div class="user-name"><c:out value="${displayName}" default="Yuki Tanaka"/></div>
                     <!-- DEV_SWITCH_ROLE_START: remove this block when feature is no longer needed -->
                     <div class="user-actions">
-                        <details class="role-switcher">
+                        <details class="role-switcher" id="roleSwitcherDropdown">
                             <summary class="user-sub switch-toggle">Switch role</summary>
-                            <div class="role-switch-menu">
-                                <a class="role-switch-item ${currentUsername eq 'admin' ? 'active' : ''}" href="${ctx}/main/switch-role?username=admin">Admin</a>
-                                <a class="role-switch-item ${currentUsername eq 'mangaka1' ? 'active' : ''}" href="${ctx}/main/switch-role?username=mangaka1">Mangaka</a>
-                                <a class="role-switch-item ${currentUsername eq 'assistant1' ? 'active' : ''}" href="${ctx}/main/switch-role?username=assistant1">Assistant</a>
-                                <a class="role-switch-item ${currentUsername eq 'tantou1' ? 'active' : ''}" href="${ctx}/main/switch-role?username=tantou1">Tantou Editor</a>
-                                <a class="role-switch-item ${currentUsername eq 'board1' ? 'active' : ''}" href="${ctx}/main/switch-role?username=board1">Board 1</a>
-                                <a class="role-switch-item ${currentUsername eq 'board2' ? 'active' : ''}" href="${ctx}/main/switch-role?username=board2">Board 2</a>
-                                <a class="role-switch-item ${currentUsername eq 'board3' ? 'active' : ''}" href="${ctx}/main/switch-role?username=board3">Board 3</a>
-                                <a class="role-switch-item ${currentUsername eq 'board4' ? 'active' : ''}" href="${ctx}/main/switch-role?username=board4">Board 4</a>
-                                <a class="role-switch-item ${currentUsername eq 'board5' ? 'active' : ''}" href="${ctx}/main/switch-role?username=board5">Board 5</a>
+                            <div class="role-switch-menu" id="roleSwitchMenu">
+                                <span style="padding:8px;display:block;color:#888">Loading...</span>
                             </div>
                         </details>
+                        <script>
+                            (function () {
+                                var ctx = window.MANGA_CTX || '';
+                                var currentUsername = '<c:out value="${currentUsername}" />';
+                                var dropdown = document.getElementById('roleSwitcherDropdown');
+                                var menu = document.getElementById('roleSwitchMenu');
+                                if (!dropdown || !menu) {
+                                    return;
+                                }
+                                dropdown.addEventListener('toggle', function () {
+                                    if (!dropdown.open) {
+                                        return;
+                                    }
+                                    fetch(ctx + '/api/v1/auth/switch-list', {
+                                        credentials: 'same-origin',
+                                        headers: { Accept: 'application/json' }
+                                    })
+                                            .then(function (res) { return res.json(); })
+                                            .then(function (json) {
+                                                if (!json.success || !json.data) {
+                                                    menu.innerHTML = '<span style="padding:8px;display:block;color:#c00">Failed to load</span>';
+                                                    return;
+                                                }
+                                                var html = '';
+                                                json.data.forEach(function (user) {
+                                                    var items = user.switchItems || [];
+                                                    if (!items.length) {
+                                                        items = [{ label: user.fullName ? (user.fullName + ' (' + user.username + ')') : user.username }];
+                                                    }
+                                                    items.forEach(function (item) {
+                                                        var isActive = user.username === currentUsername;
+                                                        html += '<a class="role-switch-item' + (isActive ? ' active' : '') + '"'
+                                                                + ' href="' + ctx + '/main/switch-role?username=' + encodeURIComponent(user.username) + '">'
+                                                                + escapeHtml(item.label)
+                                                                + '</a>';
+                                                    });
+                                                });
+                                                menu.innerHTML = html || '<span style="padding:8px;display:block;color:#888">No users found</span>';
+                                            })
+                                            .catch(function () {
+                                                menu.innerHTML = '<span style="padding:8px;display:block;color:#c00">Failed to load</span>';
+                                            });
+                                });
+
+                                function escapeHtml(str) {
+                                    return String(str)
+                                            .replace(/&/g, '&amp;')
+                                            .replace(/</g, '&lt;')
+                                            .replace(/>/g, '&gt;')
+                                            .replace(/"/g, '&quot;');
+                                }
+                            }());
+                        </script>
                         <a class="logout-link" href="${ctx}/main/logout">Logout</a>
                     </div>
                     <!-- DEV_SWITCH_ROLE_END -->

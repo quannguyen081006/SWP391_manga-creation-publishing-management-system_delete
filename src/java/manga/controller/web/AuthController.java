@@ -66,6 +66,7 @@ public class AuthController {
     private String resolveBackTarget(String back, HttpServletRequest request) {
         return "/main/dashboard";
     }
+
 }
 
 

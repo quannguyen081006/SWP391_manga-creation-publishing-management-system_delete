@@ -24,9 +24,11 @@
             var disable = false;
             if (hasSingleOnly) {
                 disable = !checked;
+            } else if (!checked && SINGLE_ONLY[role] && roles.length > 0) {
+                disable = true;
             } else if (roles.length >= 2 && !checked) {
-                disable = !DUAL_PAIR[role];
-            } else if (roles.length === 1 && DUAL_PAIR[roles[0]] && !DUAL_PAIR[role] && !checked) {
+                disable = true;
+            } else if (roles.length === 1 && !DUAL_PAIR[role] && !checked) {
                 disable = true;
             }
             box.disabled = disable;

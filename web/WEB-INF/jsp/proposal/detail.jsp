@@ -1,6 +1,7 @@
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 <%@taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <%@taglib uri="http://java.sun.com/jsp/jstl/fmt" prefix="fmt" %>
+<%@taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
 <!DOCTYPE html>
 <html>
 <head>
@@ -79,6 +80,66 @@
                     <p class="proposal-vote-note">
                         3 votes is only the minimum quorum. The result is decided when the 3-day window closes or when every eligible board member in this round has voted.
                     </p>
+                    <c:if test="${not empty boardVoters}">
+                        <div class="board-voter-list">
+                            <h4 class="board-voter-title">Board Members in This Round</h4>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Member</th>
+                                        <th>Status</th>
+                                        <th>Decision</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <c:forEach items="${boardVoters}" var="v">
+                                        <tr>
+                                            <td>
+                                                <c:out value="${v.fullName}" />
+                                                <c:if test="${v.isConflict}">
+                                                    <span class="conflict-badge">conflict</span>
+                                                </c:if>
+                                            </td>
+                                            <td>
+                                                <c:choose>
+                                                    <c:when test="${v.isConflict}">
+                                                        <span class="status-chip status-draft">Excluded</span>
+                                                    </c:when>
+                                                    <c:when test="${v.hasVoted}">
+                                                        <span class="status-chip status-approved">Voted</span>
+                                                    </c:when>
+                                                    <c:otherwise>
+                                                        <span class="status-chip status-review">Pending</span>
+                                                    </c:otherwise>
+                                                </c:choose>
+                                            </td>
+                                            <td>
+                                                <c:choose>
+                                                    <c:when test="${v.isConflict}">-</c:when>
+                                                    <c:when test="${v.voteDecision == 'APPROVED'}">
+                                                        <span style="color:#16a34a;font-weight:600;">Approve</span>
+                                                    </c:when>
+                                                    <c:when test="${v.voteDecision == 'REVISE_REQUESTED'}">
+                                                        <span style="color:#d97706;font-weight:600;">Revise</span>
+                                                    </c:when>
+                                                    <c:when test="${v.voteDecision == 'REJECTED'}">
+                                                        <span style="color:#dc2626;font-weight:600;">Reject</span>
+                                                        <c:if test="${not empty v.voteNote}">
+                                                            <button type="button"
+                                                                    class="btn small"
+                                                                    style="margin-left:6px;padding:2px 8px;font-size:11px;"
+                                                                    data-reject-reason="${fn:escapeXml(v.voteNote)}">Lý do</button>
+                                                        </c:if>
+                                                    </c:when>
+                                                    <c:otherwise>-</c:otherwise>
+                                                </c:choose>
+                                            </td>
+                                        </tr>
+                                    </c:forEach>
+                                </tbody>
+                            </table>
+                        </div>
+                    </c:if>
                 </c:when>
                 <c:otherwise>
                     <span style="color:#9ca3af;">Board voting has not started.</span>
@@ -138,6 +199,12 @@
                 syncNoteRequired();
             }());
         </script>
+    </c:if>
+
+    <c:if test="${isTantou && isBoard && proposal.assignedEditorId == sessionScope.AUTH_USER.id && proposal.status == 'BOARD_REVIEW'}">
+        <div class="alert warning">
+            Conflict of interest: you are the managing Tantou Editor for this proposal, so you cannot vote on it.
+        </div>
     </c:if>
 
     <c:if test="${canBoardVote}">
@@ -205,6 +272,15 @@
             }());
         </script>
     </c:if>
+    <script>
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('[data-reject-reason]') : null;
+            if (!btn) {
+                return;
+            }
+            alert(btn.getAttribute('data-reject-reason') || 'Không có lý do.');
+        });
+    </script>
 
     <div class="panel">
         <h2>Revision History</h2>

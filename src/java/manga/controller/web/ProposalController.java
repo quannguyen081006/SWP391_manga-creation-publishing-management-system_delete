@@ -32,6 +32,8 @@ public class ProposalController {
         model.addAttribute("proposals", proposals);
         model.addAttribute("user", user);
         model.addAttribute("isMangaka", user.hasRole("MANGAKA"));
+        model.addAttribute("isTantou", user.hasRole("TANTOU_EDITOR"));
+        model.addAttribute("isBoard", user.hasRole("EDITORIAL_BOARD"));
         return "proposal/list";
     }
 
@@ -93,6 +95,9 @@ public class ProposalController {
         model.addAttribute("canSubmit", canEditDraft);
         model.addAttribute("canReview", user.hasRole("TANTOU_EDITOR") && proposal.getAssignedEditorId() != null
                 && proposal.getAssignedEditorId().longValue() == user.getId() && "UNDER_REVIEW".equalsIgnoreCase(proposal.getStatus()));
+        model.addAttribute("isTantou", user.hasRole("TANTOU_EDITOR"));
+        model.addAttribute("isBoard", user.hasRole("EDITORIAL_BOARD"));
+        model.addAttribute("boardVoters", proposalService.listBoardRoundVoters(user, id));
 
         model.addAttribute("canBoardVote", proposalService.canCastBoardVote(user, proposal));
         model.addAttribute("boardVoteBlockMessage", proposalService.boardVoteBlockMessage(user, proposal));

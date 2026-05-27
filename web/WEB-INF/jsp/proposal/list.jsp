@@ -48,6 +48,9 @@
                     <td>
                         <c:choose>
                             <c:when test="${not empty p.boardRoundId}">
+                                <c:if test="${isTantou && p.assignedEditorId == sessionScope.AUTH_USER.id}">
+                                    <div class="conflict-badge">Conflict: you manage this proposal - cannot vote</div>
+                                </c:if>
                                 <div class="proposal-vote-compact ${p.boardRoundStatus == 'OPEN' ? 'is-open' : 'is-closed'}">
                                     <div class="compact-vote-head">
                                         <strong>${p.boardTotalVotes}/${p.boardEligibleVoterCount} cast</strong>

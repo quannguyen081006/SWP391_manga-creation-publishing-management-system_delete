@@ -87,6 +87,52 @@
         .task-decision-label.approved { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
         .task-decision-label.rejected { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
         #chapterTaskTableWrap { overflow: visible; }
+        .page-slot.task-in-progress { border-color: #a855f7 !important; }
+        .page-slot.task-submitted { border-color: #f59e0b !important; }
+        .page-slot.task-approved { border-color: #3b82f6 !important; }
+        .page-slot-status-icon {
+            position: absolute; top: 5px; right: 6px;
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 8px; z-index: 3; cursor: default;
+        }
+        .page-slot-status-icon.icon-in-progress { background: #a855f7; color: #fff; }
+        .page-slot-status-icon.icon-submitted { background: #f59e0b; color: #fff; }
+        .page-slot-status-icon.icon-approved { background: #3b82f6; color: #fff; }
+        .page-slot-status-icon .icon-tooltip {
+            display: none; position: absolute; top: 20px; right: 0;
+            background: #1f2937; color: #fff; font-size: 10px;
+            padding: 3px 7px; border-radius: 5px; white-space: nowrap; z-index: 20;
+        }
+        .page-slot-status-icon:hover .icon-tooltip { display: block; }
+        .page-slot-lock {
+            position: absolute; top: 4px; left: 20px;
+            font-size: 10px; z-index: 4; line-height: 1;
+            pointer-events: none; opacity: 0.7;
+        }
+        .task-expand-btn {
+            background: none; border: 1px solid #e5e7eb; cursor: pointer;
+            font-size: 11px; color: #6b7280; padding: 2px 8px; border-radius: 5px; margin-left: 6px;
+        }
+        .task-expand-btn:hover { background: #f3f4f6; }
+        .task-inline-row td { padding: 0 !important; }
+        .task-inline-body {
+            padding: 12px 16px; background: #f8fafc; border-top: 1px solid #e5e7eb;
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;
+        }
+        .task-page-mini {
+            width: 72px; text-align: center; font-size: 10px; color: #6b7280;
+        }
+        .task-page-mini img {
+            width: 72px; aspect-ratio: 3/4; object-fit: cover;
+            border-radius: 6px; border: 1.5px solid #e5e7eb; display: block;
+            cursor: zoom-in; margin-bottom: 3px;
+        }
+        .task-page-mini .no-thumb {
+            width: 72px; aspect-ratio: 3/4; display: flex; align-items: center;
+            justify-content: center; background: #f1f5f9; border-radius: 6px;
+            border: 1.5px dashed #cbd5e1; color: #94a3b8; font-size: 18px; margin-bottom: 3px;
+        }
     </style>
 </head>
 <body>
@@ -253,6 +299,14 @@
     </aside>
 </div>
 
+<div id="pageCompareModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:860px;width:95vw;max-height:90vh;overflow-y:auto;position:relative;">
+    <button id="pageCompareClose" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;">&times;</button>
+    <div id="pageCompareTitle" style="font-size:15px;font-weight:700;margin-bottom:14px;"></div>
+    <div id="pageCompareBody"></div>
+  </div>
+</div>
+
 <div id="assignTaskModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="assignTaskTitle">
         <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
@@ -307,6 +361,8 @@
     var activePopoverType = null;
     var activePopoverTaskId = null;
     var activePopoverCell = null;
+    var taskImagesCache = {};
+    var taskInlineLoaded = {};
 
     function escapeHtml(v) {
         if (v === null || v === undefined) { return ''; }
@@ -583,8 +639,24 @@
         var html = pageSlots.map(function (slot, index) {
             var selected = !!selectedPageIds[String(slot.id)];
             var state = slotStateClass(slot);
-            var cls = 'page-slot ' + state + (selected ? ' state-selected' : '');
+            var taskStatusCls = '';
+            var statusIconHtml = '';
+            if (slot.taskId) {
+                var ts = String(slot.taskStatus || '').toUpperCase();
+                if (ts === 'IN_PROGRESS') {
+                    taskStatusCls = ' task-in-progress';
+                    statusIconHtml = '<span class="page-slot-status-icon icon-in-progress">●<span class="icon-tooltip">Đang làm</span></span>';
+                } else if (ts === 'SUBMITTED') {
+                    taskStatusCls = ' task-submitted';
+                    statusIconHtml = '<span class="page-slot-status-icon icon-submitted">●<span class="icon-tooltip">Đã nộp</span></span>';
+                } else if (ts === 'APPROVED') {
+                    taskStatusCls = ' task-approved';
+                    statusIconHtml = '<span class="page-slot-status-icon icon-approved">●<span class="icon-tooltip">Đã duyệt</span></span>';
+                }
+            }
+            var cls = 'page-slot ' + state + taskStatusCls + (selected ? ' state-selected' : '');
             var num = '<span class="page-slot-num">' + slot.pageNumber + '</span>';
+            var lockIconHtml = slot.taskId ? '<span class="page-slot-lock" title="Trang này đã được gán task">🔒</span>' : '';
             var inner = '';
             if (state === 'state-empty') {
                 inner = '<span class="page-slot-upload-label">+ Upload</span>';
@@ -594,7 +666,7 @@
             if (slot.taskId && slot.assistantName) {
                 inner += '<span class="page-slot-initials" title="' + escapeHtml(slot.assistantName) + '">' + escapeHtml(initials(slot.assistantName)) + '</span>';
             }
-            return '<div class="' + cls + '" data-page-id="' + slot.id + '" data-slot-index="' + index + '" data-page-number="' + slot.pageNumber + '">' + num + inner + '</div>';
+            return '<div class="' + cls + '" data-page-id="' + slot.id + '" data-slot-index="' + index + '" data-page-number="' + slot.pageNumber + '">' + num + lockIconHtml + statusIconHtml + inner + '</div>';
         }).join('');
 
         if (owner) {
@@ -682,6 +754,16 @@
         return null;
     }
 
+    function findTaskByPageNumber(pageNumber) {
+        for (var i = 0; i < chapterTasks.length; i++) {
+            var t = chapterTasks[i];
+            if (Number(pageNumber) >= Number(t.pageRangeStart) && Number(pageNumber) <= Number(t.pageRangeEnd)) {
+                return t;
+            }
+        }
+        return null;
+    }
+
     function isTaskOverdue(task) {
         var st = String(task.status || '').toUpperCase();
         if (st === 'APPROVED') { return false; }
@@ -710,6 +792,7 @@
         }
         var st = String(task.status || '').toUpperCase();
         var html = '<a class="btn small" href="' + ctx + '/main/tasks/' + task.id + '">View</a>';
+        html += ' <button class="task-expand-btn" type="button" data-task-expand="' + task.id + '">▼ Trang</button>';
         if (isOwner() && st === 'SUBMITTED') {
             html += ' <button class="btn small success-soft" type="button" data-task-approve-pop="' + task.id + '">Approve</button>';
             html += ' <button class="btn small danger-soft" type="button" data-task-reject-pop="' + task.id + '">Reject</button>';
@@ -734,9 +817,96 @@
                 + '<td><span class="status-chip ' + taskStatusClass(task.status) + '">' + formatStatus(task.status) + '</span></td>'
                 + '<td>' + formatDueDateCell(task) + '</td>'
                 + '<td class="task-actions-cell"><div class="task-row-actions">' + renderTaskRowActions(task) + '</div></td>'
+                + '</tr>'
+                + '<tr class="task-inline-row" id="task-inline-' + task.id + '" style="display:none;">'
+                + '<td colspan="7"><div class="task-inline-body" id="task-inline-body-' + task.id + '">Đang tải...</div></td>'
                 + '</tr>';
         }).join('');
         renderSidebarTasks();
+    }
+
+    async function loadTaskInlinePages(taskId) {
+        var task = findTask(taskId);
+        if (!task) { return; }
+        var bodyEl = document.getElementById('task-inline-body-' + taskId);
+        if (!bodyEl) { return; }
+        if (!taskInlineLoaded[taskId]) {
+            bodyEl.innerHTML = '<span style="color:#9ca3af;font-size:12px;">Đang tải...</span>';
+            try {
+                var res = await callApi('GET', '/api/v1/tasks/' + taskId + '/images');
+                var imgs = res.data || res || [];
+                var imgMap = {};
+                imgs.forEach(function (img) { imgMap[img.pageNumber] = img; });
+                taskImagesCache[taskId] = imgs;
+                var html = '';
+                for (var p = task.pageRangeStart; p <= task.pageRangeEnd; p++) {
+                    var img = imgMap[p];
+                    html += '<div class="task-page-mini">';
+                    if (img) {
+                        html += '<img src="' + escapeHtml(imageUrl(img.fileUrl)) + '" alt="p' + p + '" data-lightbox-task="' + p + '" data-task-id="' + taskId + '" />';
+                    } else {
+                        html += '<div class="no-thumb">+</div>';
+                    }
+                    html += '<div>Trang ' + p + '</div></div>';
+                }
+                bodyEl.innerHTML = html || '<span style="color:#9ca3af;font-size:12px;">Chưa có ảnh nào.</span>';
+                taskInlineLoaded[taskId] = true;
+            } catch (e) {
+                bodyEl.innerHTML = '<span style="color:#ef4444;font-size:12px;">' + escapeHtml(e.message) + '</span>';
+            }
+        }
+    }
+
+    async function openPageCompare(slot) {
+        var modal = document.getElementById('pageCompareModal');
+        var title = document.getElementById('pageCompareTitle');
+        var body = document.getElementById('pageCompareBody');
+        modal.style.display = 'flex';
+        title.textContent = 'Trang ' + slot.pageNumber;
+        var ts = String(slot.taskStatus || '').toUpperCase();
+        var origUrl = slot.imageUrl ? imageUrl(slot.imageUrl) : null;
+        if (!slot.taskId || (ts !== 'SUBMITTED' && ts !== 'APPROVED')) {
+            body.innerHTML = origUrl
+                ? '<img src="' + escapeHtml(origUrl) + '" style="width:100%;border-radius:8px;max-height:70vh;object-fit:contain;" />'
+                : '<div style="color:#9ca3af;text-align:center;padding:40px;">Chưa có ảnh</div>';
+            return;
+        }
+        var taskImgs = taskImagesCache[slot.taskId];
+        if (!taskImgs) {
+            body.innerHTML = '<div style="padding:30px;text-align:center;color:#6b7280;">Đang tải ảnh...</div>';
+            try {
+                var res = await callApi('GET', '/api/v1/tasks/' + slot.taskId + '/images');
+                taskImgs = res.data || res || [];
+                taskImagesCache[slot.taskId] = taskImgs;
+            } catch (e) {
+                body.innerHTML = '<div class="alert error">' + escapeHtml(e.message) + '</div>';
+                return;
+            }
+        }
+        var assistantImg = null;
+        for (var i = 0; i < taskImgs.length; i++) {
+            if (Number(taskImgs[i].pageNumber) === Number(slot.pageNumber)) {
+                assistantImg = taskImgs[i];
+                break;
+            }
+        }
+        var assistantUrl = assistantImg ? imageUrl(assistantImg.fileUrl) : null;
+        if (ts === 'SUBMITTED') {
+            body.innerHTML =
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
+                + '<div><div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:6px;">Bản gốc (Mangaka)</div>'
+                + (origUrl ? '<img src="' + escapeHtml(origUrl) + '" style="width:100%;border-radius:8px;border:1px solid #e5e7eb;object-fit:contain;max-height:60vh;" />' : '<div style="height:180px;display:flex;align-items:center;justify-content:center;background:#f9fafb;border-radius:8px;border:1.5px dashed #d1d5db;color:#9ca3af;">Không có ảnh gốc</div>')
+                + '</div>'
+                + '<div><div style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;margin-bottom:6px;">Bản assistant nộp</div>'
+                + (assistantUrl ? '<img src="' + escapeHtml(assistantUrl) + '" style="width:100%;border-radius:8px;border:2px solid #f59e0b;object-fit:contain;max-height:60vh;" />' : '<div style="height:180px;display:flex;align-items:center;justify-content:center;background:#f9fafb;border-radius:8px;border:1.5px dashed #d1d5db;color:#9ca3af;">Chưa có ảnh</div>')
+                + '</div></div>';
+            return;
+        }
+        var finalUrl = assistantUrl || origUrl;
+        body.innerHTML = finalUrl
+            ? '<div style="text-align:center;margin-bottom:8px;"><span style="background:#dbeafe;color:#1d4ed8;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:600;">✓ Đã được duyệt</span></div>'
+                + '<img src="' + escapeHtml(finalUrl) + '" style="width:100%;border-radius:8px;border:2px solid #3b82f6;object-fit:contain;max-height:65vh;" />'
+            : '<div style="color:#9ca3af;text-align:center;padding:40px;">Không có ảnh</div>';
     }
 
     function switchTab(tab) {
@@ -1011,12 +1181,16 @@
 
         if (e.shiftKey) {
             if (lastSlotIndex < 0) {
-                selectedPageIds[String(pageId)] = true;
+                if (!slot.taskId) {
+                    selectedPageIds[String(pageId)] = true;
+                }
             } else {
                 var start = Math.min(lastSlotIndex, index);
                 var end = Math.max(lastSlotIndex, index);
                 for (var i = start; i <= end; i++) {
-                    selectedPageIds[String(pageSlots[i].id)] = true;
+                    if (!pageSlots[i].taskId) {
+                        selectedPageIds[String(pageSlots[i].id)] = true;
+                    }
                 }
             }
             lastSlotIndex = index;
@@ -1030,13 +1204,18 @@
             return;
         }
 
+        if (slot.taskId || slot.imageUrl) {
+            openPageCompare(slot);
+            return;
+        }
+
         if (selectedPageIds[String(pageId)]) {
             delete selectedPageIds[String(pageId)];
             renderPageGrid();
             return;
         }
 
-        var isEmpty = String(slot.status || '').toUpperCase() === 'EMPTY' && !slot.imageUrl;
+        var isEmpty = String(slot.status || '').toUpperCase() === 'EMPTY' && !slot.imageUrl && !slot.taskId;
         if (isEmpty) {
             pendingUploadPageId = pageId;
             document.getElementById('singleFileInput').click();
@@ -1097,6 +1276,40 @@
     });
 
     document.addEventListener('click', function (e) {
+        var expandBtn = e.target.closest('[data-task-expand]');
+        if (expandBtn) {
+            var tid = expandBtn.getAttribute('data-task-expand');
+            var row = document.getElementById('task-inline-' + tid);
+            if (row) {
+                var isOpen = row.style.display !== 'none';
+                row.style.display = isOpen ? 'none' : '';
+                expandBtn.textContent = isOpen ? '▼ Trang' : '▲ Trang';
+                if (!isOpen) {
+                    loadTaskInlinePages(Number(tid));
+                }
+            }
+            return;
+        }
+        var inlineLightbox = e.target.closest('[data-lightbox-task]');
+        if (inlineLightbox) {
+            var pageNum = Number(inlineLightbox.getAttribute('data-lightbox-task'));
+            var taskId = Number(inlineLightbox.getAttribute('data-task-id'));
+            var task = findTask(taskId);
+            var slot = null;
+            for (var s = 0; s < pageSlots.length; s++) {
+                if (Number(pageSlots[s].pageNumber) === pageNum) {
+                    slot = pageSlots[s];
+                    break;
+                }
+            }
+            openPageCompare({
+                pageNumber: pageNum,
+                taskId: taskId,
+                taskStatus: task ? task.status : null,
+                imageUrl: slot ? slot.imageUrl : null
+            });
+            return;
+        }
         var approvePopBtn = e.target.closest('[data-task-approve-pop]');
         if (approvePopBtn) {
             openPopover('approve', approvePopBtn.getAttribute('data-task-approve-pop'), approvePopBtn.closest('.task-actions-cell'));
@@ -1156,6 +1369,14 @@
     });
 
     document.getElementById('rejectPopoverReason').addEventListener('input', updateRejectConfirmState);
+    document.getElementById('pageCompareClose').addEventListener('click', function () {
+        document.getElementById('pageCompareModal').style.display = 'none';
+    });
+    document.getElementById('pageCompareModal').addEventListener('click', function (e) {
+        if (e.target === this) {
+            this.style.display = 'none';
+        }
+    });
 
     if (urlError) {
         showError(decodeURIComponent(urlError));

@@ -11,7 +11,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -190,9 +192,11 @@ public class ProposalRepository {
                 long editorId = findLeastAssignedTantouEditor(conn);
                 int nextAttempt = p.getSubmitAttemptCount() + 1;
                 String action = p.getSubmitAttemptCount() == 0 ? "SUBMITTED" : "RESUBMITTED";
-                String sql =
-                    "UPDATE Proposal SET status = 'UNDER_REVIEW', submittedAt = GETDATE(), assignedEditorId = ?, "
-                    + "submitAttemptCount = ?, tantouReviewOverdue = 0, updatedAt = GETDATE() WHERE id = ?";
+                String sql = isTantouReviewOverdueSchemaReady()
+                    ? "UPDATE Proposal SET status = 'UNDER_REVIEW', submittedAt = GETDATE(), assignedEditorId = ?, "
+                    + "submitAttemptCount = ?, tantouReviewOverdue = 0, updatedAt = GETDATE() WHERE id = ?"
+                    : "UPDATE Proposal SET status = 'UNDER_REVIEW', submittedAt = GETDATE(), assignedEditorId = ?, "
+                    + "submitAttemptCount = ?, updatedAt = GETDATE() WHERE id = ?";
                 try (PreparedStatement ps = conn.prepareStatement(sql)) {
                     ps.setLong(1, editorId);
                     ps.setInt(2, nextAttempt);
@@ -521,6 +525,51 @@ public class ProposalRepository {
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot mark overdue Tantou proposal reviews", ex);
         }
+    }
+
+    public List<Map<String, Object>> listBoardRoundVoters(long proposalId) {
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        if (!isBoardVotingSchemaReady()) {
+            return rows;
+        }
+        String sql =
+            "SELECT u.id, u.fullName, "
+            + "CASE WHEN h.actionType IS NOT NULL THEN 1 ELSE 0 END AS hasVoted, "
+            + "h.actionType AS voteDecision, "
+            + "h.note AS voteNote, "
+            + "CASE WHEN p.assignedEditorId = u.id THEN 1 ELSE 0 END AS isConflict "
+            + "FROM ProposalBoardRoundVoter bv "
+            + "JOIN [User] u ON u.id = bv.voterId "
+            + "JOIN Proposal p ON p.id = ? "
+            + "JOIN ProposalBoardRound br ON br.id = bv.roundId "
+            + "AND br.proposalId = p.id "
+            + "AND br.submitAttemptNumber = p.submitAttemptCount "
+            + "AND br.id = (SELECT TOP 1 br2.id FROM ProposalBoardRound br2 "
+            + "WHERE br2.proposalId = p.id AND br2.submitAttemptNumber = p.submitAttemptCount "
+            + "ORDER BY br2.roundNumber DESC, br2.id DESC) "
+            + "LEFT JOIN ProposalHistory h ON h.boardRoundId = br.id "
+            + "AND h.actorId = u.id AND h.actorRole = 'EDITORIAL_BOARD' "
+            + "AND h.actionType IN ('APPROVED','REVISE_REQUESTED','REJECTED') "
+            + "ORDER BY u.id";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, proposalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<String, Object>();
+                    row.put("userId", Long.valueOf(rs.getLong("id")));
+                    row.put("fullName", rs.getString("fullName"));
+                    row.put("hasVoted", Boolean.valueOf(rs.getInt("hasVoted") == 1));
+                    row.put("voteDecision", rs.getString("voteDecision"));
+                    row.put("voteNote", rs.getString("voteNote"));
+                    row.put("isConflict", Boolean.valueOf(rs.getInt("isConflict") == 1));
+                    rows.add(row);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot list board round voters", ex);
+        }
+        return rows;
     }
 
     public List<ProposalHistory> listHistory(long proposalId) {

@@ -51,9 +51,6 @@ public class AuthService {
         }
 
         String normalized = username.trim();
-        ensureTestingAccountExists(normalized);
-        ensureTestingAssignments(normalized);
-
         AuthenticatedUser user = userRepository.findByUsername(normalized);
         if (user == null) {
             throw new IllegalArgumentException("User not found: " + username);
