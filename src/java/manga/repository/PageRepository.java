@@ -98,7 +98,7 @@ public class PageRepository {
             + "  FROM PageTask pt "
             + "  WHERE pt.chapterId = p.chapterId "
             + "    AND p.pageNumber BETWEEN pt.pageRangeStart AND pt.pageRangeEnd "
-            + "    AND UPPER(pt.status) <> 'APPROVED' "
+            + "    AND UPPER(pt.status) NOT IN ('APPROVED','DELETED','REASSIGNED') "
             + "  ORDER BY pt.updatedAt DESC "
             + ") t "
             + "LEFT JOIN [User] u ON u.id = t.assistantId "
@@ -246,7 +246,7 @@ public class PageRepository {
     public void delete(long pageId) {
         requirePageTableReady();
         String readSql = "SELECT chapterId, pageNumber FROM " + TABLE_PAGE + " WHERE id = ?";
-        String taskSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND ? BETWEEN pageRangeStart AND pageRangeEnd AND UPPER(status) <> 'APPROVED'";
+        String taskSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND ? BETWEEN pageRangeStart AND pageRangeEnd AND UPPER(status) NOT IN ('APPROVED','DELETED','REASSIGNED')";
         String deleteSql = "DELETE FROM " + TABLE_PAGE + " WHERE id = ?";
         try (Connection conn = dataSource.getConnection()) {
             long chapterId;

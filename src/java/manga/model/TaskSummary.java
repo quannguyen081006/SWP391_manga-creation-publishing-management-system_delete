@@ -23,6 +23,8 @@ public class TaskSummary {
     private String notes;
     private String rejectionReason;
     private String approvalComment;
+    private String actionReason;
+    private Long previousAssistantId;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -60,4 +62,8 @@ public class TaskSummary {
     public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
     public String getApprovalComment() { return approvalComment; }
     public void setApprovalComment(String approvalComment) { this.approvalComment = approvalComment; }
+    public String getActionReason() { return actionReason; }
+    public void setActionReason(String actionReason) { this.actionReason = actionReason; }
+    public Long getPreviousAssistantId() { return previousAssistantId; }
+    public void setPreviousAssistantId(Long previousAssistantId) { this.previousAssistantId = previousAssistantId; }
 }

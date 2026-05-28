@@ -412,8 +412,4 @@ public class ManuscriptService {
         }
         return value.trim();
     }
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

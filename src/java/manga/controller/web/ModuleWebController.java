@@ -217,7 +217,9 @@ public class ModuleWebController {
         }
         boolean isAssignedAssistant = user.hasRole("ASSISTANT") && user.getId() == task.getAssistantId();
         boolean canAssistantUpdate = isAssignedAssistant
-                && !"APPROVED".equalsIgnoreCase(task.getStatus());
+                && ("IN_PROGRESS".equalsIgnoreCase(task.getStatus())
+                || "REJECTED".equalsIgnoreCase(task.getStatus())
+                || "OVERDUE".equalsIgnoreCase(task.getStatus()));
         boolean canAssistantSubmit = isAssignedAssistant
                 && ("IN_PROGRESS".equalsIgnoreCase(task.getStatus())
                 || "REJECTED".equalsIgnoreCase(task.getStatus())

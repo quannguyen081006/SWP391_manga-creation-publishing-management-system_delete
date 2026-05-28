@@ -204,4 +204,27 @@ public class PageTaskApiController {
         pageTaskRepository.rejectByMangaka(id, user.getId(), reason.trim());
         return ApiResponse.ok(null, "Task rejected");
     }
+
+    @RequestMapping(value = "/tasks/{id}/delete", method = RequestMethod.POST)
+    public ApiResponse<Object> deleteTask(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam("reason") String reason) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can delete task");
+        pageTaskRepository.deleteByMangaka(id, user.getId(), reason);
+        return ApiResponse.ok(null, "Task deleted");
+    }
+
+    @RequestMapping(value = "/tasks/{id}/reassign", method = RequestMethod.POST)
+    public ApiResponse<TaskSummary> reassignTask(
+            @PathVariable("id") long id,
+            HttpSession session,
+            @RequestParam("assistantId") long assistantId,
+            @RequestParam("reason") String reason) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can reassign task");
+        long newTaskId = pageTaskRepository.reassignByMangaka(id, user.getId(), assistantId, reason);
+        return ApiResponse.ok(pageTaskRepository.findById(newTaskId), "Task reassigned");
+    }
 }

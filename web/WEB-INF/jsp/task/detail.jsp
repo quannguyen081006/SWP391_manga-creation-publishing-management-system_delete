@@ -26,6 +26,19 @@
     </div>
 </div>
 
+<c:if test="${task.status == 'DELETED' || task.status == 'REASSIGNED'}">
+    <div class="section-card">
+        <h3 class="section-title compact-title">${task.status == 'DELETED' ? 'Task Deleted' : 'Task Reassigned'}</h3>
+        <div class="alert warning" style="margin-bottom:0;">
+            <div>This task is no longer editable.</div>
+            <c:if test="${not empty task.actionReason}">
+                <strong>Reason:</strong>
+                <div style="margin-top:6px;white-space:pre-wrap;"><c:out value="${task.actionReason}" /></div>
+            </c:if>
+        </div>
+    </div>
+</c:if>
+
 <c:if test="${not empty task.notes}">
     <div class="section-card">
         <h3 class="section-title compact-title">Mangaka Note</h3>

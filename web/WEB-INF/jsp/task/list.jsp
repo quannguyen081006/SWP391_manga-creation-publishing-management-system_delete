@@ -346,6 +346,8 @@
         if (status === 'SUBMITTED') { return 'status-review'; }
         if (status === 'APPROVED') { return 'status-approved'; }
         if (status === 'REJECTED') { return 'status-rejected'; }
+        if (status === 'DELETED') { return 'status-rejected'; }
+        if (status === 'REASSIGNED') { return 'status-pending'; }
         return 'status-draft';
     }
 
@@ -380,6 +382,8 @@
             APPROVED: 0,
             REJECTED: 0,
             OVERDUE: 0,
+            DELETED: 0,
+            REASSIGNED: 0,
             DELAYED: 0
         };
         for (var i = 0; i < tasks.length; i++) {
@@ -389,6 +393,8 @@
             if (st === 'SUBMITTED') { counts.SUBMITTED++; }
             if (st === 'APPROVED') { counts.APPROVED++; }
             if (st === 'REJECTED') { counts.REJECTED++; }
+            if (st === 'DELETED') { counts.DELETED++; }
+            if (st === 'REASSIGNED') { counts.REASSIGNED++; }
             if (isTaskOverdue(t)) { counts.OVERDUE++; }
             if (isTaskDelayed(t)) { counts.DELAYED++; }
         }
@@ -416,6 +422,8 @@
             + renderStatusPill('SUBMITTED', 'Submitted', counts.SUBMITTED, 'pill-submitted', taskStatusFilter)
             + renderStatusPill('APPROVED', 'Completed', counts.APPROVED, 'pill-approved', taskStatusFilter)
             + renderStatusPill('REJECTED', 'Rejected', counts.REJECTED, 'pill-rejected', taskStatusFilter)
+            + renderStatusPill('DELETED', 'Deleted', counts.DELETED, 'pill-rejected', taskStatusFilter)
+            + renderStatusPill('REASSIGNED', 'Reassigned', counts.REASSIGNED, 'pill-pending', taskStatusFilter)
             + renderStatusPill('DELAYED', 'Delayed', counts.DELAYED, 'pill-delayed', taskStatusFilter)
             + renderStatusPill('OVERDUE', 'Overdue', counts.OVERDUE, 'pill-overdue', taskStatusFilter);
     }
@@ -545,6 +553,29 @@
             modals[i].setAttribute('aria-hidden', 'true');
         }
         viewModalTaskId = null;
+    }
+
+    function openImagePreview(url, title) {
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:1400;display:flex;align-items:center;justify-content:center;padding:24px;';
+        overlay.innerHTML =
+            '<button type="button" aria-label="Close" style="position:absolute;right:22px;top:18px;width:36px;height:36px;border-radius:50%;border:1px solid #e5e7eb;background:#fff;font-size:24px;cursor:pointer;">&times;</button>'
+            + '<div style="max-width:min(1100px,96vw);max-height:92vh;text-align:center;color:#fff;">'
+            + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(title || 'Preview') + '" style="max-width:100%;max-height:84vh;object-fit:contain;border-radius:10px;background:#fff;" />'
+            + '<div style="margin-top:10px;font-size:13px;">' + escapeHtml(title || '') + '</div></div>';
+        function close() {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') { close(); }
+        }
+        overlay.querySelector('button').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) { close(); }
+        });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(overlay);
     }
 
     function closePopovers() {
@@ -727,7 +758,8 @@
         var chapter = chapterById[String(task.chapterId)];
         var latestDueDate = chapter && chapter.submissionDeadline ? addDaysIso(chapter.submissionDeadline, -3) : '';
         var dueDateAttrs = ' min="' + todayIso() + '"' + (latestDueDate ? ' max="' + escapeHtml(latestDueDate) + '"' : '');
-        var canEdit = isTaskOwner(task) && String(task.status || '').toUpperCase() !== 'APPROVED';
+        var taskStatus = String(task.status || '').toUpperCase();
+        var canEdit = isTaskOwner(task) && taskStatus !== 'APPROVED' && taskStatus !== 'DELETED' && taskStatus !== 'REASSIGNED';
         var saveBtn = document.getElementById('taskViewSaveBtn');
         if (saveBtn) {
             saveBtn.style.display = canEdit ? '' : 'none';
@@ -741,6 +773,9 @@
         }
         if (task.rejectionReason) {
             feedback += '<div class="alert error" style="margin-bottom:12px;"><strong>Revision note:</strong><div style="margin-top:6px;">' + escapeHtml(task.rejectionReason) + '</div></div>';
+        }
+        if (task.actionReason && (taskStatus === 'DELETED' || taskStatus === 'REASSIGNED')) {
+            feedback += '<div class="alert warning" style="margin-bottom:12px;"><strong>' + (taskStatus === 'DELETED' ? 'Deleted reason:' : 'Reassigned reason:') + '</strong><div style="margin-top:6px;white-space:pre-wrap;">' + escapeHtml(task.actionReason) + '</div></div>';
         }
         return approvedNote
             + '<div class="task-view-chips">'
@@ -827,7 +862,7 @@
                 : '';
             var downloadButton = '<a class="btn small" href="' + escapeHtml(url) + '" download>Download</a>';
             return '<div class="panel" style="margin:0;padding:10px;">'
-                + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || ('Page ' + img.pageNumber)) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" />'
+                + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || ('Page ' + img.pageNumber)) + '" data-preview-src="' + escapeHtml(url) + '" data-preview-title="Page ' + escapeHtml(img.pageNumber || '') + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;cursor:zoom-in;" />'
                 + '<div style="margin-top:8px;font-weight:700;">Page ' + escapeHtml(img.pageNumber || '') + '</div>'
                 + '<div class="section-desc">' + escapeHtml(img.originalFileName || '') + '</div>'
                 + downloadButton
@@ -1014,6 +1049,12 @@
         if (viewButton) {
             closePopovers();
             await openTaskView(viewButton.getAttribute('data-task-view'));
+            return;
+        }
+
+        var previewImg = e.target.closest ? e.target.closest('[data-preview-src]') : null;
+        if (previewImg) {
+            openImagePreview(previewImg.getAttribute('data-preview-src'), previewImg.getAttribute('data-preview-title'));
             return;
         }
 

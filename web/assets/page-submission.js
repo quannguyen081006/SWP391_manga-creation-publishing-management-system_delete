@@ -272,6 +272,36 @@
             + '</div>';
     }
 
+    function openImagePreview(pageNum) {
+        var img = pageImages[pageNum];
+        if (!img) {
+            return;
+        }
+        var overlay = document.createElement('div');
+        overlay.className = 'lightbox-overlay';
+        overlay.innerHTML =
+            '<button type="button" class="lightbox-close" aria-label="Close">&times;</button>'
+            + '<img class="lightbox-img" src="' + escapeHtml(imageUrl(img.fileUrl)) + '" alt="Page ' + pageNum + '" />'
+            + '<div class="lightbox-caption">Page ' + pageNum + ' - ' + escapeHtml(img.originalFileName || '') + '</div>';
+        function close() {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') {
+                close();
+            }
+        }
+        overlay.querySelector('.lightbox-close').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) {
+                close();
+            }
+        });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(overlay);
+    }
+
     function renderAll() {
         renderProgressBar();
         renderGrid();
@@ -460,6 +490,13 @@
                     showToast(err.message, 'error');
                 });
                 return;
+            }
+            var thumb = e.target.closest('.page-card-thumb');
+            if (thumb) {
+                var card = thumb.closest('[data-page]');
+                if (card) {
+                    openImagePreview(Number(card.getAttribute('data-page')));
+                }
             }
         });
     }

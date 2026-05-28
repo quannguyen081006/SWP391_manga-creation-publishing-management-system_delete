@@ -428,6 +428,24 @@
     </div>
 </div>
 
+<div id="taskReassignModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="taskReassignTitle">
+        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+        <h3 id="taskReassignTitle" class="section-title compact-title">Reassign task</h3>
+        <form id="taskReassignForm" class="form-grid">
+            <input type="hidden" id="taskReassignId" />
+            <label class="field-label" for="taskReassignAssistantId">New assistant</label>
+            <select id="taskReassignAssistantId" required>
+                <option value="">Loading assistants...</option>
+            </select>
+            <label class="field-label" for="taskReassignReason">Reason</label>
+            <textarea id="taskReassignReason" rows="3" maxlength="300" required placeholder="Lý do reassign..."></textarea>
+            <div id="taskReassignError" class="alert error" style="display:none;"></div>
+            <button class="btn primary" type="submit">Confirm reassign</button>
+        </form>
+    </div>
+</div>
+
 <script>
 (function () {
     var ctx = '${pageContext.request.contextPath}';
@@ -719,6 +737,8 @@
         if (status === 'SUBMITTED') { return 'status-review'; }
         if (status === 'APPROVED') { return 'status-approved'; }
         if (status === 'REJECTED') { return 'status-rejected'; }
+        if (status === 'DELETED') { return 'status-rejected'; }
+        if (status === 'REASSIGNED') { return 'status-pending'; }
         return 'status-draft';
     }
 
@@ -1080,6 +1100,10 @@
         var st = String(task.status || '').toUpperCase();
         var html = '<a class="btn small" href="' + ctx + '/main/tasks/' + task.id + '">View</a>';
         html += ' <button class="task-expand-btn" type="button" data-task-expand="' + task.id + '">▼ Trang</button>';
+        if (isOwner() && st === 'IN_PROGRESS') {
+            html += ' <button class="btn small" type="button" data-task-reassign="' + task.id + '">Reassign</button>';
+            html += ' <button class="btn small danger-soft" type="button" data-task-delete="' + task.id + '">Delete</button>';
+        }
         if (isOwner() && st === 'SUBMITTED') {
             html += ' <button class="btn small success-soft" type="button" data-task-approve-pop="' + task.id + '">Approve</button>';
             html += ' <button class="btn small danger-soft" type="button" data-task-reject-pop="' + task.id + '">Reject</button>';
@@ -1154,8 +1178,16 @@
         var origUrl = slot.imageUrl ? imageUrl(slot.imageUrl) : null;
         if (!slot.taskId || (ts !== 'SUBMITTED' && ts !== 'APPROVED')) {
             body.innerHTML = origUrl
-                ? '<img src="' + escapeHtml(origUrl) + '" style="width:100%;border-radius:8px;max-height:70vh;object-fit:contain;" />'
+                ? (isOwner() && !slot.taskId ? '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn small primary" type="button" id="pageCompareEdit">Upload / replace</button></div>' : '')
+                    + '<img src="' + escapeHtml(origUrl) + '" style="width:100%;border-radius:8px;max-height:70vh;object-fit:contain;" />'
                 : '<div style="color:#9ca3af;text-align:center;padding:40px;">Chưa có ảnh</div>';
+            var editBtn = document.getElementById('pageCompareEdit');
+            if (editBtn) {
+                editBtn.addEventListener('click', function () {
+                    modal.style.display = 'none';
+                    openPageUploadModal(slot);
+                });
+            }
             return;
         }
         var taskImgs = taskImagesCache[slot.taskId];
@@ -1298,16 +1330,21 @@
 
     async function fillAssistantSelect() {
         var select = document.getElementById('assignAssistantId');
+        var reassignSelect = document.getElementById('taskReassignAssistantId');
         if (!chapter || !select) { return; }
         select.innerHTML = '<option value="">Loading assistants...</option>';
+        if (reassignSelect) { reassignSelect.innerHTML = '<option value="">Loading assistants...</option>'; }
         try {
             var res = await callApi('GET', '/api/v1/series/' + chapter.seriesId + '/assistants');
             var assistants = res.data || [];
-            select.innerHTML = '<option value="">Select Assistant</option>' + assistants.map(function (a) {
+            var options = '<option value="">Select Assistant</option>' + assistants.map(function (a) {
                 return '<option value="' + a.id + '">#' + a.id + ' - ' + escapeHtml(a.fullName || a.username) + '</option>';
             }).join('');
+            select.innerHTML = options;
+            if (reassignSelect) { reassignSelect.innerHTML = options; }
         } catch (err) {
             select.innerHTML = '<option value="">Cannot load assistants</option>';
+            if (reassignSelect) { reassignSelect.innerHTML = '<option value="">Cannot load assistants</option>'; }
             showError(err.message);
         }
     }
@@ -1546,6 +1583,11 @@
             return;
         }
 
+        if (slot.imageUrl || slot.taskId) {
+            openPageCompare(slot);
+            return;
+        }
+
         if (isOwner() && !slot.taskId) {
             openPageUploadModal(slot);
             return;
@@ -1600,7 +1642,33 @@
         }
     });
 
-    document.addEventListener('click', function (e) {
+    document.getElementById('taskReassignForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var errEl = document.getElementById('taskReassignError');
+        errEl.style.display = 'none';
+        var taskId = document.getElementById('taskReassignId').value;
+        var assistantId = document.getElementById('taskReassignAssistantId').value;
+        var reason = document.getElementById('taskReassignReason').value.trim();
+        if (reason.length < 5) {
+            errEl.style.display = 'block';
+            errEl.textContent = 'Lý do reassign phải có ít nhất 5 ký tự.';
+            return;
+        }
+        try {
+            await callApi('POST', '/api/v1/tasks/' + taskId + '/reassign', {
+                assistantId: assistantId,
+                reason: reason
+            });
+            closeModals();
+            showError('');
+            await loadData();
+        } catch (err) {
+            errEl.style.display = 'block';
+            errEl.textContent = err.message;
+        }
+    });
+
+    document.addEventListener('click', async function (e) {
         var expandBtn = e.target.closest('[data-task-expand]');
         if (expandBtn) {
             var tid = expandBtn.getAttribute('data-task-expand');
@@ -1623,6 +1691,29 @@
         var rejectPopBtn = e.target.closest('[data-task-reject-pop]');
         if (rejectPopBtn) {
             openPopover('reject', rejectPopBtn.getAttribute('data-task-reject-pop'), rejectPopBtn.closest('.task-actions-cell'));
+            return;
+        }
+        var taskDeleteBtn = e.target.closest('[data-task-delete]');
+        if (taskDeleteBtn) {
+            var deleteTaskId = taskDeleteBtn.getAttribute('data-task-delete');
+            var reason = prompt('Lý do xóa task #' + deleteTaskId + ':');
+            if (!reason) { return; }
+            try {
+                await callApi('POST', '/api/v1/tasks/' + deleteTaskId + '/delete', { reason: reason });
+                await loadData();
+                showError('');
+            } catch (err) {
+                showError(err.message);
+            }
+            return;
+        }
+        var taskReassignBtn = e.target.closest('[data-task-reassign]');
+        if (taskReassignBtn) {
+            document.getElementById('taskReassignId').value = taskReassignBtn.getAttribute('data-task-reassign');
+            document.getElementById('taskReassignReason').value = '';
+            document.getElementById('taskReassignError').style.display = 'none';
+            document.getElementById('taskReassignError').textContent = '';
+            openModal('taskReassignModal');
             return;
         }
         if (e.target.closest('[data-popover-cancel]')) {

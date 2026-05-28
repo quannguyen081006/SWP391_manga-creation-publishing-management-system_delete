@@ -32,6 +32,7 @@ public class PageTaskRepository {
             "t.id, t.chapterId, t.assistantId, t.pageRangeStart, t.pageRangeEnd, t.taskType, t.dueDate, t.status, t.rejectionCount, ";
 
     private volatile Boolean taskSchemaExtended;
+    private volatile Boolean taskLifecycleSchemaReady;
 
     private String normalizeStatus(String status) {
         return status == null ? "" : status.trim().toUpperCase(Locale.ENGLISH);
@@ -47,15 +48,55 @@ public class PageTaskRepository {
     private PageRepository pageRepository;
 
     private String taskSelectColumns() {
+        ensureTaskLifecycleSchemaReady();
         if (isTaskSchemaExtended()) {
             return SQL_TASK_COLUMNS_BASE
-                    + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, t.rejectionReason, t.approvalComment, "
+                    + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, t.rejectionReason, t.approvalComment, t.actionReason, t.previousAssistantId, "
                     + SQL_IS_DELAYED;
         }
         return SQL_TASK_COLUMNS_BASE
                 + "'NORMAL' AS priority, CAST(NULL AS NVARCHAR(500)) AS notes, "
                 + "CAST(NULL AS NVARCHAR(300)) AS rejectionReason, CAST(NULL AS NVARCHAR(300)) AS approvalComment, "
+                + "CAST(NULL AS NVARCHAR(300)) AS actionReason, CAST(NULL AS BIGINT) AS previousAssistantId, "
                 + SQL_IS_DELAYED;
+    }
+
+    private void ensureTaskLifecycleSchemaReady() {
+        if (Boolean.TRUE.equals(taskLifecycleSchemaReady)) {
+            return;
+        }
+        synchronized (this) {
+            if (Boolean.TRUE.equals(taskLifecycleSchemaReady)) {
+                return;
+            }
+            try (Connection conn = dataSource.getConnection()) {
+                addColumnIfMissing(conn, "actionReason", "nvarchar(300) NULL");
+                addColumnIfMissing(conn, "previousAssistantId", "bigint NULL");
+                String dropConstraint =
+                        "IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_PageTask_status' AND parent_object_id = OBJECT_ID('dbo.PageTask')) "
+                        + "ALTER TABLE [dbo].[PageTask] DROP CONSTRAINT [CK_PageTask_status]";
+                try (PreparedStatement ps = conn.prepareStatement(dropConstraint)) {
+                    ps.executeUpdate();
+                }
+                String addConstraint =
+                        "IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_PageTask_status' AND parent_object_id = OBJECT_ID('dbo.PageTask')) "
+                        + "ALTER TABLE [dbo].[PageTask] WITH CHECK ADD CONSTRAINT [CK_PageTask_status] CHECK "
+                        + "([status] IN ('PENDING','IN_PROGRESS','SUBMITTED','APPROVED','REJECTED','OVERDUE','DELETED','REASSIGNED'))";
+                try (PreparedStatement ps = conn.prepareStatement(addConstraint)) {
+                    ps.executeUpdate();
+                }
+                taskLifecycleSchemaReady = Boolean.TRUE;
+            } catch (SQLException ex) {
+                throw new RuntimeException("Cannot prepare task lifecycle schema", ex);
+            }
+        }
+    }
+
+    private void addColumnIfMissing(Connection conn, String column, String definition) throws SQLException {
+        String sql = "IF COL_LENGTH('dbo.PageTask', '" + column + "') IS NULL ALTER TABLE [dbo].[PageTask] ADD " + column + " " + definition;
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.executeUpdate();
+        }
     }
 
     private boolean isTaskSchemaExtended() {
@@ -225,7 +266,8 @@ public class PageTaskRepository {
     }
 
     public long create(long chapterId, long assistantId, int start, int end, String taskType, Date dueDate, String priority, String notes) {
-        String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND UPPER(status) <> 'APPROVED' AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
+        ensureTaskLifecycleSchemaReady();
+        String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND UPPER(status) NOT IN ('APPROVED','DELETED','REASSIGNED') AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         String enrollmentSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
         String insertExtendedSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, priority, notes, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, ?, ?, GETDATE(), GETDATE())";
@@ -311,7 +353,7 @@ public class PageTaskRepository {
                     end,
                     taskType,
                     dueDate,
-                    "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND id <> ? AND UPPER(status) <> 'APPROVED' AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)",
+                    "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND id <> ? AND UPPER(status) NOT IN ('APPROVED','DELETED','REASSIGNED') AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)",
                     "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?",
                     "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?");
 
@@ -339,6 +381,102 @@ public class PageTaskRepository {
                     "TASK");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update task", ex);
+        }
+    }
+
+    public long reassignByMangaka(long taskId, long mangakaId, long newAssistantId, String reason) {
+        ensureTaskLifecycleSchemaReady();
+        if (reason == null || reason.trim().length() < 5) {
+            throw new IllegalArgumentException("Reassign reason must be at least 5 characters");
+        }
+        TaskSummary task = findById(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("Task not found");
+        }
+        if (findChapterOwnerMangaka(task.getChapterId()) != mangakaId) {
+            throw new IllegalArgumentException("Only chapter owner can reassign task");
+        }
+        if (!"IN_PROGRESS".equals(normalizeStatus(task.getStatus()))) {
+            throw new IllegalArgumentException("Only IN_PROGRESS task can be reassigned");
+        }
+        if (task.getAssistantId() == newAssistantId) {
+            throw new IllegalArgumentException("Choose a different assistant");
+        }
+
+        String closeSql = "UPDATE PageTask SET status = 'REASSIGNED', actionReason = ?, updatedAt = GETDATE() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection()) {
+            try (PreparedStatement close = conn.prepareStatement(closeSql)) {
+                close.setString(1, reason.trim());
+                close.setLong(2, taskId);
+                close.executeUpdate();
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot reassign task", ex);
+        }
+
+        long newTaskId = create(
+                task.getChapterId(),
+                newAssistantId,
+                task.getPageRangeStart(),
+                task.getPageRangeEnd(),
+                task.getTaskType(),
+                task.getDueDate(),
+                task.getPriority(),
+                task.getNotes());
+        setPreviousAssistantAndReason(newTaskId, task.getAssistantId(), reason.trim());
+        createNotification(
+                task.getAssistantId(),
+                "TASK_REASSIGNED",
+                "Task #" + taskId + " was reassigned. Reason: " + reason.trim(),
+                taskId,
+                "TASK");
+        return newTaskId;
+    }
+
+    public void deleteByMangaka(long taskId, long mangakaId, String reason) {
+        ensureTaskLifecycleSchemaReady();
+        if (reason == null || reason.trim().length() < 5) {
+            throw new IllegalArgumentException("Delete reason must be at least 5 characters");
+        }
+        TaskSummary task = findById(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("Task not found");
+        }
+        if (findChapterOwnerMangaka(task.getChapterId()) != mangakaId) {
+            throw new IllegalArgumentException("Only chapter owner can delete task");
+        }
+        if (!"IN_PROGRESS".equals(normalizeStatus(task.getStatus()))) {
+            throw new IllegalArgumentException("Only IN_PROGRESS task can be deleted");
+        }
+
+        String sql = "UPDATE PageTask SET status = 'DELETED', actionReason = ?, updatedAt = GETDATE() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, reason.trim());
+            ps.setLong(2, taskId);
+            ps.executeUpdate();
+            refreshChapterProgress(task.getChapterId());
+            createNotification(
+                    task.getAssistantId(),
+                    "TASK_DELETED",
+                    "Task #" + taskId + " was deleted. Reason: " + reason.trim(),
+                    taskId,
+                    "TASK");
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot delete task", ex);
+        }
+    }
+
+    private void setPreviousAssistantAndReason(long taskId, long previousAssistantId, String reason) {
+        String sql = "UPDATE PageTask SET previousAssistantId = ?, actionReason = ? WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, previousAssistantId);
+            ps.setString(2, reason);
+            ps.setLong(3, taskId);
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update reassignment metadata", ex);
         }
     }
 
@@ -1089,6 +1227,13 @@ public class PageTaskRepository {
         }
         if (hasColumn(rs, "approvalComment")) {
             t.setApprovalComment(rs.getString("approvalComment"));
+        }
+        if (hasColumn(rs, "actionReason")) {
+            t.setActionReason(rs.getString("actionReason"));
+        }
+        if (hasColumn(rs, "previousAssistantId")) {
+            long previousAssistantId = rs.getLong("previousAssistantId");
+            t.setPreviousAssistantId(rs.wasNull() ? null : Long.valueOf(previousAssistantId));
         }
         return t;
     }
