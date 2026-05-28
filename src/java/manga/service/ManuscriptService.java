@@ -22,6 +22,8 @@ import java.util.Calendar;
 @Service
 public class ManuscriptService {
 
+    public static final long MAX_MANUSCRIPT_FILE_SIZE = 50L * 1024L * 1024L;
+
     @Autowired
     private ManuscriptRepository manuscriptRepository;
 
@@ -56,11 +58,11 @@ public class ManuscriptService {
         if (request == null) {
             request = new SubmitManuscriptRequest();
         }
-        String fileUrl = request.getFileUrl();
-        // Validate file URL
-        if (fileUrl == null || fileUrl.trim().isEmpty()) {
+        String fileUrl = trimToNull(request.getFileUrl());
+        if (fileUrl == null) {
             throw new BusinessRuleException("Manuscript file is required");
         }
+        validateManuscriptFileMetadata(request.getOriginalFileName(), request.getFileSize(), request.getFileExtension());
 
         // Validate user is Mangaka owner of series
         long ownerId = manuscriptRepository.getChapterMangaka(chapterId);
@@ -79,8 +81,10 @@ public class ManuscriptService {
 
         long manuscriptId = manuscriptRepository.createDraft(
                 chapterId,
-                fileUrl.trim(),
+                fileUrl,
                 trimToNull(request.getOriginalFileName()),
+                request.getFileSize(),
+                normalizeExtension(request.getFileExtension()),
                 trimToNull(request.getNotes()),
                 trimToNull(request.getGenre()));
         return manuscriptRepository.findById(manuscriptId);
@@ -96,6 +100,9 @@ public class ManuscriptService {
         if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
             throw new BusinessRuleException("Only DRAFT manuscript versions can be submitted");
         }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be submitted");
+        }
         if (hasActiveReviewCycleExcept(manuscript.getChapterId(), manuscriptId)) {
             throw new BusinessRuleException("Cannot submit manuscript while another version is under review");
         }
@@ -107,7 +114,7 @@ public class ManuscriptService {
         notificationService.notifyUser(
             tantouId,
             "MANUSCRIPT_SUBMITTED",
-            "New manuscript submitted for chapter #" + manuscript.getChapterId(),
+            "New manuscript v" + manuscript.getVersion() + " submitted for chapter #" + manuscript.getChapterId(),
             manuscriptId,
             "MANUSCRIPT"
         );
@@ -321,10 +328,13 @@ public class ManuscriptService {
 
     @Transactional
     public void updateDraft(long manuscriptId, String fileUrl, String originalFileName, AuthenticatedUser user) {
+        updateDraft(manuscriptId, fileUrl, originalFileName, null, null, null, null, user);
+    }
+
+    @Transactional
+    public void updateDraft(long manuscriptId, String fileUrl, String originalFileName, Long fileSize,
+                            String fileExtension, String notes, String genre, AuthenticatedUser user) {
         ManuscriptSummary manuscript = requireManuscript(manuscriptId);
-        if (fileUrl == null || fileUrl.trim().isEmpty()) {
-            throw new BusinessRuleException("Manuscript file is required");
-        }
         long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
         if (ownerId != user.getId()) {
             throw new BusinessRuleException("Only owner can edit manuscript");
@@ -332,7 +342,21 @@ public class ManuscriptService {
         if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
             throw new BusinessRuleException("Only DRAFT manuscript versions can be edited");
         }
-        manuscriptRepository.updateFile(manuscriptId, fileUrl.trim(), trimToNull(originalFileName));
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be edited");
+        }
+        String cleanFileUrl = trimToNull(fileUrl);
+        if (cleanFileUrl != null) {
+            validateManuscriptFileMetadata(originalFileName, fileSize, fileExtension);
+        }
+        manuscriptRepository.updateDraftMetadata(
+                manuscriptId,
+                cleanFileUrl,
+                trimToNull(originalFileName),
+                fileSize,
+                normalizeExtension(fileExtension),
+                trimToNull(notes),
+                trimToNull(genre));
     }
 
     @Transactional
@@ -344,6 +368,9 @@ public class ManuscriptService {
         }
         if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
             throw new BusinessRuleException("Only DRAFT manuscript versions can be deleted");
+        }
+        if (!isCurrentVersion(manuscript)) {
+            throw new BusinessRuleException("Only current manuscript version can be deleted");
         }
         manuscriptRepository.delete(manuscriptId);
     }
@@ -404,6 +431,61 @@ public class ManuscriptService {
     private boolean isCurrentVersion(ManuscriptSummary manuscript) {
         List<ManuscriptSummary> versions = manuscriptRepository.listByChapter(manuscript.getChapterId());
         return !versions.isEmpty() && versions.get(0).getId() == manuscript.getId();
+    }
+
+    public boolean isCurrentVersion(long manuscriptId) {
+        ManuscriptSummary manuscript = requireManuscript(manuscriptId);
+        return isCurrentVersion(manuscript);
+    }
+
+    public boolean canAccessManuscriptFile(long manuscriptId, AuthenticatedUser user) {
+        if (user == null) {
+            return false;
+        }
+        ManuscriptSummary manuscript = manuscriptRepository.findById(manuscriptId);
+        if (manuscript == null) {
+            return false;
+        }
+        if (user.hasRole("ADMIN")) {
+            return true;
+        }
+        long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
+        if (ownerId == user.getId()) {
+            return true;
+        }
+        long tantouId = manuscriptRepository.getManuscriptTantou(manuscriptId);
+        return tantouId == user.getId() && user.hasRole("TANTOU_EDITOR");
+    }
+
+    public void validateManuscriptFileMetadata(String originalFileName, Long fileSize, String fileExtension) {
+        String extension = normalizeExtension(fileExtension);
+        if (originalFileName == null || originalFileName.trim().isEmpty()) {
+            throw new BusinessRuleException("Please choose a manuscript file to upload");
+        }
+        if (fileSize == null || fileSize.longValue() <= 0L) {
+            throw new BusinessRuleException("Uploaded manuscript file is empty");
+        }
+        if (fileSize.longValue() > MAX_MANUSCRIPT_FILE_SIZE) {
+            throw new BusinessRuleException("Manuscript file must be 50MB or smaller");
+        }
+        if (!isAllowedExtension(extension)) {
+            throw new BusinessRuleException("Allowed manuscript formats are PDF, ZIP, RAR, and CBZ");
+        }
+    }
+
+    private boolean isAllowedExtension(String extension) {
+        return "pdf".equals(extension) || "zip".equals(extension) || "rar".equals(extension) || "cbz".equals(extension);
+    }
+
+    private String normalizeExtension(String value) {
+        String extension = trimToNull(value);
+        if (extension == null) {
+            return null;
+        }
+        if (extension.startsWith(".")) {
+            extension = extension.substring(1);
+        }
+        return extension.toLowerCase();
     }
 
     private String trimToNull(String value) {

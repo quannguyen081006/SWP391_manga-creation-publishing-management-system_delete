@@ -3,6 +3,8 @@ package manga.dto;
 public class SubmitManuscriptRequest {
     private String fileUrl;
     private String originalFileName;
+    private Long fileSize;
+    private String fileExtension;
     private String notes;
     private String genre;
 
@@ -20,6 +22,22 @@ public class SubmitManuscriptRequest {
 
     public void setOriginalFileName(String originalFileName) {
         this.originalFileName = originalFileName;
+    }
+
+    public Long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(Long fileSize) {
+        this.fileSize = fileSize;
+    }
+
+    public String getFileExtension() {
+        return fileExtension;
+    }
+
+    public void setFileExtension(String fileExtension) {
+        this.fileExtension = fileExtension;
     }
 
     public String getNotes() {

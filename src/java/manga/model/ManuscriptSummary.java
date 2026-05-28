@@ -12,6 +12,8 @@ public class ManuscriptSummary {
     private String fileUrl;
     private String originalFileName;
     private Timestamp uploadedAt;
+    private Long fileSize;
+    private String fileExtension;
     private Timestamp revisionDeadline;
     private String feedback;
     private String notes;
@@ -42,6 +44,10 @@ public class ManuscriptSummary {
     public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
     public Timestamp getUploadedAt() { return uploadedAt; }
     public void setUploadedAt(Timestamp uploadedAt) { this.uploadedAt = uploadedAt; }
+    public Long getFileSize() { return fileSize; }
+    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
+    public String getFileExtension() { return fileExtension; }
+    public void setFileExtension(String fileExtension) { this.fileExtension = fileExtension; }
     public Timestamp getRevisionDeadline() { return revisionDeadline; }
     public void setRevisionDeadline(Timestamp revisionDeadline) { this.revisionDeadline = revisionDeadline; }
     public String getFeedback() { return feedback; }

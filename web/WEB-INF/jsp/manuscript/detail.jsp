@@ -22,7 +22,13 @@
     <div><span class="detail-label">Submitted</span><strong>${manuscript.submittedAt}</strong></div>
     <div><span class="detail-label">SLA Deadline</span><strong>${manuscript.reviewDeadline}</strong></div>
     <div><span class="detail-label">Status</span><span class="status-chip ${manuscript.status=='APPROVED' ? 'status-approved' : (manuscript.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${manuscript.status}</span></div>
-    <div><span class="detail-label">File / Path</span><strong>${manuscript.fileUrl}</strong></div>
+    <div><span class="detail-label">Uploaded File</span><strong>${empty manuscript.originalFileName ? 'Legacy manuscript file' : manuscript.originalFileName}</strong></div>
+    <div><span class="detail-label">Uploaded</span><strong>${manuscript.uploadedAt}</strong></div>
+    <div><span class="detail-label">File Type</span><strong>${manuscript.fileExtension}</strong></div>
+    <div><span class="detail-label">File Size</span><strong>${manuscript.fileSize}</strong></div>
+    <div><span class="detail-label">Genre</span><strong>${manuscript.genre}</strong></div>
+    <div><span class="detail-label">Download</span><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/download">Download Version File</a></div>
+    <div><span class="detail-label">Notes</span><strong>${manuscript.notes}</strong></div>
     <div><span class="detail-label">Synopsis</span><strong>${manuscript.synopsis}</strong></div>
     <c:if test="${not empty manuscript.revisionDeadline}">
         <div><span class="detail-label">Revision Deadline</span><strong>${manuscript.revisionDeadline}</strong></div>
@@ -36,12 +42,14 @@
 <div class="section-card">
     <h3 class="section-title compact-title">Version History</h3>
     <table class="data-table">
-        <thead><tr><th>Version</th><th>Status</th><th>Submitted</th><th>Reviewer</th><th>Action</th></tr></thead>
+        <thead><tr><th>Version</th><th>Status</th><th>Uploaded File</th><th>Uploaded</th><th>Submitted</th><th>Reviewer</th><th>Action</th></tr></thead>
         <tbody>
             <c:forEach items="${versionHistory}" var="v">
                 <tr class="${v.id == manuscript.id ? 'row-current' : ''}">
                     <td>v${v.version} ${v.id == manuscript.id ? '(current)' : ''}</td>
                     <td><span class="status-chip ${v.status=='APPROVED' ? 'status-approved' : (v.status=='REJECTED' ? 'status-rejected' : 'status-voting')}">${v.status}</span></td>
+                    <td>${v.originalFileName}</td>
+                    <td>${v.uploadedAt}</td>
                     <td>${v.submittedAt}</td>
                     <td>${v.reviewerName}</td>
                     <td><a class="btn small" href="${pageContext.request.contextPath}/main/manuscripts/${v.id}">View Detail</a></td>
@@ -118,7 +126,21 @@
         <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/annotate" class="form-grid">
             <label>Page Number</label>
             <input type="number" name="pageNumber" min="1" required />
-            <label>Content</label>
+            <label>Category</label>
+            <select name="category" required>
+                <option value="ART">ART</option>
+                <option value="STORY">STORY</option>
+                <option value="PACING">PACING</option>
+                <option value="DIALOGUE">DIALOGUE</option>
+                <option value="PANELING">PANELING</option>
+                <option value="OTHER">OTHER</option>
+            </select>
+            <label>Status</label>
+            <select name="status" required>
+                <option value="OPEN">OPEN</option>
+                <option value="RESOLVED">RESOLVED</option>
+            </select>
+            <label>Comment</label>
             <textarea name="content" rows="4" required></textarea>
             <button class="btn primary" type="submit">Add Annotation</button>
         </form>
@@ -129,12 +151,19 @@
 <div class="section-card">
     <h3 class="section-title compact-title">Annotations (v${manuscript.version})</h3>
     <table class="data-table">
-        <thead><tr><th>Page</th><th>Content</th><th>Created</th></tr></thead>
+        <thead><tr><th>Page</th><th>Category</th><th>Status</th><th>Editor</th><th>Comment</th><th>Created</th></tr></thead>
         <tbody>
             <c:forEach items="${annotations}" var="a">
-                <tr><td>${a.pageNumber}</td><td>${a.content}</td><td>${a.createdAt}</td></tr>
+                <tr>
+                    <td><a href="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/download#page=${a.pageNumber}">Page ${a.pageNumber}</a></td>
+                    <td><span class="status-chip status-voting">${a.category}</span></td>
+                    <td><span class="status-chip ${a.status=='RESOLVED' ? 'status-approved' : 'status-voting'}">${a.status}</span></td>
+                    <td>${a.editorName}</td>
+                    <td>${a.content}</td>
+                    <td>${a.createdAt}</td>
+                </tr>
             </c:forEach>
-            <c:if test="${empty annotations}"><tr><td colspan="3" class="muted">No annotations yet.</td></tr></c:if>
+            <c:if test="${empty annotations}"><tr><td colspan="6" class="muted">No annotations yet.</td></tr></c:if>
         </tbody>
     </table>
 </div>

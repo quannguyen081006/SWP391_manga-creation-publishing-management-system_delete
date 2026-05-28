@@ -61,6 +61,8 @@ public class AnnotationService {
             manuscriptId,
             user.getId(),
             request.getPageNumber(),
+            normalizeCategory(request.getCategory()),
+            normalizeStatus(request.getStatus()),
             request.getContent().trim()
         );
     }
@@ -73,5 +75,22 @@ public class AnnotationService {
 
         // Return annotations ordered by createdAt (repository handles ordering)
         return manuscriptRepository.listAnnotations(manuscriptId);
+    }
+
+    private String normalizeCategory(String category) {
+        String value = category == null ? "OTHER" : category.trim().toUpperCase();
+        if ("ART".equals(value) || "STORY".equals(value) || "PACING".equals(value)
+                || "DIALOGUE".equals(value) || "PANELING".equals(value) || "OTHER".equals(value)) {
+            return value;
+        }
+        throw new BusinessRuleException("Annotation category must be ART, STORY, PACING, DIALOGUE, PANELING, or OTHER");
+    }
+
+    private String normalizeStatus(String status) {
+        String value = status == null || status.trim().isEmpty() ? "OPEN" : status.trim().toUpperCase();
+        if ("OPEN".equals(value) || "RESOLVED".equals(value)) {
+            return value;
+        }
+        throw new BusinessRuleException("Annotation status must be OPEN or RESOLVED");
     }
 }

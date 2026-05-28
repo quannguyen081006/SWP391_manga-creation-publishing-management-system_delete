@@ -8,6 +8,8 @@ public class AnnotationSummary {
     private long editorId;
     private String editorName;
     private int pageNumber;
+    private String category;
+    private String status;
     private String content;
     private Timestamp createdAt;
 
@@ -21,8 +23,14 @@ public class AnnotationSummary {
     public void setEditorName(String editorName) { this.editorName = editorName; }
     public int getPageNumber() { return pageNumber; }
     public void setPageNumber(int pageNumber) { this.pageNumber = pageNumber; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public String getComment() { return content; }
+    public void setComment(String comment) { this.content = comment; }
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
 }

@@ -162,8 +162,8 @@ public class NotificationRepository {
             return "/main/chapters/" + referenceId;
         }
         if (ref.equals("MANUSCRIPT")) {
-            if ("MANUSCRIPT_REVIEW_REMINDER".equals(normalized)) {
-                return "/main/manuscripts/" + referenceId + "/review";
+            if ("MANUSCRIPT_SUBMITTED".equals(normalized) || "MANUSCRIPT_REVIEW_REMINDER".equals(normalized)) {
+                return "/main/manuscripts/" + referenceId + "/versions/" + referenceId + "/review";
             }
             if ("MANUSCRIPT_REJECTED".equals(normalized)) {
                 return "/main/manuscripts/" + referenceId + "?tab=feedback";

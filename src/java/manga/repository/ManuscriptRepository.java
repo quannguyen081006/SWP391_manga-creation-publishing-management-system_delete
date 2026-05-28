@@ -20,7 +20,7 @@ public class ManuscriptRepository {
 
     private static final String MANUSCRIPT_SELECT =
             "SELECT m.id, m.chapterId, m.version, m.status, m.submittedAt, m.reviewDeadline, m.fileUrl, "
-            + "m.originalFileName, m.uploadedAt, m.revisionDeadline, m.feedback, m.notes, "
+            + "m.originalFileName, m.uploadedAt, m.fileSize, m.fileExtension, m.revisionDeadline, m.feedback, m.notes, "
             + "COALESCE(m.genre, p.genre) AS genre, "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, p.synopsis, "
             + "mangaka.fullName AS mangakaName, reviewer.fullName AS reviewerName "
@@ -69,7 +69,8 @@ public class ManuscriptRepository {
 
     public List<AnnotationSummary> listAnnotations(long manuscriptId) {
 
-        String sql = "SELECT a.id, a.manuscriptId, a.editorId, u.fullName AS editorName, a.pageNumber, a.content, a.createdAt "
+        String sql = "SELECT a.id, a.manuscriptId, a.editorId, u.fullName AS editorName, a.pageNumber, "
+                + "a.category, a.status, a.content, a.createdAt "
                 + "FROM Annotation a "
                 + "LEFT JOIN [User] u ON u.id = a.editorId "
                 + "WHERE a.manuscriptId = ? ORDER BY a.pageNumber ASC, a.createdAt DESC";
@@ -118,13 +119,17 @@ public class ManuscriptRepository {
     }
 
     public long createDraft(long chapterId, String fileUrl, String originalFileName, String notes, String genre) {
+        return createDraft(chapterId, fileUrl, originalFileName, null, null, notes, genre);
+    }
+
+    public long createDraft(long chapterId, String fileUrl, String originalFileName, Long fileSize, String fileExtension, String notes, String genre) {
         String activeSql = "SELECT COUNT(1) FROM Manuscript WITH (UPDLOCK, HOLDLOCK) WHERE chapterId = ? AND status IN ('DRAFT','SUBMITTED','UNDER_REVIEW')";
         String latestSql = "SELECT TOP 1 status FROM Manuscript WHERE chapterId = ? ORDER BY version DESC";
         String versionSql = "SELECT ISNULL(MAX(version),0)+1 FROM Manuscript WITH (UPDLOCK, HOLDLOCK) WHERE chapterId = ?";
         String chapterSql = "SELECT c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, p.genre "
                 + "FROM Chapter c JOIN Series s ON s.id = c.seriesId LEFT JOIN Proposal p ON p.id = s.proposalId WHERE c.id = ?";
-        String insert = "INSERT INTO Manuscript (chapterId, version, status, submittedAt, fileUrl, originalFileName, uploadedAt, notes, genre, seriesTitle, chapterTitle, chapterNumber) "
-                + "VALUES (?, ?, 'DRAFT', GETDATE(), ?, ?, GETDATE(), ?, ?, ?, ?, ?)";
+        String insert = "INSERT INTO Manuscript (chapterId, version, status, submittedAt, fileUrl, originalFileName, uploadedAt, fileSize, fileExtension, notes, genre, seriesTitle, chapterTitle, chapterNumber) "
+                + "VALUES (?, ?, 'DRAFT', GETDATE(), ?, ?, GETDATE(), ?, ?, ?, ?, ?, ?, ?)";
 
         try ( Connection conn = dataSource.getConnection()) {
             boolean oldAutoCommit = conn.getAutoCommit();
@@ -184,14 +189,20 @@ public class ManuscriptRepository {
                     ps.setInt(2, version);
                     ps.setString(3, fileUrl);
                     ps.setString(4, originalFileName);
-                    ps.setString(5, notes);
-                    ps.setString(6, resolvedGenre);
-                    ps.setString(7, seriesTitle);
-                    ps.setString(8, chapterTitle);
-                    if (chapterNumber == null) {
-                        ps.setNull(9, java.sql.Types.INTEGER);
+                    if (fileSize == null) {
+                        ps.setNull(5, java.sql.Types.BIGINT);
                     } else {
-                        ps.setInt(9, chapterNumber.intValue());
+                        ps.setLong(5, fileSize.longValue());
+                    }
+                    ps.setString(6, fileExtension);
+                    ps.setString(7, notes);
+                    ps.setString(8, resolvedGenre);
+                    ps.setString(9, seriesTitle);
+                    ps.setString(10, chapterTitle);
+                    if (chapterNumber == null) {
+                        ps.setNull(11, java.sql.Types.INTEGER);
+                    } else {
+                        ps.setInt(11, chapterNumber.intValue());
                     }
                     ps.executeUpdate();
                     try ( ResultSet rs = ps.getGeneratedKeys()) {
@@ -313,6 +324,37 @@ public class ManuscriptRepository {
         }
     }
 
+    public void updateDraftMetadata(long manuscriptId, String fileUrl, String originalFileName, Long fileSize,
+                                    String fileExtension, String notes, String genre) {
+        String sql = "UPDATE Manuscript SET "
+                + "fileUrl=COALESCE(?, fileUrl), "
+                + "originalFileName=COALESCE(?, originalFileName), "
+                + "uploadedAt=CASE WHEN ? IS NULL THEN uploadedAt ELSE GETDATE() END, "
+                + "fileSize=COALESCE(?, fileSize), "
+                + "fileExtension=COALESCE(?, fileExtension), "
+                + "notes=?, genre=? "
+                + "WHERE id = ? AND status = 'DRAFT'";
+        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fileUrl);
+            ps.setString(2, originalFileName);
+            ps.setString(3, fileUrl);
+            if (fileSize == null) {
+                ps.setNull(4, java.sql.Types.BIGINT);
+            } else {
+                ps.setLong(4, fileSize.longValue());
+            }
+            ps.setString(5, fileExtension);
+            ps.setString(6, notes);
+            ps.setString(7, genre);
+            ps.setLong(8, manuscriptId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Cannot update manuscript: must be DRAFT");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update manuscript", ex);
+        }
+    }
+
     public void delete(long manuscriptId) {
         String sql = "DELETE FROM Manuscript WHERE id = ? AND status = 'DRAFT'";
         try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -340,13 +382,15 @@ public class ManuscriptRepository {
         return queryLong(sql, manuscriptId, "Cannot resolve manuscript tantou");
     }
 
-    public void addAnnotation(long manuscriptId, long editorId, int pageNumber, String content) {
-        String sql = "INSERT INTO Annotation (manuscriptId, editorId, pageNumber, content, createdAt) VALUES (?, ?, ?, ?, GETDATE())";
+    public void addAnnotation(long manuscriptId, long editorId, int pageNumber, String category, String status, String content) {
+        String sql = "INSERT INTO Annotation (manuscriptId, editorId, pageNumber, category, status, content, createdAt) VALUES (?, ?, ?, ?, ?, ?, GETDATE())";
         try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, manuscriptId);
             ps.setLong(2, editorId);
             ps.setInt(3, pageNumber);
-            ps.setString(4, content);
+            ps.setString(4, category);
+            ps.setString(5, status);
+            ps.setString(6, content);
             ps.executeUpdate();
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot add annotation", ex);
@@ -402,6 +446,9 @@ public class ManuscriptRepository {
         m.setFileUrl(rs.getString("fileUrl"));
         m.setOriginalFileName(rs.getString("originalFileName"));
         m.setUploadedAt(rs.getTimestamp("uploadedAt"));
+        long fileSize = rs.getLong("fileSize");
+        m.setFileSize(rs.wasNull() ? null : Long.valueOf(fileSize));
+        m.setFileExtension(rs.getString("fileExtension"));
         m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
         m.setFeedback(rs.getString("feedback"));
         m.setNotes(rs.getString("notes"));
@@ -432,6 +479,11 @@ public class ManuscriptRepository {
         } catch (SQLException ignore) {
         }
         a.setPageNumber(rs.getInt("pageNumber"));
+        try {
+            a.setCategory(rs.getString("category"));
+            a.setStatus(rs.getString("status"));
+        } catch (SQLException ignore) {
+        }
         a.setContent(rs.getString("content"));
         a.setCreatedAt(rs.getTimestamp("createdAt"));
 

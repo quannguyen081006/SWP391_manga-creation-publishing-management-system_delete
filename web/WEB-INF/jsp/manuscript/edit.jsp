@@ -16,9 +16,27 @@
 <c:if test="${not empty error}"><div class="alert error">${error}</div></c:if>
 
 <div class="section-card">
-    <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/edit" class="form-grid">
-        <label>File URL</label>
-        <input type="text" name="fileUrl" value="${manuscript.fileUrl}" required />
+    <form method="post" action="${pageContext.request.contextPath}/main/manuscripts/${manuscript.id}/edit" class="form-grid" enctype="multipart/form-data">
+        <label>Current File</label>
+        <div>
+            <c:choose>
+                <c:when test="${not empty manuscript.originalFileName}">
+                    <strong>${manuscript.originalFileName}</strong>
+                </c:when>
+                <c:otherwise>
+                    <strong>${manuscript.fileUrl}</strong>
+                </c:otherwise>
+            </c:choose>
+        </div>
+
+        <label>Replace File</label>
+        <input type="file" name="manuscriptFile" accept=".pdf,.zip,.rar,.cbz" />
+
+        <label>Genre</label>
+        <input type="text" name="genre" value="${manuscript.genre}" />
+
+        <label>Notes</label>
+        <textarea name="notes" rows="4">${manuscript.notes}</textarea>
 
         <button class="btn primary" type="submit">Update Manuscript</button>
     </form>

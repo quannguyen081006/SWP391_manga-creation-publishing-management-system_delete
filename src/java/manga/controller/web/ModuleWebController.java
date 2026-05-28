@@ -22,6 +22,9 @@ import manga.service.ProposalService;
 import manga.service.RankingCsvImportService;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.Part;
 import static manga.common.util.SessionUserUtil.requireRole;
@@ -43,6 +47,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 @RequestMapping("/main")
 public class ModuleWebController {
+
+    private static final long MAX_MANUSCRIPT_FILE_SIZE = ManuscriptService.MAX_MANUSCRIPT_FILE_SIZE;
 
     @Autowired
     private ProposalService proposalService;
@@ -372,6 +378,15 @@ public class ModuleWebController {
         return manuscriptDetail(id, session, model);
     }
 
+    @RequestMapping(value = "/manuscripts/{id}/versions/{versionId}/review", method = RequestMethod.GET)
+    public String manuscriptVersionReviewDeepLink(
+            @PathVariable("id") long id,
+            @PathVariable("versionId") long versionId,
+            HttpSession session,
+            Model model) {
+        return manuscriptDetail(versionId, session, model);
+    }
+
     @RequestMapping(value = "/manuscripts/{id}/approve", method = RequestMethod.POST)
     public String manuscriptApprove(@PathVariable("id") long id, HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
@@ -436,6 +451,8 @@ public class ModuleWebController {
             @PathVariable("id") long id,
             HttpSession session,
             @RequestParam("pageNumber") int pageNumber,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(value = "status", required = false) String status,
             @RequestParam("content") String content,
             Model model) {
         AuthenticatedUser user = requireUser(session);
@@ -445,6 +462,8 @@ public class ModuleWebController {
             }
             manga.dto.AddAnnotationRequest request = new manga.dto.AddAnnotationRequest();
             request.setPageNumber(pageNumber);
+            request.setCategory(category);
+            request.setStatus(status);
             request.setContent(content);
             annotationService.addAnnotation(id, request, user);
             return "redirect:/main/manuscripts/" + id;
@@ -509,6 +528,9 @@ public class ModuleWebController {
         if (!"DRAFT".equals(status)) {
             throw new IllegalArgumentException("Only DRAFT manuscript versions can be edited");
         }
+        if (!manuscriptService.isCurrentVersion(id)) {
+            throw new IllegalArgumentException("Only current manuscript version can be edited");
+        }
         model.addAttribute("manuscript", manuscript);
         return "manuscript/edit";
     }
@@ -516,7 +538,9 @@ public class ModuleWebController {
     @RequestMapping(value = "/manuscripts/{id}/edit", method = RequestMethod.POST)
     public String manuscriptUpdate(
             @PathVariable("id") long id,
-            @RequestParam("fileUrl") String fileUrl,
+            HttpServletRequest request,
+            @RequestParam(value = "notes", required = false) String notes,
+            @RequestParam(value = "genre", required = false) String genre,
             HttpSession session,
             Model model) {
         AuthenticatedUser user = requireUser(session);
@@ -529,12 +553,94 @@ public class ModuleWebController {
             if (user.getId() != mangakaId) {
                 throw new IllegalArgumentException("Only owner can edit manuscript");
             }
-            manuscriptService.updateDraft(id, fileUrl, user);
+            Part file = request.getPart("manuscriptFile");
+            ManuscriptUploadInfo upload = null;
+            if (file != null && file.getSize() > 0) {
+                validateManuscriptUploadPart(file);
+                upload = saveManuscriptUpload(request, file, manuscript.getId(), manuscript.getVersion());
+            }
+            manuscriptService.updateDraft(
+                    id,
+                    upload == null ? null : upload.path,
+                    upload == null ? null : upload.originalName,
+                    upload == null ? null : Long.valueOf(upload.size),
+                    upload == null ? null : upload.extension,
+                    notes,
+                    genre,
+                    user);
             return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
+        } catch (Exception ex) {
+            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
+            model.addAttribute("manuscript", manuscript);
             model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
+            return "manuscript/edit";
+        }
+    }
+
+    private void validateManuscriptUploadPart(Part part) {
+        if (part == null || part.getSize() == 0) {
+            throw new IllegalArgumentException("Please choose a manuscript file to upload");
+        }
+        if (part.getSize() > MAX_MANUSCRIPT_FILE_SIZE) {
+            throw new IllegalArgumentException("Manuscript file must be 50MB or smaller");
+        }
+        String submittedName = part.getSubmittedFileName();
+        String extension = extractExtension(submittedName);
+        if (!"pdf".equals(extension) && !"zip".equals(extension) && !"rar".equals(extension) && !"cbz".equals(extension)) {
+            throw new IllegalArgumentException("Allowed manuscript formats are PDF, ZIP, RAR, and CBZ");
+        }
+        String originalName = submittedName == null ? "manuscript-file" : new File(submittedName).getName();
+        manuscriptService.validateManuscriptFileMetadata(originalName, Long.valueOf(part.getSize()), extension);
+    }
+
+    private ManuscriptUploadInfo saveManuscriptUpload(HttpServletRequest request, Part part, long manuscriptId, int version)
+            throws IOException {
+        String submittedName = part.getSubmittedFileName();
+        String originalName = submittedName == null ? "manuscript-file" : new File(submittedName).getName();
+        String extension = extractExtension(originalName);
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+        String storedName = "manuscript_" + manuscriptId + "_v" + version + "_" + timestamp + "." + extension;
+        String uploadPath = request.getServletContext().getRealPath("/WEB-INF/uploads/manuscripts");
+        if (uploadPath == null) {
+            throw new IOException("Upload directory is not available");
+        }
+        File dir = new File(uploadPath);
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Cannot create manuscript upload directory");
+        }
+        File target = new File(dir, storedName);
+        if (target.exists()) {
+            timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date(System.currentTimeMillis() + 1000L));
+            storedName = "manuscript_" + manuscriptId + "_v" + version + "_" + timestamp + "." + extension;
+            target = new File(dir, storedName);
+        }
+        part.write(target.getAbsolutePath());
+        return new ManuscriptUploadInfo("/WEB-INF/uploads/manuscripts/" + storedName, originalName, part.getSize(), extension);
+    }
+
+    private String extractExtension(String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+        String name = new File(fileName).getName();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return "";
+        }
+        return name.substring(dot + 1).toLowerCase();
+    }
+
+    private static class ManuscriptUploadInfo {
+        private final String path;
+        private final String originalName;
+        private final long size;
+        private final String extension;
+
+        private ManuscriptUploadInfo(String path, String originalName, long size, String extension) {
+            this.path = path;
+            this.originalName = originalName;
+            this.size = size;
+            this.extension = extension;
         }
     }
 
@@ -566,8 +672,9 @@ public class ModuleWebController {
             Model model) {
         AuthenticatedUser user = requireUser(session);
         requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-        model.addAttribute("chapters", chapterRepository.listAll(user));
+        model.addAttribute("chapters", completedChaptersFor(user));
         model.addAttribute("selectedChapterId", chapterId);
+        model.addAttribute("genres", proposalService.listGenres());
         return "manuscript/create";
     }
 
@@ -575,17 +682,117 @@ public class ModuleWebController {
     public String manuscriptCreateSubmit(
             HttpSession session,
             @RequestParam("chapterId") long chapterId,
-            @RequestParam("fileUrl") String fileUrl,
+            @RequestParam(value = "notes", required = false) String notes,
+            @RequestParam(value = "genre", required = false) String genre,
+            HttpServletRequest request,
             Model model) {
         AuthenticatedUser user = requireUser(session);
+        Long draftId = null;
         try {
             requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-            ManuscriptSummary manuscript = manuscriptService.createDraft(chapterId, fileUrl, user);
+            Part file = request.getPart("manuscriptFile");
+            validateManuscriptUploadPart(file);
+
+            manga.dto.SubmitManuscriptRequest draftRequest = new manga.dto.SubmitManuscriptRequest();
+            draftRequest.setFileUrl("__PENDING_MANUSCRIPT_UPLOAD__");
+            String submittedName = file.getSubmittedFileName();
+            draftRequest.setOriginalFileName(submittedName == null ? "manuscript-file" : new File(submittedName).getName());
+            draftRequest.setFileSize(Long.valueOf(file.getSize()));
+            draftRequest.setFileExtension(extractExtension(file.getSubmittedFileName()));
+            draftRequest.setNotes(notes);
+            draftRequest.setGenre(genre);
+            ManuscriptSummary manuscript = manuscriptService.createDraft(chapterId, draftRequest, user);
+            draftId = Long.valueOf(manuscript.getId());
+
+            ManuscriptUploadInfo upload = saveManuscriptUpload(request, file, manuscript.getId(), manuscript.getVersion());
+            manuscriptService.updateDraft(
+                    manuscript.getId(),
+                    upload.path,
+                    upload.originalName,
+                    Long.valueOf(upload.size),
+                    upload.extension,
+                    notes,
+                    genre,
+                    user);
             return "redirect:/main/manuscripts/" + manuscript.getId();
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
+            if (draftId != null) {
+                try {
+                    manuscriptService.deleteDraft(draftId.longValue(), user);
+                } catch (RuntimeException ignore) {
+                }
+            }
             model.addAttribute("error", ex.getMessage());
-            model.addAttribute("chapters", chapterRepository.listAll(user));
+            model.addAttribute("chapters", completedChaptersFor(user));
+            model.addAttribute("selectedChapterId", chapterId);
+            model.addAttribute("genre", genre);
+            model.addAttribute("genres", proposalService.listGenres());
             return "manuscript/create";
+        }
+    }
+
+    private List<ChapterSummary> completedChaptersFor(AuthenticatedUser user) {
+        List<ChapterSummary> chapters = chapterRepository.listAll(user);
+        List<ChapterSummary> completed = new ArrayList<ChapterSummary>();
+        for (ChapterSummary chapter : chapters) {
+            if (chapter != null && isCompletedChapterStatus(chapter.getStatus())) {
+                completed.add(chapter);
+            }
+        }
+        return completed;
+    }
+
+    private boolean isCompletedChapterStatus(String status) {
+        return "COMPLETE".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status);
+    }
+
+    @RequestMapping(value = "/manuscripts/{id}/download", method = RequestMethod.GET)
+    public void manuscriptDownload(
+            @PathVariable("id") long id,
+            HttpSession session,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        AuthenticatedUser user = requireUser(session);
+        ManuscriptSummary manuscript = manuscriptRepository.findById(id);
+        if (manuscript == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        if (!manuscriptService.canAccessManuscriptFile(id, user)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+        String fileUrl = manuscript.getFileUrl();
+        if (fileUrl == null || (!fileUrl.startsWith("/WEB-INF/uploads/manuscripts/")
+                && !fileUrl.startsWith("/uploads/manuscripts/"))) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        String absolutePath = request.getServletContext().getRealPath(fileUrl);
+        if (absolutePath == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        File file = new File(absolutePath);
+        if (!file.isFile()) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        String downloadName = manuscript.getOriginalFileName();
+        if (downloadName == null || downloadName.trim().isEmpty()) {
+            downloadName = file.getName();
+        }
+        response.setContentType("application/octet-stream");
+        response.setContentLengthLong(file.length());
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20"));
+        try (java.io.FileInputStream in = new java.io.FileInputStream(file);
+             OutputStream out = response.getOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
         }
     }
 
