@@ -2,6 +2,9 @@ package manga.dto;
 
 public class SubmitManuscriptRequest {
     private String fileUrl;
+    private String originalFileName;
+    private String notes;
+    private String genre;
 
     public String getFileUrl() {
         return fileUrl;
@@ -9,5 +12,29 @@ public class SubmitManuscriptRequest {
 
     public void setFileUrl(String fileUrl) {
         this.fileUrl = fileUrl;
+    }
+
+    public String getOriginalFileName() {
+        return originalFileName;
+    }
+
+    public void setOriginalFileName(String originalFileName) {
+        this.originalFileName = originalFileName;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+
+    public String getGenre() {
+        return genre;
+    }
+
+    public void setGenre(String genre) {
+        this.genre = genre;
     }
 }

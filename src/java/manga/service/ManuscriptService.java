@@ -39,16 +39,27 @@ public class ManuscriptService {
 
     @Transactional
     public ManuscriptSummary submitManuscript(long chapterId, SubmitManuscriptRequest request, AuthenticatedUser user) {
-        ManuscriptSummary manuscript = createDraft(chapterId, request.getFileUrl(), user);
+        ManuscriptSummary manuscript = createDraft(chapterId, request, user);
         submitDraft(manuscript.getId(), user);
         return manuscriptRepository.findById(manuscript.getId());
     }
 
     @Transactional
     public ManuscriptSummary createDraft(long chapterId, String fileUrl, AuthenticatedUser user) {
+        SubmitManuscriptRequest request = new SubmitManuscriptRequest();
+        request.setFileUrl(fileUrl);
+        return createDraft(chapterId, request, user);
+    }
+
+    @Transactional
+    public ManuscriptSummary createDraft(long chapterId, SubmitManuscriptRequest request, AuthenticatedUser user) {
+        if (request == null) {
+            request = new SubmitManuscriptRequest();
+        }
+        String fileUrl = request.getFileUrl();
         // Validate file URL
         if (fileUrl == null || fileUrl.trim().isEmpty()) {
-            throw new BusinessRuleException("File URL cannot be empty");
+            throw new BusinessRuleException("Manuscript file is required");
         }
 
         // Validate user is Mangaka owner of series
@@ -66,7 +77,12 @@ public class ManuscriptService {
             throw new BusinessRuleException("Cannot create manuscript while a draft or active review version exists");
         }
 
-        long manuscriptId = manuscriptRepository.createDraft(chapterId, fileUrl.trim());
+        long manuscriptId = manuscriptRepository.createDraft(
+                chapterId,
+                fileUrl.trim(),
+                trimToNull(request.getOriginalFileName()),
+                trimToNull(request.getNotes()),
+                trimToNull(request.getGenre()));
         return manuscriptRepository.findById(manuscriptId);
     }
 
@@ -200,9 +216,7 @@ public class ManuscriptService {
     @Transactional
     public void requestRevision(long manuscriptId, String feedback, AuthenticatedUser user) {
         ManuscriptSummary manuscript = requireManuscript(manuscriptId);
-        if (feedback == null || feedback.trim().isEmpty()) {
-            throw new BusinessRuleException("Feedback is required when requesting revision");
-        }
+        String cleanFeedback = trimToNull(feedback);
         long tantouId = manuscriptRepository.getManuscriptTantou(manuscriptId);
         if (tantouId != user.getId()) {
             throw new BusinessRuleException("Only assigned Tantou Editor can request revision");
@@ -213,14 +227,17 @@ public class ManuscriptService {
         if (!ManuscriptStatus.UNDER_REVIEW.name().equals(manuscript.getStatus())) {
             throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can require revision");
         }
+        if (cleanFeedback == null && manuscriptRepository.listAnnotations(manuscriptId).isEmpty()) {
+            throw new BusinessRuleException("Feedback or at least one annotation is required when requesting revision");
+        }
 
-        manuscriptRepository.requestRevision(manuscriptId, feedback.trim());
+        manuscriptRepository.requestRevision(manuscriptId, cleanFeedback);
 
         long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
         notificationService.notifyUser(
             mangakaId,
             "MANUSCRIPT_REVISION_REQUESTED",
-            "Revision requested for chapter #" + manuscript.getChapterId() + ". Feedback: " + feedback.trim(),
+            "Revision requested for chapter #" + manuscript.getChapterId() + (cleanFeedback == null ? "." : ". Feedback: " + cleanFeedback),
             manuscriptId,
             "MANUSCRIPT"
         );
@@ -230,7 +247,7 @@ public class ManuscriptService {
             "MANUSCRIPT_REVISION_REQUESTED",
             "MANUSCRIPT",
             manuscriptId,
-            auditLogService.jsonTwoPairs("chapterId", String.valueOf(manuscript.getChapterId()), "feedback", feedback.trim())
+            auditLogService.jsonTwoPairs("chapterId", String.valueOf(manuscript.getChapterId()), "feedback", cleanFeedback == null ? "" : cleanFeedback)
         );
     }
 
@@ -299,9 +316,14 @@ public class ManuscriptService {
 
     @Transactional
     public void updateDraft(long manuscriptId, String fileUrl, AuthenticatedUser user) {
+        updateDraft(manuscriptId, fileUrl, null, user);
+    }
+
+    @Transactional
+    public void updateDraft(long manuscriptId, String fileUrl, String originalFileName, AuthenticatedUser user) {
         ManuscriptSummary manuscript = requireManuscript(manuscriptId);
         if (fileUrl == null || fileUrl.trim().isEmpty()) {
-            throw new BusinessRuleException("File URL cannot be empty");
+            throw new BusinessRuleException("Manuscript file is required");
         }
         long ownerId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
         if (ownerId != user.getId()) {
@@ -310,7 +332,7 @@ public class ManuscriptService {
         if (!ManuscriptStatus.DRAFT.name().equals(manuscript.getStatus())) {
             throw new BusinessRuleException("Only DRAFT manuscript versions can be edited");
         }
-        manuscriptRepository.updateFileUrl(manuscriptId, fileUrl.trim());
+        manuscriptRepository.updateFile(manuscriptId, fileUrl.trim(), trimToNull(originalFileName));
     }
 
     @Transactional
@@ -382,5 +404,12 @@ public class ManuscriptService {
     private boolean isCurrentVersion(ManuscriptSummary manuscript) {
         List<ManuscriptSummary> versions = manuscriptRepository.listByChapter(manuscript.getChapterId());
         return !versions.isEmpty() && versions.get(0).getId() == manuscript.getId();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

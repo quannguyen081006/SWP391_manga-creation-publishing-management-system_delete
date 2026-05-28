@@ -10,10 +10,15 @@ public class ManuscriptSummary {
     private Timestamp submittedAt;
     private Timestamp reviewDeadline;
     private String fileUrl;
+    private String originalFileName;
+    private Timestamp uploadedAt;
     private Timestamp revisionDeadline;
     private String feedback;
+    private String notes;
+    private String genre;
     private String seriesTitle;
     private String chapterTitle;
+    private String title;
     private Integer chapterNumber;
     private String synopsis;
     private String mangakaName;
@@ -33,14 +38,24 @@ public class ManuscriptSummary {
     public void setReviewDeadline(Timestamp reviewDeadline) { this.reviewDeadline = reviewDeadline; }
     public String getFileUrl() { return fileUrl; }
     public void setFileUrl(String fileUrl) { this.fileUrl = fileUrl; }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
+    public Timestamp getUploadedAt() { return uploadedAt; }
+    public void setUploadedAt(Timestamp uploadedAt) { this.uploadedAt = uploadedAt; }
     public Timestamp getRevisionDeadline() { return revisionDeadline; }
     public void setRevisionDeadline(Timestamp revisionDeadline) { this.revisionDeadline = revisionDeadline; }
     public String getFeedback() { return feedback; }
     public void setFeedback(String feedback) { this.feedback = feedback; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+    public String getGenre() { return genre; }
+    public void setGenre(String genre) { this.genre = genre; }
     public String getSeriesTitle() { return seriesTitle; }
     public void setSeriesTitle(String seriesTitle) { this.seriesTitle = seriesTitle; }
     public String getChapterTitle() { return chapterTitle; }
-    public void setChapterTitle(String chapterTitle) { this.chapterTitle = chapterTitle; }
+    public void setChapterTitle(String chapterTitle) { this.chapterTitle = chapterTitle; this.title = chapterTitle; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
     public Integer getChapterNumber() { return chapterNumber; }
     public void setChapterNumber(Integer chapterNumber) { this.chapterNumber = chapterNumber; }
     public String getSynopsis() { return synopsis; }

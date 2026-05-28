@@ -19,7 +19,9 @@ public class ManuscriptRepository {
     private DataSource dataSource;
 
     private static final String MANUSCRIPT_SELECT =
-            "SELECT m.id, m.chapterId, m.version, m.status, m.submittedAt, m.reviewDeadline, m.fileUrl, m.revisionDeadline, m.feedback, "
+            "SELECT m.id, m.chapterId, m.version, m.status, m.submittedAt, m.reviewDeadline, m.fileUrl, "
+            + "m.originalFileName, m.uploadedAt, m.revisionDeadline, m.feedback, m.notes, "
+            + "COALESCE(m.genre, p.genre) AS genre, "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, p.synopsis, "
             + "mangaka.fullName AS mangakaName, reviewer.fullName AS reviewerName "
             + "FROM Manuscript m "
@@ -67,8 +69,10 @@ public class ManuscriptRepository {
 
     public List<AnnotationSummary> listAnnotations(long manuscriptId) {
 
-        String sql = "SELECT id, manuscriptId, editorId, pageNumber, content, createdAt "
-                + "FROM Annotation WHERE manuscriptId = ? ORDER BY createdAt DESC";
+        String sql = "SELECT a.id, a.manuscriptId, a.editorId, u.fullName AS editorName, a.pageNumber, a.content, a.createdAt "
+                + "FROM Annotation a "
+                + "LEFT JOIN [User] u ON u.id = a.editorId "
+                + "WHERE a.manuscriptId = ? ORDER BY a.pageNumber ASC, a.createdAt DESC";
 
         List<AnnotationSummary> rows = new ArrayList<AnnotationSummary>();
 
@@ -106,14 +110,21 @@ public class ManuscriptRepository {
     }
 
     public long submit(long chapterId, String fileUrl) {
-        return createDraft(chapterId, fileUrl);
+        return createDraft(chapterId, fileUrl, null, null, null);
     }
 
     public long createDraft(long chapterId, String fileUrl) {
+        return createDraft(chapterId, fileUrl, null, null, null);
+    }
+
+    public long createDraft(long chapterId, String fileUrl, String originalFileName, String notes, String genre) {
         String activeSql = "SELECT COUNT(1) FROM Manuscript WITH (UPDLOCK, HOLDLOCK) WHERE chapterId = ? AND status IN ('DRAFT','SUBMITTED','UNDER_REVIEW')";
         String latestSql = "SELECT TOP 1 status FROM Manuscript WHERE chapterId = ? ORDER BY version DESC";
         String versionSql = "SELECT ISNULL(MAX(version),0)+1 FROM Manuscript WITH (UPDLOCK, HOLDLOCK) WHERE chapterId = ?";
-        String insert = "INSERT INTO Manuscript (chapterId, version, status, submittedAt, fileUrl) VALUES (?, ?, 'DRAFT', GETDATE(), ?)";
+        String chapterSql = "SELECT c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, p.genre "
+                + "FROM Chapter c JOIN Series s ON s.id = c.seriesId LEFT JOIN Proposal p ON p.id = s.proposalId WHERE c.id = ?";
+        String insert = "INSERT INTO Manuscript (chapterId, version, status, submittedAt, fileUrl, originalFileName, uploadedAt, notes, genre, seriesTitle, chapterTitle, chapterNumber) "
+                + "VALUES (?, ?, 'DRAFT', GETDATE(), ?, ?, GETDATE(), ?, ?, ?, ?, ?)";
 
         try ( Connection conn = dataSource.getConnection()) {
             boolean oldAutoCommit = conn.getAutoCommit();
@@ -142,6 +153,10 @@ public class ManuscriptRepository {
                 }
 
                 int version;
+                String chapterTitle = null;
+                Integer chapterNumber = null;
+                String seriesTitle = null;
+                String resolvedGenre = genre;
                 try ( PreparedStatement ps = conn.prepareStatement(versionSql)) {
                     ps.setLong(1, chapterId);
                     try ( ResultSet rs = ps.executeQuery()) {
@@ -149,11 +164,35 @@ public class ManuscriptRepository {
                         version = rs.getInt(1);
                     }
                 }
+                try ( PreparedStatement ps = conn.prepareStatement(chapterSql)) {
+                    ps.setLong(1, chapterId);
+                    try ( ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            chapterTitle = rs.getString("chapterTitle");
+                            int no = rs.getInt("chapterNumber");
+                            chapterNumber = rs.wasNull() ? null : Integer.valueOf(no);
+                            seriesTitle = rs.getString("seriesTitle");
+                            if (resolvedGenre == null || resolvedGenre.trim().isEmpty()) {
+                                resolvedGenre = rs.getString("genre");
+                            }
+                        }
+                    }
+                }
 
                 try ( PreparedStatement ps = conn.prepareStatement(insert, PreparedStatement.RETURN_GENERATED_KEYS)) {
                     ps.setLong(1, chapterId);
                     ps.setInt(2, version);
                     ps.setString(3, fileUrl);
+                    ps.setString(4, originalFileName);
+                    ps.setString(5, notes);
+                    ps.setString(6, resolvedGenre);
+                    ps.setString(7, seriesTitle);
+                    ps.setString(8, chapterTitle);
+                    if (chapterNumber == null) {
+                        ps.setNull(9, java.sql.Types.INTEGER);
+                    } else {
+                        ps.setInt(9, chapterNumber.intValue());
+                    }
                     ps.executeUpdate();
                     try ( ResultSet rs = ps.getGeneratedKeys()) {
                         if (rs.next()) {
@@ -257,10 +296,15 @@ public class ManuscriptRepository {
     }
 
     public void updateFileUrl(long manuscriptId, String fileUrl) {
-        String sql = "UPDATE Manuscript SET fileUrl=? WHERE id = ? AND status = 'DRAFT'";
+        updateFile(manuscriptId, fileUrl, null);
+    }
+
+    public void updateFile(long manuscriptId, String fileUrl, String originalFileName) {
+        String sql = "UPDATE Manuscript SET fileUrl=?, originalFileName=COALESCE(?, originalFileName), uploadedAt=GETDATE() WHERE id = ? AND status = 'DRAFT'";
         try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, fileUrl);
-            ps.setLong(2, manuscriptId);
+            ps.setString(2, originalFileName);
+            ps.setLong(3, manuscriptId);
             if (ps.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Cannot update manuscript: must be DRAFT");
             }
@@ -356,8 +400,12 @@ public class ManuscriptRepository {
         m.setSubmittedAt(rs.getTimestamp("submittedAt"));
         m.setReviewDeadline(rs.getTimestamp("reviewDeadline"));
         m.setFileUrl(rs.getString("fileUrl"));
+        m.setOriginalFileName(rs.getString("originalFileName"));
+        m.setUploadedAt(rs.getTimestamp("uploadedAt"));
         m.setRevisionDeadline(rs.getTimestamp("revisionDeadline"));
         m.setFeedback(rs.getString("feedback"));
+        m.setNotes(rs.getString("notes"));
+        m.setGenre(rs.getString("genre"));
         try {
             m.setSeriesTitle(rs.getString("seriesTitle"));
             m.setChapterTitle(rs.getString("chapterTitle"));
@@ -379,6 +427,10 @@ public class ManuscriptRepository {
         a.setId(rs.getLong("id"));
         a.setManuscriptId(rs.getLong("manuscriptId"));
         a.setEditorId(rs.getLong("editorId"));
+        try {
+            a.setEditorName(rs.getString("editorName"));
+        } catch (SQLException ignore) {
+        }
         a.setPageNumber(rs.getInt("pageNumber"));
         a.setContent(rs.getString("content"));
         a.setCreatedAt(rs.getTimestamp("createdAt"));
