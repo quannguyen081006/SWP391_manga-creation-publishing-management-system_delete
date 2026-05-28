@@ -11,17 +11,18 @@
         .task-row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         .task-action-popover {
             display: none;
-            position: absolute;
-            top: calc(100% + 8px);
-            right: 0;
-            width: 300px;
-            z-index: 40;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(360px, calc(100vw - 32px));
+            z-index: 1200;
             pointer-events: auto;
             background: #fff;
             border: 1px solid #e5e7eb;
             border-radius: 12px;
-            padding: 14px;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+            padding: 16px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
         }
         .task-action-popover.open { display: block; }
         .task-action-popover strong { display: block; font-size: 14px; margin-bottom: 10px; }
@@ -38,6 +39,14 @@
         .task-action-popover .popover-helper { font-size: 12px; color: #6b7280; margin: 6px 0 10px; }
         .task-action-popover .popover-counter { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 4px; }
         .task-action-popover .popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .task-popover-scrim {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1190;
+            background: rgba(15, 23, 42, 0.24);
+        }
+        .task-popover-scrim.open { display: block; }
         .task-decision-label {
             font-size: 12px;
             font-weight: 700;
@@ -153,6 +162,7 @@
     </table>
 
     <div id="taskPopoverHost" style="position:absolute;left:-9999px;width:0;height:0;overflow:hidden;" aria-hidden="true">
+    <div id="taskPopoverScrim" class="task-popover-scrim" aria-hidden="true"></div>
     <div id="taskApprovePopover" class="task-action-popover" aria-hidden="true">
         <strong id="approvePopoverTitle">Approve task</strong>
         <label class="field-label" for="approvePopoverComment">Comment (optional)</label>
@@ -539,8 +549,14 @@
 
     function closePopovers() {
         var host = document.getElementById('taskPopoverHost');
+        var scrim = document.getElementById('taskPopoverScrim');
         var approvePop = document.getElementById('taskApprovePopover');
         var rejectPop = document.getElementById('taskRejectPopover');
+        if (scrim) {
+            scrim.classList.remove('open');
+            scrim.setAttribute('aria-hidden', 'true');
+            if (host) { host.appendChild(scrim); }
+        }
         if (approvePop) {
             approvePop.classList.remove('open');
             approvePop.setAttribute('aria-hidden', 'true');
@@ -560,10 +576,16 @@
         closePopovers();
         var task = findTask(taskId);
         if (!task) { return; }
+        var scrim = document.getElementById('taskPopoverScrim');
         var popId = type === 'approve' ? 'taskApprovePopover' : 'taskRejectPopover';
         var pop = document.getElementById(popId);
-        if (!pop || !anchorCell) { return; }
-        anchorCell.appendChild(pop);
+        if (!pop) { return; }
+        if (scrim) {
+            document.body.appendChild(scrim);
+            scrim.classList.add('open');
+            scrim.setAttribute('aria-hidden', 'false');
+        }
+        document.body.appendChild(pop);
         pop.classList.add('open');
         pop.setAttribute('aria-hidden', 'false');
         activePopoverType = type;
@@ -713,6 +735,13 @@
         var approvedNote = String(task.status || '').toUpperCase() === 'APPROVED'
             ? '<div class="alert error" style="margin-bottom:12px;">Approved task cannot be edited. Create a new task instead (BR-TSK-06)</div>'
             : '';
+        var feedback = '';
+        if (task.approvalComment) {
+            feedback += '<div class="alert success" style="margin-bottom:12px;"><strong>Approval comment:</strong><div style="margin-top:6px;">' + escapeHtml(task.approvalComment) + '</div></div>';
+        }
+        if (task.rejectionReason) {
+            feedback += '<div class="alert error" style="margin-bottom:12px;"><strong>Revision note:</strong><div style="margin-top:6px;">' + escapeHtml(task.rejectionReason) + '</div></div>';
+        }
         return approvedNote
             + '<div class="task-view-chips">'
             + '<span class="status-chip">' + escapeHtml(formatStatus(task.taskType)) + '</span>'
@@ -721,6 +750,7 @@
             + renderStatusCell(task)
             + '</div>'
             + '<p class="task-view-note">Approve / Reject được thực hiện trực tiếp từ bảng — modal này chỉ để xem và cập nhật tiến độ.</p>'
+            + feedback
             + (canEdit
                 ? ('<form id="taskViewUpdateForm" class="form-grid task-view-update-form" style="max-width:640px;">'
                     + '<input name="taskId" type="hidden" value="' + task.id + '" />'
@@ -751,7 +781,9 @@
             return '<span class="task-decision-label rejected">Rejected</span>';
         }
         var st = String(task.status || '').toUpperCase();
-        var html = '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
+        var html = isAssignedAssistant(task)
+            ? '<a class="btn small" href="' + ctx + '/main/tasks/' + task.id + '">View</a>'
+            : '<button class="btn small" type="button" data-task-view="' + task.id + '">View</button>';
         if (isTaskOwner(task) && st === 'SUBMITTED') {
             html += ' <button class="btn small success-soft" type="button" data-task-approve-pop="' + task.id + '">Approve</button>';
             html += ' <button class="btn small danger-soft" type="button" data-task-reject-pop="' + task.id + '">Reject</button>';
@@ -793,17 +825,19 @@
             var deleteButton = canDeleteImage(img)
                 ? '<button class="btn small danger-soft" type="button" data-task-image-delete="' + img.id + '" data-task-id="' + img.pageTaskId + '">Delete</button>'
                 : '';
+            var downloadButton = '<a class="btn small" href="' + escapeHtml(url) + '" download>Download</a>';
             return '<div class="panel" style="margin:0;padding:10px;">'
-                + '<a href="' + escapeHtml(url) + '" target="_blank"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || ('Page ' + img.pageNumber)) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" /></a>'
+                + '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(img.originalFileName || ('Page ' + img.pageNumber)) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;" />'
                 + '<div style="margin-top:8px;font-weight:700;">Page ' + escapeHtml(img.pageNumber || '') + '</div>'
                 + '<div class="section-desc">' + escapeHtml(img.originalFileName || '') + '</div>'
+                + downloadButton
                 + deleteButton
                 + '</div>';
         }).join('') + '</div>';
     }
 
     function canDeleteImage(img) {
-        return currentUser && (Number(img.uploadedBy) === Number(currentUser.id) || hasRole('MANGAKA'));
+        return img.id && currentUser && (Number(img.uploadedBy) === Number(currentUser.id) || hasRole('MANGAKA'));
     }
 
     function imageUrl(fileUrl) {
@@ -839,7 +873,8 @@
             + '<span>Assigned: ' + escapeHtml(task.assistantName) + '</span>'
             + '<span>Status: ' + renderStatusCell(task) + '</span>'
             + '<span>Due Date: ' + formatDueDateCell(task) + '</span>'
-            + '</div>';
+            + '</div>'
+            + (task.notes ? '<div class="alert info" style="margin-top:12px;"><strong>Mangaka note:</strong><div style="margin-top:6px;white-space:pre-wrap;">' + escapeHtml(task.notes) + '</div></div>' : '');
     }
 
     function findTask(taskId) {
@@ -948,6 +983,10 @@
             closePopovers();
             return;
         }
+        if (e.target.id === 'taskPopoverScrim') {
+            closePopovers();
+            return;
+        }
 
         var insidePopover = e.target.closest ? e.target.closest('.task-action-popover') : null;
         var insideActions = e.target.closest ? e.target.closest('.task-row-actions') : null;
@@ -1012,11 +1051,12 @@
     document.getElementById('approvePopoverConfirm').addEventListener('click', async function () {
         if (!activePopoverTaskId) { return; }
         try {
+            var taskId = activePopoverTaskId;
             var comment = document.getElementById('approvePopoverComment').value.trim();
             var payload = comment ? { comment: comment } : {};
-            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/approve', payload);
+            await callApi('POST', '/api/v1/tasks/' + taskId + '/approve', payload);
             closePopovers();
-            applyTaskDecision(activePopoverTaskId, 'approved');
+            applyTaskDecision(taskId, 'approved');
             showMessage('Task approved.', false);
             await loadData();
         } catch (err) {
@@ -1029,9 +1069,10 @@
         var reason = document.getElementById('rejectPopoverReason').value.trim();
         if (reason.length < 5) { return; }
         try {
-            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/reject', { reason: reason });
+            var taskId = activePopoverTaskId;
+            await callApi('POST', '/api/v1/tasks/' + taskId + '/reject', { reason: reason });
             closePopovers();
-            applyTaskDecision(activePopoverTaskId, 'rejected');
+            applyTaskDecision(taskId, 'rejected');
             showMessage('Task rejected and sent back for rework.', false);
             await loadData();
         } catch (err) {

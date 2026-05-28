@@ -33,6 +33,10 @@ public class PageTaskRepository {
 
     private volatile Boolean taskSchemaExtended;
 
+    private String normalizeStatus(String status) {
+        return status == null ? "" : status.trim().toUpperCase(Locale.ENGLISH);
+    }
+
     @Autowired
     private DataSource dataSource;
 
@@ -45,11 +49,12 @@ public class PageTaskRepository {
     private String taskSelectColumns() {
         if (isTaskSchemaExtended()) {
             return SQL_TASK_COLUMNS_BASE
-                    + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, "
+                    + "ISNULL(t.priority, 'NORMAL') AS priority, t.notes, t.rejectionReason, t.approvalComment, "
                     + SQL_IS_DELAYED;
         }
         return SQL_TASK_COLUMNS_BASE
                 + "'NORMAL' AS priority, CAST(NULL AS NVARCHAR(500)) AS notes, "
+                + "CAST(NULL AS NVARCHAR(300)) AS rejectionReason, CAST(NULL AS NVARCHAR(300)) AS approvalComment, "
                 + SQL_IS_DELAYED;
     }
 
@@ -220,7 +225,7 @@ public class PageTaskRepository {
     }
 
     public long create(long chapterId, long assistantId, int start, int end, String taskType, Date dueDate, String priority, String notes) {
-        String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
+        String overlapSql = "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND UPPER(status) <> 'APPROVED' AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)";
         String chapterSql = "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         String enrollmentSql = "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?";
         String insertExtendedSql = "INSERT INTO PageTask (chapterId, assistantId, pageRangeStart, pageRangeEnd, taskType, dueDate, status, rejectionCount, priority, notes, assignedAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 'IN_PROGRESS', 0, ?, ?, GETDATE(), GETDATE())";
@@ -306,7 +311,7 @@ public class PageTaskRepository {
                     end,
                     taskType,
                     dueDate,
-                    "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND id <> ? AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)",
+                    "SELECT COUNT(1) FROM PageTask WHERE chapterId = ? AND id <> ? AND UPPER(status) <> 'APPROVED' AND NOT (pageRangeEnd < ? OR pageRangeStart > ?)",
                     "SELECT c.submissionDeadline, c.seriesId, s.mangakaId FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?",
                     "SELECT COUNT(1) FROM MangakaAssistant WHERE mangakaId = ? AND assistantId = ?");
 
@@ -346,8 +351,9 @@ public class PageTaskRepository {
                 && !"INKING".equals(normalized)
                 && !"COLORING".equals(normalized)
                 && !"LETTERING".equals(normalized)
-                && !"SCREENTONE".equals(normalized)) {
-            throw new IllegalArgumentException("taskType must be SKETCHING, INKING, COLORING, SCREENTONE, or LETTERING");
+                && !"SCREENTONE".equals(normalized)
+                && !"MIXED".equals(normalized)) {
+            throw new IllegalArgumentException("taskType must be SKETCHING, INKING, COLORING, SCREENTONE, LETTERING, or MIXED");
         }
         return normalized;
     }
@@ -378,6 +384,20 @@ public class PageTaskRepository {
         }
         if (end < start) {
             throw new IllegalArgumentException("pageRangeEnd must be >= pageRangeStart");
+        }
+
+        String completePageSql = "SELECT TOP 1 pageNumber FROM " + PageRepository.TABLE_PAGE
+                + " WHERE chapterId = ? AND pageNumber BETWEEN ? AND ? "
+                + "AND UPPER(ISNULL(completedStage, '')) = 'LETTERING' ORDER BY pageNumber";
+        try (PreparedStatement ps = conn.prepareStatement(completePageSql)) {
+            ps.setLong(1, chapterId);
+            ps.setInt(2, start);
+            ps.setInt(3, end);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    throw new IllegalArgumentException("Page " + rs.getInt("pageNumber") + " is already complete and cannot be assigned");
+                }
+            }
         }
 
         if (taskId == 0L) {
@@ -447,7 +467,7 @@ public class PageTaskRepository {
             throw new IllegalArgumentException("Assistant can only submit task for review");
         }
 
-        String readSql = "SELECT chapterId, assistantId, status FROM PageTask WHERE id = ?";
+        String readSql = "SELECT chapterId, assistantId, status, taskType FROM PageTask WHERE id = ?";
         String updateSql = "UPDATE PageTask SET status = ?, updatedAt = GETDATE() WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();
@@ -469,9 +489,10 @@ public class PageTaskRepository {
                 throw new IllegalArgumentException("Task not assigned to this assistant (BR-42)");
             }
 
-            if (!("IN_PROGRESS".equalsIgnoreCase(currentStatus)
-                    || "REJECTED".equalsIgnoreCase(currentStatus)
-                    || "OVERDUE".equalsIgnoreCase(currentStatus))) {
+            String current = normalizeStatus(currentStatus);
+            if (!("IN_PROGRESS".equals(current)
+                    || "REJECTED".equals(current)
+                    || "OVERDUE".equals(current))) {
                 throw new IllegalArgumentException("Assistant can submit only from active/rework task state (BR-TSK-01)");
             }
 
@@ -488,7 +509,7 @@ public class PageTaskRepository {
     }
 
     public void approveByMangaka(long taskId, long mangakaId, String comment) {
-        String readSql = "SELECT chapterId, assistantId, status FROM PageTask WHERE id = ?";
+        String readSql = "SELECT chapterId, assistantId, status, taskType FROM PageTask WHERE id = ?";
         String updateExtendedSql = "UPDATE PageTask SET status = 'APPROVED', approvalComment = ?, updatedAt = GETDATE() WHERE id = ?";
         String updateLegacySql = "UPDATE PageTask SET status = 'APPROVED', updatedAt = GETDATE() WHERE id = ?";
 
@@ -498,6 +519,7 @@ public class PageTaskRepository {
             long chapterId;
             long assistantId;
             String currentStatus;
+            String taskType;
             try (ResultSet rs = read.executeQuery()) {
                 if (!rs.next()) {
                     throw new IllegalArgumentException("Task not found");
@@ -505,6 +527,7 @@ public class PageTaskRepository {
                 chapterId = rs.getLong("chapterId");
                 assistantId = rs.getLong("assistantId");
                 currentStatus = rs.getString("status");
+                taskType = rs.getString("taskType");
             }
 
             long ownerId = findChapterOwnerMangaka(chapterId);
@@ -512,7 +535,7 @@ public class PageTaskRepository {
                 throw new IllegalArgumentException("Only chapter owner Mangaka can approve (BR-39)");
             }
 
-            if (!"SUBMITTED".equalsIgnoreCase(currentStatus)) {
+            if (!"SUBMITTED".equals(normalizeStatus(currentStatus))) {
                 throw new IllegalArgumentException("Only SUBMITTED task can be approved (BR-39)");
             }
 
@@ -530,8 +553,8 @@ public class PageTaskRepository {
                 }
             }
 
+            promoteTaskImagesToChapter(taskId, chapterId, mangakaId, taskType);
             refreshChapterProgress(chapterId);
-            promoteTaskImagesToChapter(taskId, chapterId, mangakaId);
 
             if (comment != null && !comment.trim().isEmpty()) {
                 createNotification(
@@ -546,17 +569,18 @@ public class PageTaskRepository {
         }
     }
 
-    private void promoteTaskImagesToChapter(long taskId, long chapterId, long approvedBy) {
+    private void promoteTaskImagesToChapter(long taskId, long chapterId, long approvedBy, String completedStage) {
         List<ChapterImageItem> images = chapterImageRepository.listByTask(taskId);
         for (ChapterImageItem image : images) {
             if (image.getPageNumber() == null || !"PAGE".equalsIgnoreCase(image.getImageType())) {
                 continue;
             }
-            pageRepository.upsertUploadedByPageNumber(
+            pageRepository.promoteTaskImage(
                     chapterId,
                     image.getPageNumber().intValue(),
                     image.getFileUrl(),
-                    approvedBy);
+                    approvedBy,
+                    completedStage);
         }
     }
 
@@ -587,7 +611,7 @@ public class PageTaskRepository {
                 throw new IllegalArgumentException("Only chapter owner Mangaka can reject (BR-38)");
             }
 
-            if (!"SUBMITTED".equalsIgnoreCase(currentStatus)) {
+            if (!"SUBMITTED".equals(normalizeStatus(currentStatus))) {
                 throw new IllegalArgumentException("Only SUBMITTED task can be rejected (BR-38)");
             }
             if (currentReject >= 3) {
@@ -816,14 +840,15 @@ public class PageTaskRepository {
     }
 
     public void refreshChapterProgress(long chapterId) {
+        pageRepository.ensurePageStageColumnReady();
         String readRiskSql = "SELECT atRisk FROM Chapter WHERE id = ?";
         String updateSql =
             "UPDATE c SET "
             + "completionPct = stats.completionPct, "
             + "status = CASE "
-            + "  WHEN stats.totalTasks = 0 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'PLANNING' "
-            + "  WHEN stats.totalTasks > 0 AND stats.completionPct >= 100 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'COMPLETE' "
-            + "  WHEN stats.totalTasks > 0 AND stats.completionPct < 100 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'IN_PROGRESS' "
+            + "  WHEN stats.totalPages = 0 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'PLANNING' "
+            + "  WHEN stats.totalPages > 0 AND stats.completionPct >= 100 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'COMPLETE' "
+            + "  WHEN stats.totalPages > 0 AND stats.completionPct < 100 AND c.status IN ('PLANNING','IN_PROGRESS','COMPLETE') THEN 'IN_PROGRESS' "
             + "  ELSE c.status END, "
             + "atRisk = CASE "
             + "  WHEN c.submissionDeadline < CAST(GETDATE() AS DATE) AND stats.completionPct < 100 THEN 1 "
@@ -834,9 +859,11 @@ public class PageTaskRepository {
             + "FROM Chapter c "
             + "CROSS APPLY ( "
             + "  SELECT "
-            + "    COUNT(1) AS totalTasks, "
-            + "    CAST(ROUND(CASE WHEN COUNT(1)=0 THEN 0 ELSE (100.0 * SUM(CASE WHEN status='APPROVED' THEN 1 ELSE 0 END) / COUNT(1)) END, 2) AS DECIMAL(5,2)) AS completionPct "
-            + "  FROM PageTask t WHERE t.chapterId = c.id "
+            + "    COUNT(1) AS totalPages, "
+            + "    CAST(ROUND(CASE WHEN COUNT(1)=0 THEN 0 ELSE (100.0 * SUM(CASE UPPER(ISNULL(p.completedStage, '')) "
+            + "      WHEN 'SKETCHING' THEN 1 WHEN 'INKING' THEN 2 WHEN 'COLORING' THEN 3 "
+            + "      WHEN 'SCREENTONE' THEN 4 WHEN 'LETTERING' THEN 5 ELSE 0 END) / (COUNT(1) * 5)) END, 2) AS DECIMAL(5,2)) AS completionPct "
+            + "  FROM " + PageRepository.TABLE_PAGE + " p WHERE p.chapterId = c.id "
             + ") stats "
             + "WHERE c.id = ?";
 
@@ -912,6 +939,28 @@ public class PageTaskRepository {
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot check chapter task approval status", ex);
+        }
+    }
+
+    public boolean areAllPagesFullyCompleted(long chapterId) {
+        pageRepository.ensurePageStageColumnReady();
+        String sql = "SELECT "
+                + "COUNT(1) AS totalCount, "
+                + "SUM(CASE WHEN UPPER(ISNULL(p.completedStage, '')) = 'LETTERING' THEN 1 ELSE 0 END) AS completedCount "
+                + "FROM " + PageRepository.TABLE_PAGE + " WHERE chapterId = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int totalCount = rs.getInt("totalCount");
+                    int completedCount = rs.getInt("completedCount");
+                    return totalCount > 0 && completedCount == totalCount;
+                }
+                return false;
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot check chapter page completion status", ex);
         }
     }
 
@@ -1034,6 +1083,12 @@ public class PageTaskRepository {
         }
         if (hasColumn(rs, "notes")) {
             t.setNotes(rs.getString("notes"));
+        }
+        if (hasColumn(rs, "rejectionReason")) {
+            t.setRejectionReason(rs.getString("rejectionReason"));
+        }
+        if (hasColumn(rs, "approvalComment")) {
+            t.setApprovalComment(rs.getString("approvalComment"));
         }
         return t;
     }

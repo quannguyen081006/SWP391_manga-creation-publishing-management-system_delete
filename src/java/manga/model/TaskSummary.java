@@ -21,6 +21,8 @@ public class TaskSummary {
     private boolean delayed;
     private String priority;
     private String notes;
+    private String rejectionReason;
+    private String approvalComment;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -54,4 +56,8 @@ public class TaskSummary {
     public void setPriority(String priority) { this.priority = priority; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+    public String getRejectionReason() { return rejectionReason; }
+    public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
+    public String getApprovalComment() { return approvalComment; }
+    public void setApprovalComment(String approvalComment) { this.approvalComment = approvalComment; }
 }

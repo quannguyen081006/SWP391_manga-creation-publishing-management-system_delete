@@ -91,7 +91,7 @@
                 <span class="nav-label">Series</span>
             </a>
         </c:if>
-        <c:if test="${isAdmin || isMangaka || isAssistant || isTantou}">
+        <c:if test="${isAdmin || isAssistant || isTantou}">
             <a class="nav-item nav-tasks ${fn:contains(uri, '/main/tasks') ? 'active' : ''}" href="${ctx}/main/tasks" title="Tasks">
                 <span class="nav-icon" aria-hidden="true"></span>
                 <span class="nav-label">Tasks</span>

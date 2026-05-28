@@ -42,37 +42,76 @@
         .page-slot.state-selected { box-shadow: 0 0 0 3px #8b5cf6; border-color: #7c3aed !important; }
         .page-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .page-slot-initials {
-            position: absolute; bottom: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
+            position: absolute; bottom: 34px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
             background: #059669; color: #fff; font-size: 10px; font-weight: 700;
-            display: flex; align-items: center; justify-content: center; z-index: 2;
+            display: flex; align-items: center; justify-content: center; z-index: 6;
         }
         .page-slot-add {
             border: 2px dashed #e11d48; background: #fff1f2; color: #e11d48; font-size: 24px; font-weight: 300;
         }
         .page-slot-add:hover { background: #ffe4e6; }
         .page-slot-upload-label { font-size: 11px; text-align: center; padding: 8px; }
-        .sidebar-stepper { list-style: none; padding: 0; margin: 12px 0 0; }
-        .sidebar-stepper li {
-            display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px;
+        .page-download-btn {
+            position: absolute; right: 36px; top: 6px; z-index: 5;
+            width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.92);
+            border: 1px solid #d1d5db; color: #111827; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; text-decoration: none; box-shadow: 0 2px 8px rgba(15,23,42,0.12);
         }
-        .sidebar-stepper li:last-child { border-bottom: none; }
-        .step-num {
-            flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #e11d48; color: #fff;
-            font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+        .page-download-btn:hover { background: #fff; border-color: #9ca3af; }
+        .page-stage-track {
+            position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 3;
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px;
+            background: rgba(255,255,255,0.82); border-radius: 999px; padding: 3px;
         }
+        .page-stage-dot {
+            height: 18px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+            font-size: 9px; font-weight: 800; color: #9ca3af; background: #e5e7eb;
+        }
+        .page-stage-dot.done { color: #fff; background: #059669; }
+        .page-stage-dot.current { color: #92400e; background: #fde68a; opacity: 0.72; }
+        .page-stage-picker {
+            display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+            padding: 5px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff;
+        }
+        .page-stage-picker label { display: flex; gap: 4px; align-items: center; font-size: 11px; font-weight: 700; color: #4b5563; }
+        .page-stage-picker input { margin: 0; }
+        .page-upload-preview {
+            min-height: 220px; border: 1px solid #e5e7eb; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; background: #f9fafb; overflow: hidden;
+        }
+        .page-upload-preview img { width: 100%; max-height: 48vh; object-fit: contain; display: block; }
+        .page-upload-modal-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .page-status-legend { display: grid; gap: 9px; margin-top: 12px; }
+        .legend-row { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; font-size: 12px; color: #4b5563; }
+        .legend-row strong { display: block; font-size: 12px; color: #111827; margin-bottom: 1px; }
+        .legend-swatch {
+            width: 24px; height: 24px; border-radius: 7px; background: #f9fafb; box-sizing: border-box;
+            box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+        }
+        .legend-empty { border: 2px dashed #d1d5db; }
+        .legend-uploaded { border: 2px solid #3b82f6; background: #eff6ff; }
+        .legend-task { border: 2px solid #10b981; background: #ecfdf5; }
+        .legend-progress { border: 2px solid #a855f7; background: #faf5ff; }
+        .legend-submitted { border: 2px solid #f59e0b; background: #fffbeb; }
+        .legend-complete { border: 2px solid #059669; background: #ecfdf5; }
         .sidebar-task-mini { font-size: 12px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
         .sidebar-task-mini:last-child { border-bottom: none; }
-        .assign-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+        .assign-chips, .assign-stage-summary {
+            display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; max-height: 86px;
+            overflow-y: auto; align-content: flex-start;
+        }
         .assign-chip {
             background: #ede9fe; border: 1px solid #c4b5fd; color: #5b21b6; border-radius: 999px;
-            padding: 4px 10px; font-size: 12px; font-weight: 600;
+            padding: 4px 10px; font-size: 12px; font-weight: 600; line-height: 1.25;
+            max-width: 100%; overflow-wrap: anywhere;
         }
         .task-actions-cell { position: relative; vertical-align: top; }
         .task-row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         .task-action-popover {
-            display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 300px; z-index: 40;
-            pointer-events: auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
-            padding: 14px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: min(360px, calc(100vw - 32px)); z-index: 1200; pointer-events: auto;
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+            padding: 16px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
         }
         .task-action-popover.open { display: block; }
         .task-action-popover strong { display: block; font-size: 14px; margin-bottom: 10px; }
@@ -83,6 +122,11 @@
         .task-action-popover .popover-helper { font-size: 12px; color: #6b7280; margin: 6px 0 10px; }
         .task-action-popover .popover-counter { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 4px; }
         .task-action-popover .popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .task-popover-scrim {
+            display: none; position: fixed; inset: 0; z-index: 1190;
+            background: rgba(15, 23, 42, 0.24);
+        }
+        .task-popover-scrim.open { display: block; }
         .task-decision-label { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
         .task-decision-label.approved { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
         .task-decision-label.rejected { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
@@ -90,6 +134,7 @@
         .page-slot.task-in-progress { border-color: #a855f7 !important; }
         .page-slot.task-submitted { border-color: #f59e0b !important; }
         .page-slot.task-approved { border-color: #3b82f6 !important; }
+        .page-slot.stage-complete { border-color: #059669 !important; box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.25); }
         .page-slot-status-icon {
             position: absolute; top: 5px; right: 6px;
             width: 16px; height: 16px; border-radius: 50%;
@@ -126,7 +171,7 @@
         .task-page-mini img {
             width: 72px; aspect-ratio: 3/4; object-fit: cover;
             border-radius: 6px; border: 1.5px solid #e5e7eb; display: block;
-            cursor: zoom-in; margin-bottom: 3px;
+            margin-bottom: 3px;
         }
         .task-page-mini .no-thumb {
             width: 72px; aspect-ratio: 3/4; display: flex; align-items: center;
@@ -151,7 +196,6 @@
 
 <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
     <button id="btnDelete" class="btn small" type="button" style="color:#ef4444;border-color:#fecaca;display:none;">Delete chapter</button>
-    <button id="btnSave" class="btn small" type="button" style="display:none;">Save changes</button>
     <button id="btnMarkDone" class="btn primary" type="button" style="display:none;">Submit for review</button>
 </div>
 
@@ -172,13 +216,11 @@
                 <span id="pageCountLabel" style="font-size:13px;color:#6b7280;font-weight:500;">Đang tải...</span>
                 <div id="pagesOwnerActions" style="display:none;gap:8px;">
                     <button class="btn small primary" type="button" id="btnAddPage">+ Thêm trang</button>
-                    <button class="btn small" type="button" id="btnBulkUpload">Upload bulk</button>
-                    <input id="bulkFileInput" type="file" accept="image/*" multiple style="display:none;" />
                     <input id="singleFileInput" type="file" accept="image/*" style="display:none;" />
                 </div>
             </div>
             <div class="pages-hint" id="pagesHint">
-                Nhấp ô trang để <strong>chọn / bỏ chọn</strong> (nhấp lại lần nữa = bỏ chọn). Ô trống chưa chọn: nhấp để upload.
+                Nhấp ô trang để upload/thay ảnh và chọn stage đã hoàn thành.
                 Giữ <strong>Shift</strong> + nhấp để chọn dải trang, rồi <strong>Gán task</strong>.
                 Ảnh lưu đường dẫn trên database; file nằm <code>web/img/chapter/</code> (không đi theo git pull).
             </div>
@@ -221,6 +263,7 @@
                 </table>
             </div>
             <div id="taskPopoverHost" style="position:absolute;left:-9999px;width:0;height:0;overflow:hidden;" aria-hidden="true">
+                <div id="taskPopoverScrim" class="task-popover-scrim" aria-hidden="true"></div>
                 <div id="taskApprovePopover" class="task-action-popover" aria-hidden="true">
                     <strong id="approvePopoverTitle">Approve task</strong>
                     <label class="field-label" for="approvePopoverComment">Comment (optional)</label>
@@ -282,17 +325,37 @@
             </div>
         </div>
         <div class="panel" style="margin-bottom:14px;">
-            <strong style="font-size:13px;">Quy trình 3 bước</strong>
-            <ol class="sidebar-stepper">
-                <li><span class="step-num">1</span><span>Upload trang manuscript vào các ô trống</span></li>
-                <li><span class="step-num">2</span><span>Chọn trang (Shift+click) và gán task cho assistant</span></li>
-                <li><span class="step-num">3</span><span>Hoàn thành task → Submit chapter for review</span></li>
-            </ol>
+            <strong style="font-size:13px;">Chú thích trạng thái trang</strong>
+            <div class="page-status-legend">
+                <div class="legend-row">
+                    <span class="legend-swatch legend-empty"></span>
+                    <span><strong>Trống</strong>Chưa có ảnh page.</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-swatch legend-uploaded"></span>
+                    <span><strong>Đã upload</strong>Có ảnh, chưa gán task.</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-swatch legend-task"></span>
+                    <span><strong>Đã gán task</strong>Trang đang thuộc một task.</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-swatch legend-progress"></span>
+                    <span><strong>Đang làm</strong>Task của trang đang in progress.</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-swatch legend-submitted"></span>
+                    <span><strong>Chờ duyệt</strong>Assistant đã submit task.</span>
+                </div>
+                <div class="legend-row">
+                    <span class="legend-swatch legend-complete"></span>
+                    <span><strong>Hoàn tất</strong>Page đã xong đủ 5 stage.</span>
+                </div>
+            </div>
         </div>
         <div class="panel">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <strong style="font-size:13px;">Tasks</strong>
-                <button id="btnManualTask" class="btn small primary" type="button" style="display:none;font-size:11px;">Tạo task thủ công</button>
             </div>
             <div id="sidebarTaskList"><p class="section-desc" style="margin:0;">Loading...</p></div>
         </div>
@@ -307,6 +370,34 @@
   </div>
 </div>
 
+<div id="pageUploadModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="pageUploadTitle">
+        <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+        <h3 id="pageUploadTitle" class="section-title compact-title">Upload page</h3>
+        <p id="pageUploadSubtitle" class="section-desc"></p>
+        <div id="pageUploadPreview" class="page-upload-preview"></div>
+        <label class="field-label" for="pageModalFileInput" style="margin-top:12px;">Image file</label>
+        <input id="pageModalFileInput" type="file" accept="image/*" />
+        <label class="field-label" style="margin-top:12px;">Stages completed</label>
+        <div id="pageUploadStagePicker" class="page-stage-picker" title="Tick stages completed by this page image">
+            <label><input type="checkbox" value="SKETCHING" />Sketching</label>
+            <label><input type="checkbox" value="INKING" />Inking</label>
+            <label><input type="checkbox" value="COLORING" />Coloring</label>
+            <label><input type="checkbox" value="SCREENTONE" />Screentone</label>
+            <label><input type="checkbox" value="LETTERING" />Lettering</label>
+        </div>
+        <div id="pageUploadError" class="alert error" style="display:none;margin-top:12px;"></div>
+        <div class="page-upload-modal-actions" style="margin-top:14px;">
+            <a id="pageUploadDownload" class="btn small" href="#" download style="display:none;">Download current</a>
+            <button class="btn small danger-soft" type="button" id="pageUploadDelete" style="display:none;">Delete page</button>
+            <div style="display:flex;gap:8px;margin-left:auto;">
+                <button class="btn small" type="button" data-modal-close>Cancel</button>
+                <button class="btn small primary" type="button" id="pageUploadSave">Save page</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="assignTaskModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="assignTaskTitle">
         <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
@@ -314,15 +405,8 @@
         <form id="assignTaskForm" class="form-grid">
             <label class="field-label">Trang đã chọn</label>
             <div id="assignPageChips" class="assign-chips"><span class="section-desc" style="margin:0;">Chưa chọn trang — chọn trên lưới Pages hoặc mở từ sidebar sau khi chọn.</span></div>
-            <label class="field-label" for="assignTaskType">Task type</label>
-            <select id="assignTaskType" name="taskType" required>
-                <option value="">Select task type</option>
-                <option value="SKETCHING">Sketching</option>
-                <option value="INKING">Inking</option>
-                <option value="COLORING">Coloring</option>
-                <option value="LETTERING">Lettering</option>
-                <option value="SCREENTONE">Screentone</option>
-            </select>
+            <label class="field-label">Work to do</label>
+            <div id="assignTaskTypeSummary" class="assign-stage-summary section-desc" style="margin:0;">Tự tính theo stage tiếp theo của từng trang.</div>
             <label class="field-label" for="assignAssistantId">Assistant</label>
             <select id="assignAssistantId" name="assistantId" required>
                 <option value="">Loading assistants...</option>
@@ -358,11 +442,13 @@
     var selectedPageIds = {};
     var lastSlotIndex = -1;
     var pendingUploadPageId = null;
+    var pendingUploadSlot = null;
     var activePopoverType = null;
     var activePopoverTaskId = null;
     var activePopoverCell = null;
     var taskImagesCache = {};
     var taskInlineLoaded = {};
+    var metadataSaveTimer = null;
 
     function escapeHtml(v) {
         if (v === null || v === undefined) { return ''; }
@@ -486,6 +572,134 @@
         return String(s || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
     }
 
+    var pageStageOrder = ['SKETCHING', 'INKING', 'COLORING', 'SCREENTONE', 'LETTERING'];
+
+    function normalizeStage(stage) {
+        var s = String(stage || '').trim().toUpperCase();
+        return pageStageOrder.indexOf(s) >= 0 ? s : '';
+    }
+
+    function nextAllowedStage(slot) {
+        var current = normalizeStage(slot && slot.completedStage);
+        if (!current) { return pageStageOrder[0]; }
+        var idx = pageStageOrder.indexOf(current);
+        return pageStageOrder[Math.min(idx + 1, pageStageOrder.length - 1)];
+    }
+
+    function prepareStageSelect(slot) {
+        var picker = document.getElementById('pageUploadStagePicker');
+        if (!picker) { return; }
+        var current = normalizeStage(slot && slot.completedStage);
+        var currentIndex = current ? pageStageOrder.indexOf(current) : -1;
+        var boxes = picker.querySelectorAll('input[type="checkbox"]');
+        picker.setAttribute('data-base-index', String(currentIndex));
+        for (var i = 0; i < boxes.length; i++) {
+            var optStage = normalizeStage(boxes[i].value);
+            var optIndex = pageStageOrder.indexOf(optStage);
+            boxes[i].checked = optIndex <= currentIndex;
+        }
+        refreshStagePickerEnabled();
+    }
+
+    function refreshStagePickerEnabled() {
+        var picker = document.getElementById('pageUploadStagePicker');
+        if (!picker) { return; }
+        var boxes = picker.querySelectorAll('input[type="checkbox"]');
+        var baseIndex = Number(picker.getAttribute('data-base-index') || '-1');
+        var highest = baseIndex;
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].checked) {
+                highest = Math.max(highest, i);
+            }
+        }
+        var maxEnabled = Math.min(highest + 1, boxes.length - 1);
+        for (var j = 0; j < boxes.length; j++) {
+            boxes[j].disabled = j <= baseIndex || j > maxEnabled;
+        }
+    }
+
+    function selectedUploadStage(slot) {
+        var picker = document.getElementById('pageUploadStagePicker');
+        if (!picker) { return ''; }
+        var boxes = picker.querySelectorAll('input[type="checkbox"]');
+        var highest = -1;
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].checked) {
+                highest = Math.max(highest, pageStageOrder.indexOf(normalizeStage(boxes[i].value)));
+            }
+        }
+        for (var j = 0; j <= highest; j++) {
+            if (!boxes[j].checked) {
+                throw new Error('Stage phải tick theo thứ tự từ Sketching trước.');
+            }
+        }
+        return highest >= 0 ? pageStageOrder[highest] : '';
+    }
+
+    function syncStagePickerFromClick(changedBox) {
+        var picker = document.getElementById('pageUploadStagePicker');
+        if (!picker || !changedBox) { return; }
+        var boxes = picker.querySelectorAll('input[type="checkbox"]');
+        var changedIndex = pageStageOrder.indexOf(normalizeStage(changedBox.value));
+        if (changedBox.checked) {
+            for (var i = 0; i < boxes.length; i++) {
+                if (!boxes[i].disabled && i < changedIndex) {
+                    boxes[i].checked = true;
+                }
+            }
+        } else {
+            for (var j = 0; j < boxes.length; j++) {
+                if (!boxes[j].disabled && j > changedIndex) {
+                    boxes[j].checked = false;
+                }
+            }
+        }
+        refreshStagePickerEnabled();
+    }
+
+    function renderStageTrack(stage) {
+        var current = normalizeStage(stage);
+        var doneIndex = current ? pageStageOrder.indexOf(current) : -1;
+        var activeIndex = Math.min(doneIndex + 1, pageStageOrder.length - 1);
+        return '<div class="page-stage-track">'
+            + pageStageOrder.map(function (s, i) {
+                var cls = i <= doneIndex ? ' done' : (i === activeIndex ? ' current' : '');
+                return '<span class="page-stage-dot' + cls + '" title="' + escapeHtml(formatStatus(s)) + '">' + s.charAt(0) + '</span>';
+            }).join('')
+            + '</div>';
+    }
+
+    function showPageUploadError(message) {
+        var el = document.getElementById('pageUploadError');
+        if (!el) { return; }
+        el.style.display = message ? 'block' : 'none';
+        el.textContent = message || '';
+    }
+
+    function openPageUploadModal(slot) {
+        if (!slot) { return; }
+        pendingUploadPageId = slot.id;
+        pendingUploadSlot = slot;
+        showPageUploadError('');
+        document.getElementById('pageUploadTitle').textContent = slot.imageUrl ? 'Replace page ' + slot.pageNumber : 'Upload page ' + slot.pageNumber;
+        document.getElementById('pageUploadSubtitle').textContent = 'Choose the image and tick the stages already completed for this page.';
+        document.getElementById('pageModalFileInput').value = '';
+        prepareStageSelect(slot);
+        var preview = document.getElementById('pageUploadPreview');
+        var download = document.getElementById('pageUploadDownload');
+        if (slot.imageUrl) {
+            var url = imageUrl(slot.imageUrl);
+            preview.innerHTML = '<img src="' + escapeHtml(url) + '" alt="Page ' + slot.pageNumber + '" />';
+            download.href = url;
+            download.style.display = '';
+        } else {
+            preview.innerHTML = '<span class="section-desc">No image uploaded yet.</span>';
+            download.style.display = 'none';
+        }
+        document.getElementById('pageUploadDelete').style.display = isOwner() ? '' : 'none';
+        openModal('pageUploadModal');
+    }
+
     function chapterStatusClass(status) {
         status = String(status || '').toUpperCase();
         if (status === 'PLANNING') { return 'status-draft'; }
@@ -572,16 +786,33 @@
         var out = [];
         for (var i = 0; i < ids.length; i++) {
             var p = findPageById(ids[i]);
-            if (p) { out.push(p); }
+            if (p && isAssignablePage(p)) { out.push(p); }
         }
         out.sort(function (a, b) { return a.pageNumber - b.pageNumber; });
         return out;
     }
 
+    function isPageFullyComplete(slot) {
+        return normalizeStage(slot && slot.completedStage) === 'LETTERING';
+    }
+
+    function isAssignablePage(slot) {
+        return !!slot && !slot.taskId && !isPageFullyComplete(slot);
+    }
+
+    function toggleSelectedPage(pageId, slot) {
+        if (!isAssignablePage(slot)) { return; }
+        if (selectedPageIds[String(pageId)]) {
+            delete selectedPageIds[String(pageId)];
+        } else {
+            selectedPageIds[String(pageId)] = true;
+        }
+    }
+
     function countUploaded() {
         var n = 0;
         for (var i = 0; i < pageSlots.length; i++) {
-            if (String(pageSlots[i].status || '').toUpperCase() === 'UPLOADED') { n++; }
+            if (pageSlots[i].imageUrl) { n++; }
         }
         return n;
     }
@@ -626,6 +857,57 @@
         }).join('');
     }
 
+    function nextTaskTypeForPages(selected) {
+        if (!selected || !selected.length) {
+            return pageStageOrder[0];
+        }
+        var first = null;
+        var mixed = false;
+        selected.forEach(function (p) {
+            var stage = normalizeStage(p.completedStage);
+            var nextIndex = stage ? Math.min(pageStageOrder.indexOf(stage) + 1, pageStageOrder.length - 1) : 0;
+            var next = pageStageOrder[nextIndex];
+            if (first === null) {
+                first = next;
+            } else if (first !== next) {
+                mixed = true;
+            }
+        });
+        return mixed ? 'MIXED' : first;
+    }
+
+    function groupConsecutivePages(selected) {
+        var groups = [];
+        var current = [];
+        selected.forEach(function (page) {
+            if (!current.length || page.pageNumber === current[current.length - 1].pageNumber + 1) {
+                current.push(page);
+            } else {
+                groups.push(current);
+                current = [page];
+            }
+        });
+        if (current.length) {
+            groups.push(current);
+        }
+        return groups;
+    }
+
+    function setDefaultAssignTaskType() {
+        var summary = document.getElementById('assignTaskTypeSummary');
+        if (!summary) { return; }
+        var selected = getSelectedPages();
+        if (!selected.length) {
+            summary.textContent = 'Tự tính theo stage tiếp theo của từng trang.';
+            return;
+        }
+        summary.innerHTML = selected.map(function (p) {
+            var stage = normalizeStage(p.completedStage);
+            var nextIndex = stage ? Math.min(pageStageOrder.indexOf(stage) + 1, pageStageOrder.length - 1) : 0;
+            return '<span class="assign-chip">Page ' + p.pageNumber + ': ' + escapeHtml(formatStatus(pageStageOrder[nextIndex])) + '</span>';
+        }).join('');
+    }
+
     function renderPageGrid() {
         var grid = document.getElementById('pageSlotGrid');
         var owner = isOwner();
@@ -637,7 +919,11 @@
         }
 
         var html = pageSlots.map(function (slot, index) {
-            var selected = !!selectedPageIds[String(slot.id)];
+            var selectable = isAssignablePage(slot);
+            if (!selectable && selectedPageIds[String(slot.id)]) {
+                delete selectedPageIds[String(slot.id)];
+            }
+            var selected = selectable && !!selectedPageIds[String(slot.id)];
             var state = slotStateClass(slot);
             var taskStatusCls = '';
             var statusIconHtml = '';
@@ -654,18 +940,21 @@
                     statusIconHtml = '<span class="page-slot-status-icon icon-approved">●<span class="icon-tooltip">Đã duyệt</span></span>';
                 }
             }
-            var cls = 'page-slot ' + state + taskStatusCls + (selected ? ' state-selected' : '');
+            var completeStageCls = normalizeStage(slot.completedStage) === 'LETTERING' ? ' stage-complete' : '';
+            var cls = 'page-slot ' + state + taskStatusCls + completeStageCls + (selected ? ' state-selected' : '');
             var num = '<span class="page-slot-num">' + slot.pageNumber + '</span>';
             var lockIconHtml = slot.taskId ? '<span class="page-slot-lock" title="Trang này đã được gán task">🔒</span>' : '';
             var inner = '';
             if (state === 'state-empty') {
                 inner = '<span class="page-slot-upload-label">+ Upload</span>';
             } else if (slot.imageUrl) {
-                inner = '<img src="' + escapeHtml(imageUrl(slot.imageUrl)) + '" alt="Page ' + slot.pageNumber + '" />';
+                inner = '<img src="' + escapeHtml(imageUrl(slot.imageUrl)) + '" alt="Page ' + slot.pageNumber + '" />'
+                    + '<a class="page-download-btn" href="' + escapeHtml(imageUrl(slot.imageUrl)) + '" download title="Download page image" data-page-download>↓</a>';
             }
-            if (slot.taskId && slot.assistantName) {
+            if (slot.taskId && slot.assistantName && String(slot.taskStatus || '').toUpperCase() !== 'APPROVED') {
                 inner += '<span class="page-slot-initials" title="' + escapeHtml(slot.assistantName) + '">' + escapeHtml(initials(slot.assistantName)) + '</span>';
             }
+            inner += renderStageTrack(slot.completedStage);
             return '<div class="' + cls + '" data-page-id="' + slot.id + '" data-slot-index="' + index + '" data-page-number="' + slot.pageNumber + '">' + num + lockIconHtml + statusIconHtml + inner + '</div>';
         }).join('');
 
@@ -736,11 +1025,9 @@
             && seriesData && String(seriesData.status || '').toUpperCase() !== 'CANCELLED';
 
         document.getElementById('btnDelete').style.display = (owner && String(chapter.status || '').toUpperCase() === 'PLANNING') ? '' : 'none';
-        document.getElementById('btnSave').style.display = owner ? '' : 'none';
         document.getElementById('btnMarkDone').style.display = canSubmit ? '' : 'none';
         document.getElementById('pagesOwnerActions').style.display = owner ? 'flex' : 'none';
         document.getElementById('pagesOwnerActions').style.gap = '8px';
-        document.getElementById('btnManualTask').style.display = owner ? '' : 'none';
         document.getElementById('pagesHint').style.display = owner ? '' : 'none';
 
         updateAssignDueConstraints();
@@ -843,7 +1130,7 @@
                     var img = imgMap[p];
                     html += '<div class="task-page-mini">';
                     if (img) {
-                        html += '<img src="' + escapeHtml(imageUrl(img.fileUrl)) + '" alt="p' + p + '" data-lightbox-task="' + p + '" data-task-id="' + taskId + '" />';
+                        html += '<img src="' + escapeHtml(imageUrl(img.fileUrl)) + '" alt="p' + p + '" />';
                     } else {
                         html += '<div class="no-thumb">+</div>';
                     }
@@ -931,12 +1218,21 @@
             m.classList.remove('open');
             m.setAttribute('aria-hidden', 'true');
         });
+        pendingUploadPageId = null;
+        pendingUploadSlot = null;
+        showPageUploadError('');
     }
 
     function closePopovers() {
         var host = document.getElementById('taskPopoverHost');
+        var scrim = document.getElementById('taskPopoverScrim');
         var approvePop = document.getElementById('taskApprovePopover');
         var rejectPop = document.getElementById('taskRejectPopover');
+        if (scrim) {
+            scrim.classList.remove('open');
+            scrim.setAttribute('aria-hidden', 'true');
+            if (host) { host.appendChild(scrim); }
+        }
         if (approvePop) {
             approvePop.classList.remove('open');
             approvePop.setAttribute('aria-hidden', 'true');
@@ -955,11 +1251,17 @@
     function openPopover(type, taskId, anchorCell) {
         closePopovers();
         var task = findTask(taskId);
-        if (!task || !anchorCell) { return; }
+        if (!task) { return; }
+        var scrim = document.getElementById('taskPopoverScrim');
         var popId = type === 'approve' ? 'taskApprovePopover' : 'taskRejectPopover';
         var pop = document.getElementById(popId);
         if (!pop) { return; }
-        anchorCell.appendChild(pop);
+        if (scrim) {
+            document.body.appendChild(scrim);
+            scrim.classList.add('open');
+            scrim.setAttribute('aria-hidden', 'false');
+        }
+        document.body.appendChild(pop);
         pop.classList.add('open');
         pop.setAttribute('aria-hidden', 'false');
         activePopoverType = type;
@@ -987,6 +1289,7 @@
 
     function openAssignModal() {
         renderAssignChips();
+        setDefaultAssignTaskType();
         var err = document.getElementById('assignTaskError');
         err.style.display = 'none';
         err.textContent = '';
@@ -1071,12 +1374,15 @@
         switchTab(btn.getAttribute('data-tab'));
     });
 
-    document.getElementById('btnSave').addEventListener('click', async function () {
+    async function saveChapterMetadata() {
         var updateError = document.getElementById('updateError');
         updateError.style.display = 'none';
         try {
             var title = document.getElementById('updateTitle').value;
             var deadline = document.getElementById('updateDeadline').value;
+            if (!chapter || (title === (chapter.title || '') && deadline === formatDate(chapter.submissionDeadline))) {
+                return;
+            }
             var qs = new URLSearchParams({
                 title: title,
                 submissionDeadline: deadline,
@@ -1093,7 +1399,16 @@
             updateError.style.display = 'block';
             updateError.textContent = err.message;
         }
-    });
+    }
+
+    function scheduleMetadataSave() {
+        if (!isOwner()) { return; }
+        clearTimeout(metadataSaveTimer);
+        metadataSaveTimer = setTimeout(saveChapterMetadata, 700);
+    }
+
+    document.getElementById('updateTitle').addEventListener('input', scheduleMetadataSave);
+    document.getElementById('updateDeadline').addEventListener('change', saveChapterMetadata);
 
     document.getElementById('btnDelete').addEventListener('click', async function () {
         if (!confirm('Delete this chapter? This cannot be undone.')) { return; }
@@ -1114,40 +1429,25 @@
     document.getElementById('btnAddPage').addEventListener('click', async function () {
         try {
             await callApi('POST', '/api/v1/pages', { chapterId: chapterId });
-            await loadPages();
+            await loadData();
         } catch (err) { showError(err.message); }
     });
 
-    document.getElementById('btnBulkUpload').addEventListener('click', function () {
-        document.getElementById('bulkFileInput').click();
+    document.getElementById('pageUploadStagePicker').addEventListener('change', function (e) {
+        if (e.target && e.target.type === 'checkbox') {
+            syncStagePickerFromClick(e.target);
+        }
     });
 
-    document.getElementById('bulkFileInput').addEventListener('change', async function (e) {
-        var files = Array.prototype.slice.call(e.target.files || []);
-        e.target.value = '';
-        if (!files.length) { return; }
-        files.sort(function (a, b) {
-            return String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' });
-        });
-        var emptySlots = pageSlots.filter(function (p) {
-            return String(p.status || '').toUpperCase() === 'EMPTY' && !p.imageUrl;
-        }).sort(function (a, b) { return a.pageNumber - b.pageNumber; });
-        try {
-            var count = Math.min(files.length, emptySlots.length);
-            for (var i = 0; i < count; i++) {
-                var fd = new FormData();
-                fd.append('file', files[i]);
-                await uploadMultipart('/api/v1/pages/' + emptySlots[i].id + '/upload', fd);
-            }
-            if (files.length > emptySlots.length) {
-                showError('Chỉ upload được ' + emptySlots.length + ' file — hết ô trống. Thêm trang hoặc bỏ bớt file.');
-            } else {
-                showError('');
-            }
-            await loadPages();
-        } catch (err) {
-            showError(err.message);
-        }
+    document.getElementById('pageModalFileInput').addEventListener('change', function (e) {
+        var file = e.target.files && e.target.files[0];
+        var preview = document.getElementById('pageUploadPreview');
+        if (!file || !preview) { return; }
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            preview.innerHTML = '<img src="' + escapeHtml(ev.target.result) + '" alt="Selected page image" />';
+        };
+        reader.readAsDataURL(file);
     });
 
     document.getElementById('singleFileInput').addEventListener('change', async function (e) {
@@ -1157,12 +1457,57 @@
         try {
             var fd = new FormData();
             fd.append('file', file);
+            fd.append('completedStage', selectedUploadStage(findPageById(pendingUploadPageId)));
             await uploadMultipart('/api/v1/pages/' + pendingUploadPageId + '/upload', fd);
             pendingUploadPageId = null;
             showError('');
-            await loadPages();
+            await loadData();
         } catch (err) {
             showError(err.message);
+        }
+    });
+
+    document.getElementById('pageUploadSave').addEventListener('click', async function () {
+        if (!pendingUploadPageId || !pendingUploadSlot) { return; }
+        var fileInput = document.getElementById('pageModalFileInput');
+        var file = fileInput.files && fileInput.files[0];
+        var hasExisting = !!pendingUploadSlot.imageUrl;
+        if (!file && !hasExisting) {
+            showPageUploadError('Choose an image file first.');
+            return;
+        }
+        try {
+            if (!file && hasExisting) {
+                showPageUploadError('Choose a replacement image to update this page.');
+                return;
+            }
+            var fd = new FormData();
+            fd.append('file', file);
+            fd.append('completedStage', selectedUploadStage(pendingUploadSlot));
+            await uploadMultipart('/api/v1/pages/' + pendingUploadPageId + '/upload', fd);
+            pendingUploadPageId = null;
+            pendingUploadSlot = null;
+            closeModals();
+            showError('');
+            await loadData();
+        } catch (err) {
+            showPageUploadError(err.message);
+        }
+    });
+
+    document.getElementById('pageUploadDelete').addEventListener('click', async function () {
+        if (!pendingUploadPageId || !pendingUploadSlot) { return; }
+        if (!confirm('Delete page ' + pendingUploadSlot.pageNumber + '? This cannot be undone.')) { return; }
+        try {
+            await callApi('DELETE', '/api/v1/pages/' + pendingUploadPageId);
+            pendingUploadPageId = null;
+            pendingUploadSlot = null;
+            closeModals();
+            selectedPageIds = {};
+            showError('');
+            await loadData();
+        } catch (err) {
+            showPageUploadError(err.message);
         }
     });
 
@@ -1174,25 +1519,16 @@
         }
         var slotEl = e.target.closest('[data-page-id]');
         if (!slotEl) { return; }
+        if (e.target.closest('[data-page-download]')) {
+            return;
+        }
         var pageId = slotEl.getAttribute('data-page-id');
         var index = Number(slotEl.getAttribute('data-slot-index'));
         var slot = findPageById(pageId);
         if (!slot) { return; }
 
         if (e.shiftKey) {
-            if (lastSlotIndex < 0) {
-                if (!slot.taskId) {
-                    selectedPageIds[String(pageId)] = true;
-                }
-            } else {
-                var start = Math.min(lastSlotIndex, index);
-                var end = Math.max(lastSlotIndex, index);
-                for (var i = start; i <= end; i++) {
-                    if (!pageSlots[i].taskId) {
-                        selectedPageIds[String(pageSlots[i].id)] = true;
-                    }
-                }
-            }
+            toggleSelectedPage(pageId, slot);
             lastSlotIndex = index;
             renderPageGrid();
             return;
@@ -1204,25 +1540,17 @@
             return;
         }
 
-        if (slot.taskId || slot.imageUrl) {
-            openPageCompare(slot);
-            return;
-        }
-
         if (selectedPageIds[String(pageId)]) {
             delete selectedPageIds[String(pageId)];
             renderPageGrid();
             return;
         }
 
-        var isEmpty = String(slot.status || '').toUpperCase() === 'EMPTY' && !slot.imageUrl && !slot.taskId;
-        if (isEmpty) {
-            pendingUploadPageId = pageId;
-            document.getElementById('singleFileInput').click();
+        if (isOwner() && !slot.taskId) {
+            openPageUploadModal(slot);
             return;
         }
 
-        selectedPageIds[String(pageId)] = true;
         renderPageGrid();
     });
 
@@ -1237,10 +1565,6 @@
         openAssignModal();
     });
 
-    document.getElementById('btnManualTask').addEventListener('click', function () {
-        openAssignModal();
-    });
-
     document.getElementById('assignTaskForm').addEventListener('submit', async function (e) {
         e.preventDefault();
         var errEl = document.getElementById('assignTaskError');
@@ -1251,19 +1575,20 @@
             errEl.textContent = 'Chọn ít nhất một trang trên lưới Pages.';
             return;
         }
-        var pageNums = selected.map(function (p) { return p.pageNumber; });
-        var minPage = Math.min.apply(null, pageNums);
-        var maxPage = Math.max.apply(null, pageNums);
+        var groups = groupConsecutivePages(selected);
         try {
-            await callApi('POST', '/api/v1/chapters/' + chapterId + '/tasks', {
-                assistantId: document.getElementById('assignAssistantId').value,
-                pageRangeStart: minPage,
-                pageRangeEnd: maxPage,
-                taskType: document.getElementById('assignTaskType').value,
-                dueDate: document.getElementById('assignDueDate').value,
-                priority: document.getElementById('assignPriority').value,
-                notes: document.getElementById('assignNotes').value
-            });
+            for (var g = 0; g < groups.length; g++) {
+                var group = groups[g];
+                await callApi('POST', '/api/v1/chapters/' + chapterId + '/tasks', {
+                    assistantId: document.getElementById('assignAssistantId').value,
+                    pageRangeStart: group[0].pageNumber,
+                    pageRangeEnd: group[group.length - 1].pageNumber,
+                    taskType: nextTaskTypeForPages(group),
+                    dueDate: document.getElementById('assignDueDate').value,
+                    priority: document.getElementById('assignPriority').value,
+                    notes: document.getElementById('assignNotes').value
+                });
+            }
             selectedPageIds = {};
             e.target.reset();
             closeModals();
@@ -1290,26 +1615,6 @@
             }
             return;
         }
-        var inlineLightbox = e.target.closest('[data-lightbox-task]');
-        if (inlineLightbox) {
-            var pageNum = Number(inlineLightbox.getAttribute('data-lightbox-task'));
-            var taskId = Number(inlineLightbox.getAttribute('data-task-id'));
-            var task = findTask(taskId);
-            var slot = null;
-            for (var s = 0; s < pageSlots.length; s++) {
-                if (Number(pageSlots[s].pageNumber) === pageNum) {
-                    slot = pageSlots[s];
-                    break;
-                }
-            }
-            openPageCompare({
-                pageNumber: pageNum,
-                taskId: taskId,
-                taskStatus: task ? task.status : null,
-                imageUrl: slot ? slot.imageUrl : null
-            });
-            return;
-        }
         var approvePopBtn = e.target.closest('[data-task-approve-pop]');
         if (approvePopBtn) {
             openPopover('approve', approvePopBtn.getAttribute('data-task-approve-pop'), approvePopBtn.closest('.task-actions-cell'));
@@ -1321,6 +1626,10 @@
             return;
         }
         if (e.target.closest('[data-popover-cancel]')) {
+            closePopovers();
+            return;
+        }
+        if (e.target.id === 'taskPopoverScrim') {
             closePopovers();
             return;
         }
@@ -1341,14 +1650,15 @@
     document.getElementById('approvePopoverConfirm').addEventListener('click', async function () {
         if (!activePopoverTaskId) { return; }
         try {
+            var taskId = activePopoverTaskId;
             var comment = document.getElementById('approvePopoverComment').value.trim();
             var payload = comment ? { comment: comment } : {};
-            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/approve', payload);
+            await callApi('POST', '/api/v1/tasks/' + taskId + '/approve', payload);
             closePopovers();
-            var t = findTask(activePopoverTaskId);
+            var t = findTask(taskId);
             if (t) { t._decisionLabel = 'approved'; t.status = 'APPROVED'; }
             renderChapterTasks();
-            await loadPages();
+            await loadData();
             showError('');
         } catch (err) { showError(err.message); }
     });
@@ -1358,12 +1668,13 @@
         var reason = document.getElementById('rejectPopoverReason').value.trim();
         if (reason.length < 5) { return; }
         try {
-            await callApi('POST', '/api/v1/tasks/' + activePopoverTaskId + '/reject', { reason: reason });
+            var taskId = activePopoverTaskId;
+            await callApi('POST', '/api/v1/tasks/' + taskId + '/reject', { reason: reason });
             closePopovers();
-            var t = findTask(activePopoverTaskId);
+            var t = findTask(taskId);
             if (t) { t._decisionLabel = 'rejected'; t.status = 'IN_PROGRESS'; }
             renderChapterTasks();
-            await loadPages();
+            await loadData();
             showError('');
         } catch (err) { showError(err.message); }
     });

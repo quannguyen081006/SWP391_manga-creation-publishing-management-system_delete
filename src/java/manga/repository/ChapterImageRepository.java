@@ -69,9 +69,35 @@ public class ChapterImageRepository {
     public List<ChapterImageItem> listByTask(long pageTaskId) {
         String sql =
             "SELECT id, chapterId, pageTaskId, uploadedBy, imageType, pageNumber, fileUrl, originalFileName, fileSizeBytes, uploadedAt, isActive, note "
-            + "FROM ChapterImage WHERE pageTaskId = ? AND isActive = 1 "
-            + "ORDER BY CASE WHEN pageNumber IS NULL THEN 1 ELSE 0 END, pageNumber ASC, uploadedAt ASC";
-        return list(sql, pageTaskId, "Cannot list task images");
+            + "FROM ("
+            + "  SELECT ci.id, ci.chapterId, ci.pageTaskId, ci.uploadedBy, ci.imageType, ci.pageNumber, ci.fileUrl, ci.originalFileName, ci.fileSizeBytes, ci.uploadedAt, ci.isActive, ci.note, 0 AS sourceRank "
+            + "  FROM ChapterImage ci WHERE ci.pageTaskId = ? AND ci.isActive = 1 "
+            + "  UNION ALL "
+            + "  SELECT CAST(0 AS bigint) AS id, p.chapterId, pt.id AS pageTaskId, ISNULL(p.uploadedBy, 0) AS uploadedBy, 'PAGE' AS imageType, p.pageNumber, p.imageUrl AS fileUrl, "
+            + "         CONCAT('Chapter page ', p.pageNumber) AS originalFileName, CAST(0 AS bigint) AS fileSizeBytes, p.uploadedAt, CAST(1 AS bit) AS isActive, 'CHAPTER_PAGE' AS note, 1 AS sourceRank "
+            + "  FROM PageTask pt JOIN [dbo].[Page] p ON p.chapterId = pt.chapterId AND p.pageNumber BETWEEN pt.pageRangeStart AND pt.pageRangeEnd "
+            + "  WHERE pt.id = ? AND p.imageUrl IS NOT NULL "
+            + "    AND NOT EXISTS (SELECT 1 FROM ChapterImage ci WHERE ci.pageTaskId = pt.id AND ci.pageNumber = p.pageNumber AND ci.isActive = 1) "
+            + ") x "
+            + "ORDER BY CASE WHEN pageNumber IS NULL THEN 1 ELSE 0 END, pageNumber ASC, sourceRank ASC, uploadedAt ASC";
+        return list(sql, pageTaskId, pageTaskId, "Cannot list task images");
+    }
+
+    private List<ChapterImageItem> list(String sql, long firstId, long secondId, String error) {
+        List<ChapterImageItem> rows = new ArrayList<ChapterImageItem>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, firstId);
+            ps.setLong(2, secondId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(map(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException(error, ex);
+        }
+        return rows;
     }
 
     public void deactivate(long imageId, long requestorId) {

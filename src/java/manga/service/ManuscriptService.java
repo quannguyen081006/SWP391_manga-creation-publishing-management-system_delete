@@ -357,7 +357,7 @@ public class ManuscriptService {
         List<ManuscriptSummary> manuscripts = manuscriptRepository.listByChapter(chapterId);
         for (ManuscriptSummary m : manuscripts) {
             String status = m.getStatus();
-            if (ManuscriptStatus.SUBMITTED.name().equals(status) || 
+            if (ManuscriptStatus.SUBMITTED.name().equals(status) ||
                 ManuscriptStatus.UNDER_REVIEW.name().equals(status)) {
                 return true;
             }
@@ -412,4 +412,8 @@ public class ManuscriptService {
         }
         return value.trim();
     }
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

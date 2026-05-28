@@ -12,10 +12,10 @@
     }
 
     var pageImages = {};
+    var pageSlots = {};
     var loadingPage = null;
     var pendingPageNum = null;
     var pendingAction = 'upload';
-    var lightboxPage = null;
 
     var gridEl = document.getElementById('pageGrid');
     var progressEl = document.getElementById('pageProgressBar');
@@ -32,7 +32,7 @@
     function uploadedCount() {
         var count = 0;
         for (var p = PAGE_TASK.pageStart; p <= PAGE_TASK.pageEnd; p++) {
-            if (pageImages[p]) {
+            if (pageImages[p] && pageImages[p].id) {
                 count++;
             }
         }
@@ -131,6 +131,31 @@
         });
     }
 
+    async function loadPageSlots() {
+        var data = await apiGet(PAGE_TASK.ctx + '/api/v1/chapters/' + PAGE_TASK.chapterId + '/pages');
+        (data || []).forEach(function (slot) {
+            if (slot.pageNumber >= PAGE_TASK.pageStart && slot.pageNumber <= PAGE_TASK.pageEnd) {
+                pageSlots[slot.pageNumber] = slot;
+            }
+        });
+    }
+
+    var stageOrder = ['SKETCHING', 'INKING', 'COLORING', 'SCREENTONE', 'LETTERING'];
+
+    function normalizeStage(stage) {
+        var s = String(stage || '').trim().toUpperCase();
+        return stageOrder.indexOf(s) >= 0 ? s : '';
+    }
+
+    function nextStageForPage(pageNum) {
+        var slot = pageSlots[pageNum] || {};
+        var current = normalizeStage(slot.completedStage);
+        if (!current) {
+            return stageOrder[0];
+        }
+        return stageOrder[Math.min(stageOrder.indexOf(current) + 1, stageOrder.length - 1)];
+    }
+
     function renderProgressBar() {
         if (!progressEl) {
             return;
@@ -165,22 +190,28 @@
 
         if (img) {
             var url = imageUrl(img.fileUrl);
+            var inherited = String(img.note || '').toUpperCase() === 'CHAPTER_PAGE' || !img.id;
             var approvedBadge = isApproved
                 ? '<span class="approved-badge" title="Đã được Mangaka duyệt, ảnh đã cập nhật vào chapter">✓ Approved</span>'
-                : '';
+                : (inherited ? '<span class="approved-badge" title="Base image from chapter">Base image</span>' : '');
             html += approvedBadge
                 + '<img class="page-card-thumb" src="' + escapeHtml(url) + '" alt="Page ' + pageNum
-                + '" data-lightbox="' + pageNum + '"'
                 + (isApproved ? ' title="Đã được Mangaka duyệt, ảnh đã cập nhật vào chapter"' : '')
                 + ' />'
                 + '<div class="page-card-footer">'
                 + '<div class="page-card-meta"><strong>Page ' + pageNum + '</strong>'
+                + '<span>' + escapeHtml(nextStageForPage(pageNum)) + '</span>'
                 + '<span>' + escapeHtml(img.originalFileName || '') + '</span></div>';
 
             if (PAGE_TASK.canUpdate && !isApproved) {
                 html += '<div class="page-card-actions">'
+                    + '<a class="btn small" href="' + escapeHtml(url) + '" download title="Download">↓</a>'
                     + '<button type="button" class="btn small" data-page-replace="' + pageNum + '" title="Replace">🔄</button>'
-                    + '<button type="button" class="btn small danger-soft" data-page-delete="' + pageNum + '" title="Delete">🗑</button>'
+                    + (inherited ? '' : '<button type="button" class="btn small danger-soft" data-page-delete="' + pageNum + '" title="Delete">🗑</button>')
+                    + '</div>';
+            } else {
+                html += '<div class="page-card-actions">'
+                    + '<a class="btn small" href="' + escapeHtml(url) + '" download title="Download">↓</a>'
                     + '</div>';
             }
             html += '</div>';
@@ -192,8 +223,8 @@
             }
             html += '<div class="' + emptyClass + '"' + (canClick ? ' data-page-upload="' + pageNum + '"' : '') + '>'
                 + (PAGE_TASK.canUpdate && !isApproved
-                    ? '<span style="font-size:28px;line-height:1;">+</span><strong>Page ' + pageNum + '</strong><span>Click to upload</span>'
-                    : '<strong>Page ' + pageNum + '</strong><span>No image</span>')
+                    ? '<span style="font-size:28px;line-height:1;">+</span><strong>Page ' + pageNum + '</strong><span>' + escapeHtml(nextStageForPage(pageNum)) + '</span><span>Click to upload</span>'
+                    : '<strong>Page ' + pageNum + '</strong><span>' + escapeHtml(nextStageForPage(pageNum)) + '</span><span>No image</span>')
                 + '</div>';
         }
 
@@ -397,108 +428,12 @@
         }
     }
 
-    function filledPagesSorted() {
-        var pages = [];
-        for (var p = PAGE_TASK.pageStart; p <= PAGE_TASK.pageEnd; p++) {
-            if (pageImages[p]) {
-                pages.push(p);
-            }
-        }
-        return pages;
-    }
-
-    function closeLightbox() {
-        var overlay = document.getElementById('pageLightbox');
-        if (overlay) {
-            overlay.remove();
-        }
-        lightboxPage = null;
-        document.removeEventListener('keydown', onLightboxKey);
-    }
-
-    function renderLightbox() {
-        var overlay = document.getElementById('pageLightbox');
-        if (!overlay || lightboxPage === null) {
-            return;
-        }
-        var img = pageImages[lightboxPage];
-        if (!img) {
-            closeLightbox();
-            return;
-        }
-        var pages = filledPagesSorted();
-        var idx = pages.indexOf(lightboxPage);
-        var hasPrev = idx > 0;
-        var hasNext = idx >= 0 && idx < pages.length - 1;
-
-        overlay.innerHTML =
-            '<button type="button" class="lightbox-close" aria-label="Close">&times;</button>'
-            + '<button type="button" class="lightbox-nav prev" aria-label="Previous"' + (hasPrev ? '' : ' disabled') + '>&#8249;</button>'
-            + '<img class="lightbox-img" src="' + escapeHtml(imageUrl(img.fileUrl)) + '" alt="Page ' + lightboxPage + '" />'
-            + '<button type="button" class="lightbox-nav next" aria-label="Next"' + (hasNext ? '' : ' disabled') + '>&#8250;</button>'
-            + '<div class="lightbox-caption">Page ' + lightboxPage + ' — ' + escapeHtml(img.originalFileName || '') + '</div>';
-
-        overlay.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
-        overlay.addEventListener('click', function (e) {
-            if (e.target === overlay) {
-                closeLightbox();
-            }
-        });
-        var prevBtn = overlay.querySelector('.lightbox-nav.prev');
-        var nextBtn = overlay.querySelector('.lightbox-nav.next');
-        if (prevBtn && hasPrev) {
-            prevBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                lightboxPage = pages[idx - 1];
-                renderLightbox();
-            });
-        }
-        if (nextBtn && hasNext) {
-            nextBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                lightboxPage = pages[idx + 1];
-                renderLightbox();
-            });
-        }
-    }
-
-    function openLightbox(pageNum) {
-        if (!pageImages[pageNum]) {
-            return;
-        }
-        lightboxPage = pageNum;
-        closeLightbox();
-        var overlay = document.createElement('div');
-        overlay.id = 'pageLightbox';
-        overlay.className = 'lightbox-overlay';
-        document.body.appendChild(overlay);
-        renderLightbox();
-        document.addEventListener('keydown', onLightboxKey);
-    }
-
-    function onLightboxKey(e) {
-        if (e.key === 'Escape') {
-            closeLightbox();
-            return;
-        }
-        var pages = filledPagesSorted();
-        var idx = pages.indexOf(lightboxPage);
-        if (e.key === 'ArrowLeft' && idx > 0) {
-            lightboxPage = pages[idx - 1];
-            renderLightbox();
-        }
-        if (e.key === 'ArrowRight' && idx >= 0 && idx < pages.length - 1) {
-            lightboxPage = pages[idx + 1];
-            renderLightbox();
-        }
-    }
-
     async function initPageGrid() {
         for (var p = PAGE_TASK.pageStart; p <= PAGE_TASK.pageEnd; p++) {
             pageImages[p] = null;
         }
         try {
-            await loadImages();
+            await Promise.all([loadImages(), loadPageSlots()]);
             renderAll();
         } catch (err) {
             if (gridEl) {
@@ -525,10 +460,6 @@
                     showToast(err.message, 'error');
                 });
                 return;
-            }
-            var thumb = e.target.closest('[data-lightbox]');
-            if (thumb) {
-                openLightbox(Number(thumb.getAttribute('data-lightbox')));
             }
         });
     }

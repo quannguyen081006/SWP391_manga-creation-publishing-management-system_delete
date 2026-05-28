@@ -6,6 +6,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.PageSlotSummary;
 import manga.repository.ChapterRepository;
 import manga.repository.PageRepository;
+import manga.repository.PageTaskRepository;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -32,6 +33,9 @@ public class PageApiController {
     @Autowired
     private ChapterRepository chapterRepository;
 
+    @Autowired
+    private PageTaskRepository pageTaskRepository;
+
     @RequestMapping(value = "/chapters/{chapterId}/pages", method = RequestMethod.GET)
     public ApiResponse<List<PageSlotSummary>> listByChapter(@PathVariable("chapterId") long chapterId, HttpSession session) {
         SessionUserUtil.requireUser(session);
@@ -51,6 +55,7 @@ public class PageApiController {
         }
         int next = pageNumber != null && pageNumber > 0 ? pageNumber.intValue() : pageRepository.nextPageNumber(chapterId);
         long pageId = pageRepository.create(chapterId, next);
+        pageTaskRepository.refreshChapterProgress(chapterId);
         return ApiResponse.ok(pageRepository.findById(pageId), "Page slot created");
     }
 
@@ -58,7 +63,8 @@ public class PageApiController {
     public ApiResponse<PageSlotSummary> uploadImage(
             @PathVariable("pageId") long pageId,
             HttpSession session,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            @RequestParam(value = "completedStage", required = false) String completedStage) {
         AuthenticatedUser user = SessionUserUtil.requireUser(session);
         PageSlotSummary page = pageRepository.findById(pageId);
         if (page == null) {
@@ -69,8 +75,28 @@ public class PageApiController {
             throw new IllegalArgumentException("Only chapter owner can upload page images");
         }
         String savedPath = saveMultipart(request);
-        pageRepository.markUploaded(pageId, savedPath, user.getId());
+        pageRepository.markUploaded(pageId, savedPath, user.getId(), completedStage);
+        pageTaskRepository.refreshChapterProgress(page.getChapterId());
         return ApiResponse.ok(pageRepository.findById(pageId), "Page image uploaded");
+    }
+
+    @RequestMapping(value = "/pages/{pageId}", method = RequestMethod.DELETE)
+    public ApiResponse<Object> delete(
+            @PathVariable("pageId") long pageId,
+            HttpSession session) {
+        AuthenticatedUser user = SessionUserUtil.requireUser(session);
+        SessionUserUtil.requireRole(user, "MANGAKA", "Only MANGAKA can delete page slots");
+        PageSlotSummary page = pageRepository.findById(pageId);
+        if (page == null) {
+            throw new IllegalArgumentException("Page not found");
+        }
+        long ownerId = chapterRepository.findOwnerMangakaByChapter(page.getChapterId());
+        if (ownerId != user.getId()) {
+            throw new IllegalArgumentException("Only chapter owner can delete pages");
+        }
+        pageRepository.delete(pageId);
+        pageTaskRepository.refreshChapterProgress(page.getChapterId());
+        return ApiResponse.ok(null, "Page deleted");
     }
 
     private String saveMultipart(HttpServletRequest request) {

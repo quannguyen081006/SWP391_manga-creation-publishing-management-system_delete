@@ -26,6 +26,31 @@
     </div>
 </div>
 
+<c:if test="${not empty task.notes}">
+    <div class="section-card">
+        <h3 class="section-title compact-title">Mangaka Note</h3>
+        <div style="white-space:pre-wrap;"><c:out value="${task.notes}" /></div>
+    </div>
+</c:if>
+
+<c:if test="${not empty task.approvalComment || not empty task.rejectionReason}">
+    <div class="section-card">
+        <h3 class="section-title compact-title">Mangaka Feedback</h3>
+        <c:if test="${not empty task.approvalComment}">
+            <div class="alert success" style="margin-bottom:0;">
+                <strong>Approval comment:</strong>
+                <div style="margin-top:6px;"><c:out value="${task.approvalComment}" /></div>
+            </div>
+        </c:if>
+        <c:if test="${not empty task.rejectionReason}">
+            <div class="alert error" style="margin-bottom:0;">
+                <strong>Revision note:</strong>
+                <div style="margin-top:6px;"><c:out value="${task.rejectionReason}" /></div>
+            </div>
+        </c:if>
+    </div>
+</c:if>
+
 <c:if test="${canMangakaReview}">
     <div class="section-card">
         <h3 class="section-title compact-title">Mangaka Review</h3>

@@ -12,6 +12,7 @@ public class PageSlotSummary {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private Timestamp uploadedAt;
     private String status;
+    private String completedStage;
     private Long taskId;
     private String taskType;
     private String taskStatus;
@@ -32,6 +33,8 @@ public class PageSlotSummary {
     public void setUploadedAt(Timestamp uploadedAt) { this.uploadedAt = uploadedAt; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getCompletedStage() { return completedStage; }
+    public void setCompletedStage(String completedStage) { this.completedStage = completedStage; }
     public Long getTaskId() { return taskId; }
     public void setTaskId(Long taskId) { this.taskId = taskId; }
     public String getTaskType() { return taskType; }

@@ -66,7 +66,7 @@ public class PageTaskApiController {
             @RequestParam("assistantId") long assistantId,
             @RequestParam("pageRangeStart") int pageRangeStart,
             @RequestParam("pageRangeEnd") int pageRangeEnd,
-            @RequestParam("taskType") String taskType,
+            @RequestParam(value = "taskType", required = false) String taskType,
             @RequestParam("dueDate") String dueDate,
             @RequestParam(value = "priority", defaultValue = "NORMAL") String priority,
             @RequestParam(value = "notes", required = false) String notes) {
@@ -83,7 +83,7 @@ public class PageTaskApiController {
                 assistantId,
                 pageRangeStart,
                 pageRangeEnd,
-                taskType,
+                taskType == null || taskType.trim().isEmpty() ? "MIXED" : taskType,
                 Date.valueOf(dueDate),
                 priority,
                 notes);
