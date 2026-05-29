@@ -827,7 +827,9 @@ public class ModuleWebController {
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
-            requireAdmin(user);
+            if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
+                throw new IllegalArgumentException("Only ADMIN or EDITORIAL_BOARD can upload ranking CSV");
+            }
             int count = rankingCsvImportService.importCsv(id, csvFile, user);
             model.addAttribute("success", "CSV imported successfully. " + count + " ranking rows imported.");
             rankingPeriods(session, model);

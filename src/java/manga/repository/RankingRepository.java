@@ -60,11 +60,19 @@ public class RankingRepository {
     //  createPeriod — không thay đổi                                      //
     // ------------------------------------------------------------------ //
     public long createPeriod(String name, Date startDate, Date endDate) {
-        String sql = "INSERT INTO RankingPeriod (name, startDate, endDate, status) VALUES (?, ?, ?, 'OPEN')";
+        return createPeriod(name, startDate, endDate, "OPEN");
+    }
+
+    // ------------------------------------------------------------------ //
+    //  createPeriodWithStatus — new method for lifecycle refactor         //
+    // ------------------------------------------------------------------ //
+    public long createPeriod(String name, Date startDate, Date endDate, String status) {
+        String sql = "INSERT INTO RankingPeriod (name, startDate, endDate, status) VALUES (?, ?, ?, ?)";
         try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
             ps.setDate(2, startDate);
             ps.setDate(3, endDate);
+            ps.setString(4, status);
             ps.executeUpdate();
             try ( ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -81,15 +89,59 @@ public class RankingRepository {
     //  closePeriod — không thay đổi                                       //
     // ------------------------------------------------------------------ //
     public void closePeriod(long periodId) {
-        String sql = "UPDATE RankingPeriod SET status = 'CLOSED' WHERE id = ? AND status = 'OPEN'";
+        updatePeriodStatus(periodId, "CLOSED", "OPEN");
+    }
+
+    // ------------------------------------------------------------------ //
+    //  updatePeriodStatus — new method for lifecycle refactor              //
+    // ------------------------------------------------------------------ //
+    public void updatePeriodStatus(long periodId, String newStatus, String expectedCurrentStatus) {
+        String sql = "UPDATE RankingPeriod SET status = ? WHERE id = ? AND status = ?";
         try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, periodId);
+            ps.setString(1, newStatus);
+            ps.setLong(2, periodId);
+            ps.setString(3, expectedCurrentStatus);
             if (ps.executeUpdate() == 0) {
-                throw new IllegalArgumentException("Only OPEN period can be closed");
+                throw new IllegalArgumentException("Cannot update period status from " + expectedCurrentStatus + " to " + newStatus);
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot close ranking period", ex);
+            throw new RuntimeException("Cannot update ranking period status", ex);
         }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  findOpenExpiredPeriods — find OPEN periods past their endDate       //
+    // ------------------------------------------------------------------ //
+    public List<Map<String, Object>> findOpenExpiredPeriods() {
+        String sql = "SELECT id, name, startDate, endDate, status, calculatedAt FROM RankingPeriod WHERE status = 'OPEN' AND endDate < CAST(GETDATE() AS DATE)";
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql);  ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                rows.add(mapPeriod(rs));
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find expired ranking periods", ex);
+        }
+        return rows;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  findPeriodByMonthYear — check if period exists for month/year      //
+    // ------------------------------------------------------------------ //
+    public Map<String, Object> findPeriodByMonthYear(int year, int month) {
+        String sql = "SELECT id, name, startDate, endDate, status, calculatedAt FROM RankingPeriod WHERE YEAR(startDate) = ? AND MONTH(startDate) = ?";
+        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, year);
+            ps.setInt(2, month);
+            try ( ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapPeriod(rs);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find ranking period by month/year", ex);
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ //

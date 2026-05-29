@@ -5,6 +5,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -48,6 +52,30 @@ public class UserRepository {
                 }
             }
         }
+    }
+
+    public List<Map<String, Object>> findByRole(String roleName) {
+        String sql = "SELECT u.id, u.username, u.fullName FROM [User] u " +
+                     "JOIN UserRole ur ON u.id = ur.userId " +
+                     "JOIN [Role] r ON ur.roleId = r.id " +
+                     "WHERE r.name = ?";
+        List<Map<String, Object>> users = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, roleName);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> user = new HashMap<>();
+                    user.put("id", rs.getLong("id"));
+                    user.put("username", rs.getString("username"));
+                    user.put("fullName", rs.getString("fullName"));
+                    users.add(user);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find users by role", ex);
+        }
+        return users;
     }
 }
 

@@ -25,8 +25,8 @@ public class RankingCsvImportService {
 
     @Transactional
     public int importCsv(long periodId, MultipartFile file, AuthenticatedUser user) {
-        if (user == null || !user.hasRole("ADMIN")) {
-            throw new BusinessRuleException("Only ADMIN can upload ranking CSV");
+        if (user == null || (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD"))) {
+            throw new BusinessRuleException("Only ADMIN or EDITORIAL_BOARD can upload ranking CSV");
         }
 
         Map<String, Object> period = rankingRepository.findPeriodById(periodId);
