@@ -641,6 +641,13 @@ public class PageTaskRepository {
             }
 
             refreshChapterProgress(chapterId);
+            long mangakaId = findChapterOwnerMangaka(chapterId);
+            createNotification(
+                    mangakaId,
+                    "TASK_SUBMITTED",
+                    "Task #" + taskId + " has been submitted for your review by assistant.",
+                    taskId,
+                    "TASK");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot update task status", ex);
         }
@@ -694,14 +701,11 @@ public class PageTaskRepository {
             promoteTaskImagesToChapter(taskId, chapterId, mangakaId, taskType);
             refreshChapterProgress(chapterId);
 
+            String approveMsg = "Task #" + taskId + " has been approved.";
             if (comment != null && !comment.trim().isEmpty()) {
-                createNotification(
-                        assistantId,
-                        "TASK_APPROVED",
-                        "Task #" + taskId + " approved. Comment: " + comment.trim(),
-                        taskId,
-                        "TASK");
+                approveMsg += " Comment: " + comment.trim();
             }
+            createNotification(assistantId, "TASK_APPROVED", approveMsg, taskId, "TASK");
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot approve task", ex);
         }
@@ -1133,6 +1137,21 @@ public class PageTaskRepository {
         String normalized = type.trim().toUpperCase(Locale.ENGLISH);
         if ("TASK_ASSIGNED".equals(normalized)) {
             return "New page task assigned";
+        }
+        if ("TASK_SUBMITTED".equals(normalized)) {
+            return "Task submitted for review";
+        }
+        if ("TASK_APPROVED".equals(normalized)) {
+            return "Task approved";
+        }
+        if ("TASK_REJECTED".equals(normalized)) {
+            return "Task rejected - rework needed";
+        }
+        if ("TASK_DELETED".equals(normalized)) {
+            return "Task deleted";
+        }
+        if ("TASK_REASSIGNED".equals(normalized)) {
+            return "Task reassigned";
         }
         if ("TASK_DUE_SOON".equals(normalized)) {
             return "Task due in 24 hours";

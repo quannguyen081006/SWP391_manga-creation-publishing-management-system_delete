@@ -168,19 +168,6 @@
     </table>
 </div>
 
-<div class="section-card">
-    <h3 class="section-title compact-title">Review History</h3>
-    <table class="data-table">
-        <thead><tr><th>Action</th><th>Actor</th><th>Detail</th><th>Performed</th></tr></thead>
-        <tbody>
-            <c:forEach items="${reviewHistory}" var="h">
-                <tr><td>${h.action}</td><td>${h.actorId}</td><td>${h.detail}</td><td>${h.performedAt}</td></tr>
-            </c:forEach>
-            <c:if test="${empty reviewHistory}"><tr><td colspan="4" class="muted">No review history yet.</td></tr></c:if>
-        </tbody>
-    </table>
-</div>
-
 <a class="btn" href="${pageContext.request.contextPath}/main/manuscripts">Back to Manuscripts</a>
 
 <jsp:include page="../common/footer.jsp" />

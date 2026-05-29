@@ -36,9 +36,6 @@ public class ManuscriptService {
     @Autowired
     private NotificationService notificationService;
 
-    @Autowired
-    private AuditLogService auditLogService;
-
     @Transactional
     public ManuscriptSummary submitManuscript(long chapterId, SubmitManuscriptRequest request, AuthenticatedUser user) {
         ManuscriptSummary manuscript = createDraft(chapterId, request, user);
@@ -118,15 +115,6 @@ public class ManuscriptService {
             manuscriptId,
             "MANUSCRIPT"
         );
-
-        // Audit log
-        auditLogService.append(
-            user,
-            "MANUSCRIPT_SUBMITTED",
-            "MANUSCRIPT",
-            manuscriptId,
-            auditLogService.jsonPair("chapterId", String.valueOf(manuscript.getChapterId()))
-        );
     }
 
     @Transactional
@@ -160,15 +148,6 @@ public class ManuscriptService {
             "Manuscript approved for chapter #" + chapterId,
             manuscriptId,
             "MANUSCRIPT"
-        );
-
-        // Audit log
-        auditLogService.append(
-            user,
-            "MANUSCRIPT_APPROVED",
-            "MANUSCRIPT",
-            manuscriptId,
-            auditLogService.jsonPair("chapterId", String.valueOf(chapterId))
         );
     }
 
@@ -209,15 +188,6 @@ public class ManuscriptService {
             manuscriptId,
             "MANUSCRIPT"
         );
-
-        // Audit log
-        auditLogService.append(
-            user,
-            "MANUSCRIPT_REJECTED",
-            "MANUSCRIPT",
-            manuscriptId,
-            auditLogService.jsonTwoPairs("chapterId", String.valueOf(chapterId), "feedback", request.getFeedback().trim())
-        );
     }
 
     @Transactional
@@ -247,14 +217,6 @@ public class ManuscriptService {
             "Revision requested for chapter #" + manuscript.getChapterId() + (cleanFeedback == null ? "." : ". Feedback: " + cleanFeedback),
             manuscriptId,
             "MANUSCRIPT"
-        );
-
-        auditLogService.append(
-            user,
-            "MANUSCRIPT_REVISION_REQUESTED",
-            "MANUSCRIPT",
-            manuscriptId,
-            auditLogService.jsonTwoPairs("chapterId", String.valueOf(manuscript.getChapterId()), "feedback", cleanFeedback == null ? "" : cleanFeedback)
         );
     }
 
@@ -287,15 +249,6 @@ public class ManuscriptService {
             "Review started for chapter #" + chapterId,
             manuscriptId,
             "MANUSCRIPT"
-        );
-
-        // Audit log
-        auditLogService.append(
-            user,
-            "MANUSCRIPT_REVIEW_STARTED",
-            "MANUSCRIPT",
-            manuscriptId,
-            auditLogService.jsonPair("chapterId", String.valueOf(chapterId))
         );
     }
 

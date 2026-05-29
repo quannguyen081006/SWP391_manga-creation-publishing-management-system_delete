@@ -10,8 +10,6 @@ import manga.model.SeriesSummary;
 import manga.repository.DecisionRepository;
 import manga.repository.ProductionRepository;
 import manga.repository.RankingRepository;
-import manga.service.NotificationService;
-import manga.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,12 +28,6 @@ public class DecisionService {
 
     @Autowired
     private ProductionRepository productionRepository;
-
-    @Autowired
-    private NotificationService notificationService;
-
-    @Autowired
-    private AuditLogService auditLogService;
 
     public List<Map<String, Object>> listDecisionSessions(AuthenticatedUser user) {
         // Only ADMIN and EDITORIAL_BOARD can view decisions
@@ -89,10 +81,6 @@ public class DecisionService {
         // The pipeline auto-generates suggestions for bottom 20% series
         long sessionId = decisionRepository.createSession(request.getSeriesId(), request.getRankingRecordId(), null);
 
-        // Audit log (BR-67)
-        auditLogService.append(user, "DECISION_SESSION_OPENED", "DECISION_SESSION", sessionId, 
-            "Opened decision session for series " + request.getSeriesId());
-
         return sessionId;
     }
 
@@ -121,10 +109,6 @@ public class DecisionService {
         // Submit vote (repository handles BR-60, BR-61, BR-64, BR-62, BR-69)
         decisionRepository.castVote(sessionId, user.getId(), normalized, 
             request.getJustification() == null ? null : request.getJustification().trim());
-
-        // Audit log (BR-67)
-        auditLogService.append(user, "DECISION_VOTE_CAST", "DECISION_SESSION", sessionId, 
-            "Voted " + normalized + " for decision session");
     }
 
     public void finalizeDecision(long sessionId, AuthenticatedUser user) {
@@ -153,10 +137,6 @@ public class DecisionService {
 
         // Finalize (repository handles aggregation, majority result, series cancellation)
         decisionRepository.finalizeSession(sessionId);
-
-        // Audit log (BR-67)
-        auditLogService.append(user, "DECISION_FINALIZED", "DECISION_SESSION", sessionId, 
-            "Finalized decision session with " + totalVotes + " votes");
 
         // Notification is handled within repository's transaction
     }

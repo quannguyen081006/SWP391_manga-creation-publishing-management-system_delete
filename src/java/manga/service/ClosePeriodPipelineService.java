@@ -33,12 +33,6 @@ public class ClosePeriodPipelineService {
     private DecisionRepository decisionRepository;
 
     @Autowired
-    private NotificationService notificationService;
-
-    @Autowired
-    private AuditLogService auditLogService;
-
-    @Autowired
     private DataSource dataSource;
 
     @Transactional
@@ -90,8 +84,6 @@ public class ClosePeriodPipelineService {
                     throw new BusinessRuleException("Failed to close ranking period: status was modified");
                 }
             }
-            auditLogService.append(user, "CLOSE_PERIOD", "RANKING_PERIOD", periodId, 
-                "Closed ranking period for calculation");
         } catch (SQLException ex) {
             throw new RuntimeException("Database error in phase 1: lock period", ex);
         }
@@ -101,8 +93,6 @@ public class ClosePeriodPipelineService {
     void phase2CalculateSeriesRanking(long periodId, AuthenticatedUser user) {
         try (Connection conn = dataSource.getConnection()) {
             calculateSeriesRanking(conn, periodId);
-            auditLogService.append(user, "CALCULATE_SERIES_RANKING", "RANKING_PERIOD", periodId, 
-                "Calculated series ranking snapshot");
         } catch (SQLException ex) {
             throw new RuntimeException("Database error in phase 2: series ranking", ex);
         }
@@ -112,8 +102,6 @@ public class ClosePeriodPipelineService {
     void phase3CalculateMangakaRanking(long periodId, AuthenticatedUser user) {
         try (Connection conn = dataSource.getConnection()) {
             calculateMangakaRanking(conn, periodId);
-            auditLogService.append(user, "CALCULATE_MANGAKA_RANKING", "RANKING_PERIOD", periodId, 
-                "Calculated mangaka ranking snapshot");
         } catch (SQLException ex) {
             throw new RuntimeException("Database error in phase 3: mangaka ranking", ex);
         }
@@ -123,8 +111,6 @@ public class ClosePeriodPipelineService {
     void phase4RunDecisionEngine(long periodId, AuthenticatedUser user) {
         try (Connection conn = dataSource.getConnection()) {
             runDecisionEngine(conn, periodId, user);
-            auditLogService.append(user, "RUN_DECISION_ENGINE", "RANKING_PERIOD", periodId, 
-                "Created decision sessions for bottom 20% series");
         } catch (SQLException ex) {
             throw new RuntimeException("Database error in phase 4: decision engine", ex);
         }
@@ -138,8 +124,6 @@ public class ClosePeriodPipelineService {
                 ps.setLong(1, periodId);
                 ps.executeUpdate();
             }
-            auditLogService.append(user, "FINALIZE_PERIOD", "RANKING_PERIOD", periodId, 
-                "Finalized period: " + periodName);
         } catch (SQLException ex) {
             throw new RuntimeException("Database error in phase 5: finalize period", ex);
         }
@@ -328,11 +312,7 @@ public class ClosePeriodPipelineService {
             String suggestion = calculateSystemSuggestion(revenueTrend);
 
             // Create DecisionSession
-            long sessionId = decisionRepository.createSession(seriesId, rankingRecordId, suggestion);
-
-            // Send notification
-            auditLogService.append(user, "CREATE_DECISION_SESSION", "DECISION_SESSION", sessionId, 
-                "Opened decision session for series " + seriesId + " with system suggestion: " + suggestion);
+            decisionRepository.createSession(seriesId, rankingRecordId, suggestion);
         }
     }
 

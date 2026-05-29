@@ -32,8 +32,8 @@
                 <article class="notification-row ${n.read ? 'is-read' : 'is-unread'}">
                     <div class="notification-main">
                         <div class="notification-row-head">
-                            <span class="audit-action">${empty n.title ? n.type : n.title}</span>
-                            <span class="audit-time">${n.createdAt}</span>
+                            <span class="notification-title">${empty n.title ? n.type : n.title}</span>
+                            <span class="notification-time">${n.createdAt}</span>
                         </div>
                         <p>${n.message}</p>
                         <c:if test="${not empty n.referenceType}">

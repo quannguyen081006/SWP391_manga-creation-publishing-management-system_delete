@@ -125,10 +125,6 @@
                 <span class="nav-icon" aria-hidden="true"></span>
                 <span class="nav-label">Users</span>
             </a>
-            <a class="nav-item nav-audit ${fn:contains(uri, '/main/audit-logs') ? 'active' : ''}" href="${ctx}/main/audit-logs" title="Audit Logs">
-                <span class="nav-icon" aria-hidden="true"></span>
-                <span class="nav-label">Audit Logs</span>
-            </a>
         </c:if>
 
     </aside>

@@ -8,7 +8,6 @@ import manga.model.AuthenticatedUser;
 import manga.repository.RankingRepository;
 import manga.repository.MangakaRankingRepository;
 import manga.service.NotificationService;
-import manga.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,9 +30,6 @@ public class RankingService {
 
     @Autowired
     private NotificationService notificationService;
-
-    @Autowired
-    private AuditLogService auditLogService;
 
     public List<Map<String, Object>> listPeriods() {
         return rankingRepository.listPeriods();
@@ -60,10 +56,6 @@ public class RankingService {
         }
 
         long periodId = rankingRepository.createPeriod(request.getName(), startDate, request.getEndDate());
-
-        // Audit log
-        auditLogService.append(user, "CREATE_RANKING_PERIOD", "RANKING_PERIOD", periodId, 
-            "Created ranking period: " + request.getName());
 
         // Notify Editorial Board
         notificationService.notifyUser(
@@ -116,10 +108,6 @@ public class RankingService {
         // Submit entry (repository handles duplicate check BR-54)
         rankingRepository.submitEntry(periodId, request.getSeriesId(), user.getId(), 
             request.getVoteCount(), request.getReaderCount(), request.getRevenue());
-
-        // Audit log
-        auditLogService.append(user, "SUBMIT_VOTE_ENTRY", "VOTE_ENTRY", periodId, 
-            "Submitted vote entry for series " + request.getSeriesId());
     }
 
     @Transactional

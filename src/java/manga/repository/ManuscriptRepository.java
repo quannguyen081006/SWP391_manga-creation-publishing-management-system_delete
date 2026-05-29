@@ -23,18 +23,12 @@ public class ManuscriptRepository {
             + "m.originalFileName, m.uploadedAt, m.fileSize, m.fileExtension, m.revisionDeadline, m.feedback, m.notes, "
             + "COALESCE(m.genre, p.genre) AS genre, "
             + "c.title AS chapterTitle, c.chapterNumber, s.title AS seriesTitle, p.synopsis, "
-            + "mangaka.fullName AS mangakaName, reviewer.fullName AS reviewerName "
+            + "mangaka.fullName AS mangakaName, CAST(NULL AS VARCHAR(255)) AS reviewerName "
             + "FROM Manuscript m "
             + "JOIN Chapter c ON c.id = m.chapterId "
             + "JOIN Series s ON s.id = c.seriesId "
             + "LEFT JOIN Proposal p ON p.id = s.proposalId "
-            + "LEFT JOIN [User] mangaka ON mangaka.id = s.mangakaId "
-            + "LEFT JOIN [User] reviewer ON reviewer.id = ("
-            + "  SELECT TOP 1 al.actorId FROM AuditLog al "
-            + "  WHERE al.entityType = 'MANUSCRIPT' AND al.entityId = m.id "
-            + "    AND al.action IN ('MANUSCRIPT_REVIEW_STARTED','MANUSCRIPT_APPROVED','MANUSCRIPT_REJECTED','MANUSCRIPT_REVISION_REQUESTED') "
-            + "  ORDER BY al.performedAt DESC"
-            + ") ";
+            + "LEFT JOIN [User] mangaka ON mangaka.id = s.mangakaId ";
 
     public List<ManuscriptSummary> listByChapter(long chapterId) {
         String sql = MANUSCRIPT_SELECT + "WHERE m.chapterId = ? ORDER BY m.version DESC";

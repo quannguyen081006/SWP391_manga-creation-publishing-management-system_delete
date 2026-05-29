@@ -71,10 +71,10 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private boolean isAllowed(AuthenticatedUser user, String uri, String context) {
         String path = uri.substring(context.length());
-        if (path.startsWith("/api/v1/users") || path.startsWith("/api/v1/audit-logs")) {
+        if (path.startsWith("/api/v1/users")) {
             return user.hasRole("ADMIN");
         }
-        if (path.startsWith("/main/users") || path.startsWith("/main/audit-logs")) {
+        if (path.startsWith("/main/users")) {
             return user.hasRole("ADMIN");
         }
         if (path.startsWith("/main/proposals")) {

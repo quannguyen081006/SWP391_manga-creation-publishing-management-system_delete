@@ -23,14 +23,17 @@ public class DecisionRepository {
     //  listSessions — không thay đổi                                      //
     // ------------------------------------------------------------------ //
     public List<Map<String, Object>> listSessions() {
-        String sql = "SELECT id, seriesId, rankingRecordId, status, result, systemSuggestion, openedAt, closedAt"
-                   + " FROM DecisionSession ORDER BY openedAt DESC";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                rows.add(mapSession(rs));
+        try (Connection conn = dataSource.getConnection()) {
+            boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
+            String sql = "SELECT id, seriesId, rankingRecordId, status, result"
+                       + (hasSystemSuggestion ? ", systemSuggestion" : "")
+                       + ", openedAt, closedAt FROM DecisionSession ORDER BY openedAt DESC";
+            try (PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(mapSession(rs, hasSystemSuggestion));
+                }
             }
         } catch (SQLException ex) {
             throw new RuntimeException("Cannot list decision sessions", ex);
@@ -42,12 +45,14 @@ public class DecisionRepository {
     //  getSessionDetail — không thay đổi                                  //
     // ------------------------------------------------------------------ //
     public Map<String, Object> getSessionDetail(long sessionId) {
-        String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result, systemSuggestion, openedAt, closedAt"
-                          + " FROM DecisionSession WHERE id = ?";
         String votesSql   = "SELECT id, sessionId, voterId, decision, justification, votedAt"
                           + " FROM DecisionVote WHERE sessionId = ? ORDER BY votedAt DESC";
 
         try (Connection conn = dataSource.getConnection()) {
+            boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
+            String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result"
+                              + (hasSystemSuggestion ? ", systemSuggestion" : "")
+                              + ", openedAt, closedAt FROM DecisionSession WHERE id = ?";
             Map<String, Object> session;
             try (PreparedStatement ps = conn.prepareStatement(sessionSql)) {
                 ps.setLong(1, sessionId);
@@ -55,7 +60,7 @@ public class DecisionRepository {
                     if (!rs.next()) {
                         throw new IllegalArgumentException("Decision session not found");
                     }
-                    session = mapSession(rs);
+                    session = mapSession(rs, hasSystemSuggestion);
                 }
             }
 
@@ -276,13 +281,18 @@ public class DecisionRepository {
     //  createSession — create new OPEN decision session                    //
     // ------------------------------------------------------------------ //
     public long createSession(long seriesId, long rankingRecordId, String systemSuggestion) {
-        String sql = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, systemSuggestion, openedAt) VALUES (?, ?, 'OPEN', ?, GETDATE())";
         try (Connection conn = dataSource.getConnection()) {
+            boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
+            String sql = hasSystemSuggestion
+                    ? "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, systemSuggestion, openedAt) VALUES (?, ?, 'OPEN', ?, GETDATE())"
+                    : "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt) VALUES (?, ?, 'OPEN', GETDATE())";
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 ps.setLong(1, seriesId);
                 ps.setLong(2, rankingRecordId);
-                ps.setString(3, systemSuggestion);
+                if (hasSystemSuggestion) {
+                    ps.setString(3, systemSuggestion);
+                }
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -348,16 +358,24 @@ public class DecisionRepository {
     // ------------------------------------------------------------------ //
     //  mapSession helper — không thay đổi                                 //
     // ------------------------------------------------------------------ //
-    private Map<String, Object> mapSession(ResultSet rs) throws SQLException {
+    private Map<String, Object> mapSession(ResultSet rs, boolean hasSystemSuggestion) throws SQLException {
         Map<String, Object> row = new HashMap<String, Object>();
         row.put("id",              rs.getLong("id"));
         row.put("seriesId",        rs.getLong("seriesId"));
         row.put("rankingRecordId", rs.getLong("rankingRecordId"));
         row.put("status",          rs.getString("status"));
         row.put("result",          rs.getString("result"));
-        row.put("systemSuggestion", rs.getString("systemSuggestion"));
+        row.put("systemSuggestion", hasSystemSuggestion ? rs.getString("systemSuggestion") : null);
         row.put("openedAt",        rs.getTimestamp("openedAt"));
         row.put("closedAt",        rs.getTimestamp("closedAt"));
         return row;
+    }
+
+    private boolean hasDecisionSessionSystemSuggestionColumn(Connection conn) throws SQLException {
+        String sql = "SELECT COL_LENGTH('DecisionSession', 'systemSuggestion')";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() && rs.getObject(1) != null;
+        }
     }
 }

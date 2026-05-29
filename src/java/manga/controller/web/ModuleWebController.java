@@ -7,14 +7,12 @@ import manga.model.Proposal;
 import manga.model.SeriesSummary;
 import manga.model.TaskSummary;
 import manga.repository.ChapterRepository;
-import manga.repository.AuditLogRepository;
 import manga.repository.DecisionRepository;
 import manga.repository.ManuscriptRepository;
 import manga.repository.PageTaskRepository;
 import manga.repository.ProductionRepository;
 import manga.repository.RankingRepository;
 import manga.repository.UserAdminRepository;
-import manga.service.AuditLogService;
 import manga.service.AnnotationService;
 import manga.service.ManuscriptService;
 import manga.service.NotificationService;
@@ -81,12 +79,6 @@ public class ModuleWebController {
 
     @Autowired
     private UserAdminRepository userAdminRepository;
-
-    @Autowired
-    private AuditLogRepository auditLogRepository;
-
-    @Autowired
-    private AuditLogService auditLogService;
 
     @Autowired
     private NotificationService notificationService;
@@ -338,7 +330,6 @@ public class ModuleWebController {
         model.addAttribute("manuscript", manuscript);
         model.addAttribute("annotations", manuscriptRepository.listAnnotations(id));
         model.addAttribute("versionHistory", versionHistory);
-        model.addAttribute("reviewHistory", auditLogRepository.listByEntity("MANUSCRIPT", id));
         model.addAttribute("currentUser", user);
         model.addAttribute("isMangakaOwner", isMangakaOwner);
         model.addAttribute("isAssignedTantou", isAssignedTantou);
@@ -1006,26 +997,6 @@ public class ModuleWebController {
         return users(session, null, null, model);
     }
 
-    @RequestMapping(value = "/audit-logs", method = RequestMethod.GET)
-    public String auditLogs(
-            HttpSession session,
-            @RequestParam(value = "actorId", required = false) Integer actorId,
-            @RequestParam(value = "action", required = false) String action,
-            @RequestParam(value = "entityType", required = false) String entityType,
-            @RequestParam(value = "limit", defaultValue = "100") int limit,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        requireAdmin(user);
-        int safeLimit = limit < 1 ? 100 : Math.min(limit, 500);
-        model.addAttribute("auditLogs", auditLogRepository.search(actorId, action, entityType, safeLimit));
-        model.addAttribute("actorId", actorId);
-        model.addAttribute("action", action);
-        model.addAttribute("entityType", entityType);
-        model.addAttribute("limit", safeLimit);
-        model.addAttribute("availableActions", auditLogRepository.listActions());
-        return "audit/list";
-    }
-
     @RequestMapping(value = "/users/new", method = RequestMethod.GET)
     public String userNew(HttpSession session, Model model) {
         AuthenticatedUser user = requireUser(session);
@@ -1067,11 +1038,9 @@ public class ModuleWebController {
             requireAdmin(user);
             validateCreateUser(username, password, confirmPassword, fullName, email, roles);
             long id = userAdminRepository.createUser(username, password, fullName, email);
-            auditLogService.append(user, "USER_CREATED", "USER", id, auditLogService.jsonTwoPairs("username", username, "email", email));
             for (String role : roles) {
                 String normalizedRole = role.trim().toUpperCase();
                 userAdminRepository.addRole(id, normalizedRole);
-                auditLogService.append(user, "USER_ROLE_ASSIGNED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
             }
             notificationService.notifyUser(id, "ACCOUNT_CREATED", "Your MangaFlow account has been created.", 0, null);
             return "redirect:/main/users?created=" + id + "&username=" + username.trim();
@@ -1101,7 +1070,6 @@ public class ModuleWebController {
         try {
             requireAdmin(user);
             userAdminRepository.updateUser(id, fullName, email);
-            auditLogService.append(user, "USER_UPDATED", "USER", id, auditLogService.jsonTwoPairs("fullName", fullName, "email", email));
             return "redirect:/main/users";
         } catch (RuntimeException ex) {
             model.addAttribute("editing", true);
@@ -1124,7 +1092,6 @@ public class ModuleWebController {
             requireAdmin(user);
             String normalizedStatus = status.trim().toUpperCase();
             userAdminRepository.updateStatus(id, normalizedStatus);
-            auditLogService.append(user, "USER_STATUS_CHANGED", "USER", id, auditLogService.jsonPair("status", normalizedStatus));
             notificationService.notifyUser(id, "ACCOUNT_STATUS_CHANGED", "Your account status changed to " + normalizedStatus + ".", 0, null);
             return "redirect:/main/users";
         } catch (RuntimeException ex) {
@@ -1153,7 +1120,6 @@ public class ModuleWebController {
             for (String normalizedRole : requestedRoles) {
                 userAdminRepository.addRole(id, normalizedRole);
                 if (!currentRoles.contains(normalizedRole)) {
-                    auditLogService.append(user, "USER_ROLE_ASSIGNED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
                     notificationService.notifyUser(id, "ROLE_ASSIGNED", "Role " + normalizedRole + " was assigned to your account.", 0, null);
                 }
             }
@@ -1178,7 +1144,6 @@ public class ModuleWebController {
             List<String> currentRoles = userAdminRepository.listRoles(id);
             userAdminRepository.removeRole(id, normalizedRole);
             if (currentRoles.contains(normalizedRole)) {
-                auditLogService.append(user, "USER_ROLE_REMOVED", "USER", id, auditLogService.jsonPair("role", normalizedRole));
                 notificationService.notifyUser(id, "ROLE_REMOVED", "Role " + normalizedRole + " was removed from your account.", 0, null);
             }
             return "redirect:/main/users";

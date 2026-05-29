@@ -114,10 +114,13 @@ public class RankingRepository {
 
         String periodStatusSql = "SELECT status FROM RankingPeriod WHERE id = ?";
         String duplicateSql = "SELECT COUNT(1) FROM VoteEntry WHERE periodId = ? AND seriesId = ? AND boardMemberId = ?";
-        String insertSql = "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, revenue, submittedAt)"
-                + " VALUES (?, ?, ?, ?, ?, ?, GETDATE())";
-
         try ( Connection conn = dataSource.getConnection()) {
+            boolean hasRevenue = hasVoteEntryRevenueColumn(conn);
+            String insertSql = hasRevenue
+                    ? "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, revenue, submittedAt)"
+                    + " VALUES (?, ?, ?, ?, ?, ?, GETDATE())"
+                    : "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt)"
+                    + " VALUES (?, ?, ?, ?, ?, GETDATE())";
 
             // Check 1: period phải OPEN (BR-49)
             try ( PreparedStatement ps = conn.prepareStatement(periodStatusSql)) {
@@ -153,7 +156,9 @@ public class RankingRepository {
                 ps.setLong(3, boardMemberId);
                 ps.setInt(4, voteCount);
                 ps.setInt(5, readerCount);
-                ps.setBigDecimal(6, revenue);
+                if (hasRevenue) {
+                    ps.setBigDecimal(6, revenue);
+                }
                 ps.executeUpdate();
             }
 
@@ -177,10 +182,13 @@ public class RankingRepository {
     public void replaceCsvEntries(long periodId, long adminUserId, List<RankingCsvRow> rows) {
         String statusSql = "SELECT status FROM RankingPeriod WHERE id = ?";
         String deleteSql = "DELETE FROM VoteEntry WHERE periodId = ? AND boardMemberId = ?";
-        String insertSql = "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, revenue, submittedAt)"
-                + " VALUES (?, ?, ?, ?, ?, ?, GETDATE())";
-
         try ( Connection conn = dataSource.getConnection()) {
+            boolean hasRevenue = hasVoteEntryRevenueColumn(conn);
+            String insertSql = hasRevenue
+                    ? "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, revenue, submittedAt)"
+                    + " VALUES (?, ?, ?, ?, ?, ?, GETDATE())"
+                    : "INSERT INTO VoteEntry (periodId, seriesId, boardMemberId, voteCount, readerCount, submittedAt)"
+                    + " VALUES (?, ?, ?, ?, ?, GETDATE())";
             conn.setAutoCommit(false);
             try {
                 try ( PreparedStatement ps = conn.prepareStatement(statusSql)) {
@@ -208,7 +216,9 @@ public class RankingRepository {
                         ps.setLong(3, adminUserId);
                         ps.setInt(4, row.getVoteCount());
                         ps.setInt(5, row.getReaderCount());
-                        ps.setBigDecimal(6, row.getRevenue());
+                        if (hasRevenue) {
+                            ps.setBigDecimal(6, row.getRevenue());
+                        }
                         ps.addBatch();
                     }
                     ps.executeBatch();
@@ -230,23 +240,27 @@ public class RankingRepository {
     //  listEntries — không thay đổi                                       //
     // ------------------------------------------------------------------ //
     public List<Map<String, Object>> listEntries(long periodId) {
-        String sql = "SELECT id, periodId, seriesId, boardMemberId, voteCount, readerCount, revenue, submittedAt"
-                + " FROM VoteEntry WHERE periodId = ? ORDER BY id DESC";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-        try ( Connection conn = dataSource.getConnection();  PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, periodId);
-            try ( ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> row = new HashMap<String, Object>();
-                    row.put("id", rs.getLong("id"));
-                    row.put("periodId", rs.getLong("periodId"));
-                    row.put("seriesId", rs.getLong("seriesId"));
-                    row.put("boardMemberId", rs.getLong("boardMemberId"));
-                    row.put("voteCount", rs.getInt("voteCount"));
-                    row.put("readerCount", rs.getInt("readerCount"));
-                    row.put("revenue", rs.getBigDecimal("revenue"));
-                    row.put("submittedAt", rs.getTimestamp("submittedAt"));
-                    rows.add(row);
+        try ( Connection conn = dataSource.getConnection()) {
+            boolean hasRevenue = hasVoteEntryRevenueColumn(conn);
+            String sql = "SELECT id, periodId, seriesId, boardMemberId, voteCount, readerCount"
+                    + (hasRevenue ? ", revenue" : "")
+                    + ", submittedAt FROM VoteEntry WHERE periodId = ? ORDER BY id DESC";
+            try ( PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, periodId);
+                try ( ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> row = new HashMap<String, Object>();
+                        row.put("id", rs.getLong("id"));
+                        row.put("periodId", rs.getLong("periodId"));
+                        row.put("seriesId", rs.getLong("seriesId"));
+                        row.put("boardMemberId", rs.getLong("boardMemberId"));
+                        row.put("voteCount", rs.getInt("voteCount"));
+                        row.put("readerCount", rs.getInt("readerCount"));
+                        row.put("revenue", hasRevenue ? rs.getBigDecimal("revenue") : java.math.BigDecimal.ZERO);
+                        row.put("submittedAt", rs.getTimestamp("submittedAt"));
+                        rows.add(row);
+                    }
                 }
             }
         } catch (SQLException ex) {
@@ -507,23 +521,27 @@ public class RankingRepository {
     }
 
     public List<manga.dto.RevenueDataPoint> getRevenueHistory(long seriesId, long currentPeriodId, int limit) {
-        String sql = "SELECT TOP 3 rp.id AS periodId, rp.name AS periodName, COALESCE(SUM(ve.revenue), 0) AS totalRevenue "
-                + "FROM RankingPeriod rp "
-                + "LEFT JOIN VoteEntry ve ON ve.periodId = rp.id AND ve.seriesId = ? "
-                + "WHERE rp.status = 'CALCULATED' OR rp.id = ? "
-                + "GROUP BY rp.id, rp.name, rp.endDate "
-                + "ORDER BY rp.endDate DESC";
         List<manga.dto.RevenueDataPoint> points = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, seriesId);
-            ps.setLong(2, currentPeriodId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    points.add(new manga.dto.RevenueDataPoint(
-                        rs.getLong("periodId"),
-                        rs.getString("periodName"),
-                        rs.getBigDecimal("totalRevenue")
-                    ));
+        try (Connection conn = dataSource.getConnection()) {
+            boolean hasRevenue = hasVoteEntryRevenueColumn(conn);
+            String revenueExpression = hasRevenue ? "COALESCE(SUM(ve.revenue), 0)" : "CAST(0 AS DECIMAL(15,2))";
+            String sql = "SELECT TOP 3 rp.id AS periodId, rp.name AS periodName, " + revenueExpression + " AS totalRevenue "
+                    + "FROM RankingPeriod rp "
+                    + "LEFT JOIN VoteEntry ve ON ve.periodId = rp.id AND ve.seriesId = ? "
+                    + "WHERE rp.status = 'CALCULATED' OR rp.id = ? "
+                    + "GROUP BY rp.id, rp.name, rp.endDate "
+                    + "ORDER BY rp.endDate DESC";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, seriesId);
+                ps.setLong(2, currentPeriodId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        points.add(new manga.dto.RevenueDataPoint(
+                            rs.getLong("periodId"),
+                            rs.getString("periodName"),
+                            rs.getBigDecimal("totalRevenue")
+                        ));
+                    }
                 }
             }
         } catch (SQLException ex) {
@@ -575,5 +593,13 @@ public class RankingRepository {
         row.put("status", rs.getString("status"));
         row.put("calculatedAt", rs.getTimestamp("calculatedAt"));
         return row;
+    }
+
+    private boolean hasVoteEntryRevenueColumn(Connection conn) throws SQLException {
+        String sql = "SELECT COL_LENGTH('VoteEntry', 'revenue')";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() && rs.getObject(1) != null;
+        }
     }
 }

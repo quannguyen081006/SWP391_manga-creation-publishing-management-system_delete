@@ -49,7 +49,7 @@
     <c:if test="${not empty revenueHistory}">
     <div class="section-card" style="margin-top: 15px;">
         <h4 class="section-title">Revenue Trend (Last 3 Periods)</h4>
-        <div id="revenueChart" style="height: 300px; width: 100%;"></div>
+        <canvas id="revenueChart" style="height: 300px; width: 100%;"></canvas>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
             var revenueData = ${revenueHistory};
