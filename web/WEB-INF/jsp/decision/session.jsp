@@ -212,7 +212,7 @@
         <div class="decision-card status-${s.status}">
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
                 <div>
-                    <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #2c3e50;">Series #${s.seriesId}</h3>
+                    <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #2c3e50;">${s.seriesTitle} <span style="font-size: 14px; color: #95a5a6;">(#${s.seriesId})</span></h3>
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <span class="risk-badge HIGH">⚠️ High Risk</span>
                         <span style="color: #7f8c8d; font-size: 14px;">Opened: ${s.openedAt}</span>
@@ -244,7 +244,7 @@
     <div style="display: grid; grid-template-columns: repeat(4, auto); gap: 20px; margin-bottom: 20px;">
         <div>
             <div style="font-size: 12px; color: #95a5a6; text-transform: uppercase; letter-spacing: 0.5px;">Series</div>
-            <div style="font-weight: 600; color: #2c3e50;">#${sessionDetail.seriesId}</div>
+            <div style="font-weight: 600; color: #2c3e50;">${sessionDetail.seriesTitle} <span style="font-size: 14px; color: #95a5a6;">(#${sessionDetail.seriesId})</span></div>
         </div>
         <div>
             <div style="font-size: 12px; color: #95a5a6; text-transform: uppercase; letter-spacing: 0.5px;">Status</div>

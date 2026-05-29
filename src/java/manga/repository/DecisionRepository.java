@@ -26,9 +26,12 @@ public class DecisionRepository {
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         try (Connection conn = dataSource.getConnection()) {
             boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
-            String sql = "SELECT id, seriesId, rankingRecordId, status, result"
-                       + (hasSystemSuggestion ? ", systemSuggestion" : "")
-                       + ", openedAt, closedAt FROM DecisionSession ORDER BY openedAt DESC";
+            String sql = "SELECT ds.id, ds.seriesId, ds.rankingRecordId, ds.status, ds.result"
+                       + (hasSystemSuggestion ? ", ds.systemSuggestion" : "")
+                       + ", ds.openedAt, ds.closedAt, s.title AS seriesTitle"
+                       + " FROM DecisionSession ds"
+                       + " JOIN Series s ON s.id = ds.seriesId"
+                       + " ORDER BY ds.openedAt DESC";
             try (PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -51,10 +54,13 @@ public class DecisionRepository {
         try (Connection conn = dataSource.getConnection()) {
             boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
             boolean hasRevenueTrendSnapshot = hasDecisionSessionRevenueTrendSnapshotColumn(conn);
-            String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result"
-                              + (hasSystemSuggestion ? ", systemSuggestion" : "")
-                              + (hasRevenueTrendSnapshot ? ", revenueTrendSnapshot" : "")
-                              + ", openedAt, closedAt FROM DecisionSession WHERE id = ?";
+            String sessionSql = "SELECT ds.id, ds.seriesId, ds.rankingRecordId, ds.status, ds.result"
+                              + (hasSystemSuggestion ? ", ds.systemSuggestion" : "")
+                              + (hasRevenueTrendSnapshot ? ", ds.revenueTrendSnapshot" : "")
+                              + ", ds.openedAt, ds.closedAt, s.title AS seriesTitle"
+                              + " FROM DecisionSession ds"
+                              + " JOIN Series s ON s.id = ds.seriesId"
+                              + " WHERE ds.id = ?";
             Map<String, Object> session;
             try (PreparedStatement ps = conn.prepareStatement(sessionSql)) {
                 ps.setLong(1, sessionId);
@@ -396,6 +402,7 @@ public class DecisionRepository {
         row.put("systemSuggestion", hasSystemSuggestion ? rs.getString("systemSuggestion") : null);
         row.put("openedAt",        rs.getTimestamp("openedAt"));
         row.put("closedAt",        rs.getTimestamp("closedAt"));
+        row.put("seriesTitle",     rs.getString("seriesTitle"));
         if (hasRevenueTrendSnapshot) {
             row.put("revenueTrendSnapshot", rs.getString("revenueTrendSnapshot"));
         }
