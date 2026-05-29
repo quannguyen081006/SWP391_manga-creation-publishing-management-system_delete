@@ -295,7 +295,7 @@
                 <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/mangaka">👑 Mangaka Ranking</a>
                 
                 <c:if test="${p.status == 'OPEN'}">
-                    <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN') || sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">
+                    <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">
                         <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/upload" enctype="multipart/form-data" style="display:inline-block;">
                             <div class="upload-zone">
                                 <label class="upload-label">
@@ -314,23 +314,6 @@
                 </c:if>
             </div>
             
-            <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD') && p.status == 'OPEN'}">
-                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #ecf0f1;">
-                    <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/entries" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;">
-                        <div>
-                            <label>Series</label>
-                            <select name="seriesId" required style="width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px;">
-                                <c:forEach items="${seriesList}" var="s">
-                                    <option value="${s.id}">${s.title} (#${s.id})</option>
-                                </c:forEach>
-                            </select>
-                        </div>
-                        <div><label>Vote Count</label><input type="number" min="0" name="voteCount" required style="width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px;" /></div>
-                        <div><label>Reader Count</label><input type="number" min="1" name="readerCount" required style="width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px;" /></div>
-                        <div><button class="btn" type="submit">📝 Submit Entry</button></div>
-                    </form>
-                </div>
-            </c:if>
         </div>
     </c:forEach>
     
