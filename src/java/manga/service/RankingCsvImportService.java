@@ -49,8 +49,8 @@ public class RankingCsvImportService {
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), "UTF-8"))) {
             String header = reader.readLine();
-            if (header == null || !header.trim().equalsIgnoreCase("seriesId,seriesTitle,genre,voteCount,readerCount")) {
-                throw new BusinessRuleException("Invalid CSV header. Expected: seriesId,seriesTitle,genre,voteCount,readerCount");
+            if (header == null || !header.trim().replaceAll("\\s+", "").equalsIgnoreCase("series_id,series_name,mangaka_id,likes,reads,revenue")) {
+                throw new BusinessRuleException("Invalid CSV header. Expected: series_id,series_name,mangaka_id,likes,reads,revenue");
             }
 
             String line;
@@ -64,10 +64,14 @@ public class RankingCsvImportService {
 
                 RankingCsvRow row = parseRow(line, lineNumber);
                 if (!seenSeriesIds.add(row.getSeriesId())) {
-                    throw new BusinessRuleException("Line " + lineNumber + ": duplicate seriesId " + row.getSeriesId());
+                    throw new BusinessRuleException("Line " + lineNumber + ": duplicate series_id " + row.getSeriesId());
                 }
                 if (!rankingRepository.seriesExists(row.getSeriesId())) {
-                    throw new BusinessRuleException("Line " + lineNumber + ": seriesId " + row.getSeriesId() + " does not exist");
+                    throw new BusinessRuleException("Line " + lineNumber + ": series_id " + row.getSeriesId() + " does not exist");
+                }
+                long dbMangakaId = rankingRepository.getSeriesMangakaId(row.getSeriesId());
+                if (dbMangakaId != row.getMangakaId()) {
+                    throw new BusinessRuleException("Line " + lineNumber + ": mangaka_id " + row.getMangakaId() + " does not match series owner in database (which is " + dbMangakaId + ")");
                 }
                 rows.add(row);
             }
@@ -85,38 +89,42 @@ public class RankingCsvImportService {
 
     private RankingCsvRow parseRow(String line, int lineNumber) {
         String[] parts = line.split(",");
-        if (parts.length != 5) {
-            throw new BusinessRuleException("Line " + lineNumber + ": expected 5 columns");
+        if (parts.length != 6) {
+            throw new BusinessRuleException("Line " + lineNumber + ": expected 6 columns (series_id, series_name, mangaka_id, likes, reads, revenue)");
         }
 
         RankingCsvRow row = new RankingCsvRow();
         try {
             row.setSeriesId(Long.parseLong(parts[0].trim()));
             row.setSeriesTitle(parts[1].trim());
-            row.setGenre(parts[2].trim());
+            row.setMangakaId(Long.parseLong(parts[2].trim()));
             row.setVoteCount(Integer.parseInt(parts[3].trim()));
             row.setReaderCount(Integer.parseInt(parts[4].trim()));
+            row.setRevenue(new java.math.BigDecimal(parts[5].trim()));
         } catch (NumberFormatException ex) {
             throw new BusinessRuleException("Line " + lineNumber + ": invalid numeric value");
         }
 
         if (row.getSeriesId() < 0) {
-            throw new BusinessRuleException("Line " + lineNumber + ": seriesId cannot be negative");
+            throw new BusinessRuleException("Line " + lineNumber + ": series_id cannot be negative");
         }
         if (row.getSeriesTitle().length() == 0) {
-            throw new BusinessRuleException("Line " + lineNumber + ": seriesTitle is required");
+            throw new BusinessRuleException("Line " + lineNumber + ": series_name is required");
         }
-        if (row.getGenre().length() == 0) {
-            throw new BusinessRuleException("Line " + lineNumber + ": genre is required");
+        if (row.getMangakaId() < 0) {
+            throw new BusinessRuleException("Line " + lineNumber + ": mangaka_id cannot be negative");
         }
         if (row.getVoteCount() < 0) {
-            throw new BusinessRuleException("Line " + lineNumber + ": voteCount cannot be negative");
+            throw new BusinessRuleException("Line " + lineNumber + ": likes cannot be negative");
         }
         if (row.getReaderCount() <= 0) {
-            throw new BusinessRuleException("Line " + lineNumber + ": readerCount must be greater than 0");
+            throw new BusinessRuleException("Line " + lineNumber + ": reads must be greater than 0");
         }
         if (row.getVoteCount() > row.getReaderCount()) {
-            throw new BusinessRuleException("Line " + lineNumber + ": voteCount cannot exceed readerCount");
+            throw new BusinessRuleException("Line " + lineNumber + ": likes cannot exceed reads");
+        }
+        if (row.getRevenue() == null || row.getRevenue().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new BusinessRuleException("Line " + lineNumber + ": revenue cannot be negative");
         }
         return row;
     }

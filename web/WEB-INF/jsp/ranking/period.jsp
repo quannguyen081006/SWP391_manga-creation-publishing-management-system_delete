@@ -39,7 +39,8 @@
                     <td>${p.startDate} - ${p.endDate}</td>
                     <td>${p.status}</td>
                     <td>
-                        <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/results">Results</a>
+                        <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/results">Series Ranking</a>
+                        <a class="btn small" href="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/mangaka">Mangaka Ranking</a>
                         <c:if test="${sessionScope.AUTH_USER.hasRole('ADMIN')}">
                             <c:if test="${p.status == 'OPEN'}">
                                 <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/upload" enctype="multipart/form-data" style="display:inline-block;">
@@ -49,9 +50,6 @@
                             </c:if>
                             <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/close" style="display:inline-block;">
                                 <button class="btn small" type="submit">Close</button>
-                            </form>
-                            <form method="post" action="${pageContext.request.contextPath}/main/ranking/periods/${p.id}/calculate" style="display:inline-block;">
-                                <button class="btn small" type="submit">Calculate</button>
                             </form>
                         </c:if>
                     </td>

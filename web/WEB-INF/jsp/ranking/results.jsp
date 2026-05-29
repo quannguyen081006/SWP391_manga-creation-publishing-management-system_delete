@@ -14,22 +14,30 @@
 <p class="page-sub">Period: ${period.name} (${period.status})</p>
 
 <div class="section-card">
-    <h3 class="section-title">Result Board</h3>
+    <h3 class="section-title">Series Ranking Snapshot</h3>
     <table class="data-table">
-        <thead><tr><th>Rank</th><th>Series ID</th><th>Score</th><th>Bottom 20%</th><th>Calculated</th></tr></thead>
+        <thead><tr><th>Rank</th><th>Series ID</th><th>Series Title</th><th>Engagement %</th><th>Total Likes</th><th>Total Reads</th><th>Bottom 20%</th><th>Calculated</th></tr></thead>
         <tbody>
             <c:forEach items="${results}" var="r">
-                <tr>
+                <tr class="${r.isBottomTwenty ? 'bottom-twenty' : ''}">
                     <td>${r.rankPosition}</td>
                     <td>${r.seriesId}</td>
-                    <td>${r.rankScore}</td>
-                    <td>${r.isBottomTwenty}</td>
+                    <td>${r.seriesTitle}</td>
+                    <td>${r.rankScore}%</td>
+                    <td>${r.totalLikes}</td>
+                    <td>${r.totalReads}</td>
+                    <td>${r.isBottomTwenty ? 'Yes' : 'No'}</td>
                     <td>${r.calculatedAt}</td>
                 </tr>
             </c:forEach>
-            <c:if test="${empty results}"><tr><td colspan="5">No results yet.</td></tr></c:if>
+            <c:if test="${empty results}"><tr><td colspan="8">No results yet. Close a period to generate ranking snapshot.</td></tr></c:if>
         </tbody>
     </table>
+    <style>
+        .bottom-twenty {
+            background-color: #fff3cd;
+        }
+    </style>
 </div>
 
 <div class="section-card">

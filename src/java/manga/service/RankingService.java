@@ -6,6 +6,7 @@ import manga.dto.SubmitVoteEntryRequest;
 import manga.enums.RankingPeriodStatus;
 import manga.model.AuthenticatedUser;
 import manga.repository.RankingRepository;
+import manga.repository.MangakaRankingRepository;
 import manga.service.NotificationService;
 import manga.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,12 @@ public class RankingService {
 
     @Autowired
     private RankingRepository rankingRepository;
+
+    @Autowired
+    private ClosePeriodPipelineService closePeriodPipelineService;
+
+    @Autowired
+    private MangakaRankingRepository mangakaRankingRepository;
 
     @Autowired
     private NotificationService notificationService;
@@ -71,32 +78,7 @@ public class RankingService {
     }
 
     public void closeRankingPeriod(long periodId, AuthenticatedUser user) {
-        // ADMIN only
-        if (!user.hasRole("ADMIN")) {
-            throw new BusinessRuleException("Only ADMIN can close ranking period");
-        }
-
-        // Validate period exists and is OPEN
-        Map<String, Object> period = rankingRepository.findPeriodById(periodId);
-        String status = (String) period.get("status");
-        if (!RankingPeriodStatus.OPEN.name().equals(status)) {
-            throw new BusinessRuleException("Only OPEN period can be closed (BR-57)");
-        }
-
-        rankingRepository.closePeriod(periodId);
-
-        // Audit log
-        auditLogService.append(user, "CLOSE_RANKING_PERIOD", "RANKING_PERIOD", periodId, 
-            "Closed ranking period");
-
-        // Notify Editorial Board
-        notificationService.notifyUser(
-            user.getId(),
-            "RANKING_PERIOD_CLOSED",
-            "Ranking period is now closed. Vote submissions are no longer accepted.",
-            periodId,
-            "RANKING_PERIOD"
-        );
+        closePeriodPipelineService.executePipeline(periodId, user);
     }
 
     public void submitVoteEntry(long periodId, SubmitVoteEntryRequest request, AuthenticatedUser user) {
@@ -127,9 +109,13 @@ public class RankingService {
             throw new BusinessRuleException("voteCount cannot exceed readerCount (BR-50)");
         }
 
+        if (request.getRevenue() == null || request.getRevenue().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new BusinessRuleException("revenue cannot be negative");
+        }
+
         // Submit entry (repository handles duplicate check BR-54)
         rankingRepository.submitEntry(periodId, request.getSeriesId(), user.getId(), 
-            request.getVoteCount(), request.getReaderCount());
+            request.getVoteCount(), request.getReaderCount(), request.getRevenue());
 
         // Audit log
         auditLogService.append(user, "SUBMIT_VOTE_ENTRY", "VOTE_ENTRY", periodId, 
@@ -138,31 +124,16 @@ public class RankingService {
 
     @Transactional
     public void calculateRanking(long periodId, AuthenticatedUser user) {
-        // ADMIN only
-        if (!user.hasRole("ADMIN")) {
-            throw new BusinessRuleException("Only ADMIN can trigger ranking calculation");
-        }
-
-        // Validate period exists and is CLOSED (BR-57)
-        Map<String, Object> period = rankingRepository.findPeriodById(periodId);
-        String status = (String) period.get("status");
-        if (!RankingPeriodStatus.CLOSED.name().equals(status)) {
-            throw new BusinessRuleException("Only CLOSED period can be calculated (BR-57)");
-        }
-
-        // Calculate ranking (repository handles BR-56, BR-58, bottom 20% logic)
-        rankingRepository.calculatePeriod(periodId);
-
-        // Audit log
-        auditLogService.append(user, "CALCULATE_RANKING", "RANKING_PERIOD", periodId, 
-            "Calculated ranking results");
-
-        // Notification is handled within repository's transaction
+        throw new BusinessRuleException("Use close period to trigger pipeline");
     }
 
     public List<Map<String, Object>> getRankingResults(long periodId, AuthenticatedUser user) {
         // Any authenticated user can view results
         return rankingRepository.results(periodId);
+    }
+
+    public List<Map<String, Object>> getMangakaRanking(long periodId, AuthenticatedUser user) {
+        return mangakaRankingRepository.findByPeriodId(periodId);
     }
 
     public List<Map<String, Object>> listVoteEntries(long periodId, AuthenticatedUser user) {

@@ -43,7 +43,55 @@
         <span>Series: ${sessionDetail.seriesId}</span>
         <span>Status: ${sessionDetail.status}</span>
         <span>Result: ${sessionDetail.result}</span>
+        <span>System Suggestion: ${sessionDetail.systemSuggestion}</span>
     </div>
+
+    <c:if test="${not empty revenueHistory}">
+    <div class="section-card" style="margin-top: 15px;">
+        <h4 class="section-title">Revenue Trend (Last 3 Periods)</h4>
+        <div id="revenueChart" style="height: 300px; width: 100%;"></div>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            var revenueData = ${revenueHistory};
+            var labels = revenueData.map(function(d) { return d.periodName; });
+            var revenues = revenueData.map(function(d) { return d.revenue; });
+
+            var ctx = document.getElementById('revenueChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Revenue',
+                        data: revenues,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Revenue'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Period'
+                            }
+                        }
+                    }
+                }
+            });
+        </script>
+    </div>
+    </c:if>
 
     <c:if test="${sessionScope.AUTH_USER.hasRole('EDITORIAL_BOARD')}">
         <form method="post" action="${pageContext.request.contextPath}/main/decisions/${sessionDetail.id}/votes" class="decision-vote-form">

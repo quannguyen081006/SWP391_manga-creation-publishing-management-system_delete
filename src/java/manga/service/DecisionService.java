@@ -85,7 +85,9 @@ public class DecisionService {
         // Note: This check would be implemented in repository
 
         // Create session (repository handles creation)
-        long sessionId = decisionRepository.createSession(request.getSeriesId(), request.getRankingRecordId());
+        // Note: systemSuggestion is null here since this is manual session creation
+        // The pipeline auto-generates suggestions for bottom 20% series
+        long sessionId = decisionRepository.createSession(request.getSeriesId(), request.getRankingRecordId(), null);
 
         // Audit log (BR-67)
         auditLogService.append(user, "DECISION_SESSION_OPENED", "DECISION_SESSION", sessionId, 

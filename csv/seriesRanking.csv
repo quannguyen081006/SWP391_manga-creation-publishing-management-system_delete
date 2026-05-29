@@ -1,5 +1,5 @@
-seriesId,seriesTitle,genre,voteCount,readerCount
-0,Shadows of Edo,Action,9200,10000
-1,Celestial Kitchen,Fantasy,8700,10000
-2,Neon Lotus High,Drama,7600,10000
-3,Shadows of Tokyo,Thriller,4100,10000
+series_id,series_name,mangaka_id,likes,reads,revenue
+0,Shadows of Edo,1,1200,5000,3200
+1,Celestial Kitchen,12,800,4000,1500
+2,Neon Lotus High,13,1500,6000,5000
+3,Shadows of Tokyo,12,300,2500,900

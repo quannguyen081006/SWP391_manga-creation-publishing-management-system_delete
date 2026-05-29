@@ -23,7 +23,7 @@ public class DecisionRepository {
     //  listSessions — không thay đổi                                      //
     // ------------------------------------------------------------------ //
     public List<Map<String, Object>> listSessions() {
-        String sql = "SELECT id, seriesId, rankingRecordId, status, result, openedAt, closedAt"
+        String sql = "SELECT id, seriesId, rankingRecordId, status, result, systemSuggestion, openedAt, closedAt"
                    + " FROM DecisionSession ORDER BY openedAt DESC";
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         try (Connection conn = dataSource.getConnection();
@@ -42,7 +42,7 @@ public class DecisionRepository {
     //  getSessionDetail — không thay đổi                                  //
     // ------------------------------------------------------------------ //
     public Map<String, Object> getSessionDetail(long sessionId) {
-        String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result, openedAt, closedAt"
+        String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result, systemSuggestion, openedAt, closedAt"
                           + " FROM DecisionSession WHERE id = ?";
         String votesSql   = "SELECT id, sessionId, voterId, decision, justification, votedAt"
                           + " FROM DecisionVote WHERE sessionId = ? ORDER BY votedAt DESC";
@@ -275,13 +275,14 @@ public class DecisionRepository {
     // ------------------------------------------------------------------ //
     //  createSession — create new OPEN decision session                    //
     // ------------------------------------------------------------------ //
-    public long createSession(long seriesId, long rankingRecordId) {
-        String sql = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt) VALUES (?, ?, 'OPEN', GETDATE())";
+    public long createSession(long seriesId, long rankingRecordId, String systemSuggestion) {
+        String sql = "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, systemSuggestion, openedAt) VALUES (?, ?, 'OPEN', ?, GETDATE())";
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 ps.setLong(1, seriesId);
                 ps.setLong(2, rankingRecordId);
+                ps.setString(3, systemSuggestion);
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -354,6 +355,7 @@ public class DecisionRepository {
         row.put("rankingRecordId", rs.getLong("rankingRecordId"));
         row.put("status",          rs.getString("status"));
         row.put("result",          rs.getString("result"));
+        row.put("systemSuggestion", rs.getString("systemSuggestion"));
         row.put("openedAt",        rs.getTimestamp("openedAt"));
         row.put("closedAt",        rs.getTimestamp("closedAt"));
         return row;

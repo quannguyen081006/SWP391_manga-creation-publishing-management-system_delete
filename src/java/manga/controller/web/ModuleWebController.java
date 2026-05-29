@@ -20,6 +20,8 @@ import manga.service.ManuscriptService;
 import manga.service.NotificationService;
 import manga.service.ProposalService;
 import manga.service.RankingCsvImportService;
+import manga.service.RankingService;
+import manga.dto.SubmitVoteEntryRequest;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -91,6 +93,9 @@ public class ModuleWebController {
 
     @Autowired
     private RankingCsvImportService rankingCsvImportService;
+
+    @Autowired
+    private RankingService rankingService;
 
     @RequestMapping(value = "/proposals/{id}/edit", method = RequestMethod.GET)
     public String proposalEditPage(@PathVariable("id") long id, HttpSession session, Model model) {
@@ -848,21 +853,7 @@ public class ModuleWebController {
         AuthenticatedUser user = requireUser(session);
         try {
             requireAdmin(user);
-            rankingRepository.closePeriod(id);
-            return "redirect:/main/ranking/periods";
-        } catch (RuntimeException ex) {
-            rankingPeriods(session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "ranking/period";
-        }
-    }
-
-    @RequestMapping(value = "/ranking/periods/{id}/calculate", method = RequestMethod.POST)
-    public String rankingCalculate(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            requireAdmin(user);
-            rankingRepository.calculatePeriod(id);
+            rankingService.closeRankingPeriod(id, user);
             return "redirect:/main/ranking/periods/" + id + "/results";
         } catch (RuntimeException ex) {
             rankingPeriods(session, model);
@@ -871,6 +862,7 @@ public class ModuleWebController {
         }
     }
 
+
     @RequestMapping(value = "/ranking/periods/{id}/entries", method = RequestMethod.POST)
     public String rankingSubmitEntry(
             @PathVariable("id") long id,
@@ -878,13 +870,19 @@ public class ModuleWebController {
             @RequestParam("seriesId") long seriesId,
             @RequestParam("voteCount") int voteCount,
             @RequestParam("readerCount") int readerCount,
+            @RequestParam("revenue") java.math.BigDecimal revenue,
             Model model) {
         AuthenticatedUser user = requireUser(session);
         try {
             if (!user.hasRole("EDITORIAL_BOARD")) {
                 throw new IllegalArgumentException("Only EDITORIAL_BOARD can submit entries");
             }
-            rankingRepository.submitEntry(id, seriesId, user.getId(), voteCount, readerCount);
+            SubmitVoteEntryRequest req = new SubmitVoteEntryRequest();
+            req.setSeriesId(seriesId);
+            req.setVoteCount(voteCount);
+            req.setReaderCount(readerCount);
+            req.setRevenue(revenue);
+            rankingService.submitVoteEntry(id, req, user);
             return "redirect:/main/ranking/periods";
         } catch (RuntimeException ex) {
             rankingPeriods(session, model);
@@ -900,6 +898,14 @@ public class ModuleWebController {
         model.addAttribute("results", rankingRepository.results(id));
         model.addAttribute("entries", rankingRepository.listEntries(id));
         return "ranking/results";
+    }
+
+    @RequestMapping(value = "/ranking/periods/{id}/mangaka", method = RequestMethod.GET)
+    public String rankingMangaka(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        model.addAttribute("period", rankingRepository.findPeriodById(id));
+        model.addAttribute("mangakaRanking", rankingService.getMangakaRanking(id, user));
+        return "ranking/mangaka-ranking";
     }
 
     @RequestMapping(value = "/decisions", method = RequestMethod.GET)
@@ -918,7 +924,42 @@ public class ModuleWebController {
         if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
             throw new IllegalArgumentException("Only ADMIN/EDITORIAL_BOARD can view decision detail");
         }
-        model.addAttribute("sessionDetail", decisionRepository.getSessionDetail(id));
+        
+        Map<String, Object> sessionDetail = decisionRepository.getSessionDetail(id);
+        model.addAttribute("sessionDetail", sessionDetail);
+        
+        if (sessionDetail != null) {
+            long seriesId = (Long) sessionDetail.get("seriesId");
+            long rankingRecordId = (Long) sessionDetail.get("rankingRecordId");
+            long periodId = rankingRepository.getPeriodIdByRankingRecordId(rankingRecordId);
+            
+            if (periodId != -1) {
+                List<manga.dto.RevenueDataPoint> history = rankingRepository.getRevenueHistory(seriesId, periodId, 3);
+                String revenueHistoryJson = "[]";
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    revenueHistoryJson = mapper.writeValueAsString(history);
+                } catch (Exception ex) {
+                    // Ignore
+                }
+                model.addAttribute("revenueHistory", revenueHistoryJson);
+            }
+            
+            // Check if user has voted
+            boolean hasVoted = false;
+            List<Map<String, Object>> votes = (List<Map<String, Object>>) sessionDetail.get("votes");
+            if (votes != null) {
+                for (Map<String, Object> vote : votes) {
+                    Long voterId = (Long) vote.get("voterId");
+                    if (voterId != null && voterId == user.getId()) {
+                        hasVoted = true;
+                        break;
+                    }
+                }
+            }
+            model.addAttribute("hasVoted", hasVoted);
+        }
+        
         return "decision/session";
     }
 

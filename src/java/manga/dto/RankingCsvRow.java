@@ -1,11 +1,15 @@
 package manga.dto;
 
+import java.math.BigDecimal;
+
 public class RankingCsvRow {
     private long seriesId;
     private String seriesTitle;
     private String genre;
     private int voteCount;
     private int readerCount;
+    private long mangakaId;
+    private BigDecimal revenue;
 
     public long getSeriesId() {
         return seriesId;
@@ -46,4 +50,21 @@ public class RankingCsvRow {
     public void setReaderCount(int readerCount) {
         this.readerCount = readerCount;
     }
+
+    public long getMangakaId() {
+        return mangakaId;
+    }
+
+    public void setMangakaId(long mangakaId) {
+        this.mangakaId = mangakaId;
+    }
+
+    public BigDecimal getRevenue() {
+        return revenue;
+    }
+
+    public void setRevenue(BigDecimal revenue) {
+        this.revenue = revenue;
+    }
 }
+

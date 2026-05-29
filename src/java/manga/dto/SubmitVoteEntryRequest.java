@@ -1,9 +1,12 @@
 package manga.dto;
 
+import java.math.BigDecimal;
+
 public class SubmitVoteEntryRequest {
     private long seriesId;
     private int voteCount;
     private int readerCount;
+    private BigDecimal revenue;
 
     public long getSeriesId() {
         return seriesId;
@@ -28,4 +31,13 @@ public class SubmitVoteEntryRequest {
     public void setReaderCount(int readerCount) {
         this.readerCount = readerCount;
     }
+
+    public BigDecimal getRevenue() {
+        return revenue;
+    }
+
+    public void setRevenue(BigDecimal revenue) {
+        this.revenue = revenue;
+    }
 }
+
