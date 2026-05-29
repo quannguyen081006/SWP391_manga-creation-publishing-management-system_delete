@@ -49,46 +49,61 @@
     <c:if test="${not empty revenueHistory}">
     <div class="section-card" style="margin-top: 15px;">
         <h4 class="section-title">Revenue Trend (Last 3 Periods)</h4>
-        <canvas id="revenueChart" style="height: 300px; width: 100%;"></canvas>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <div id="revenueChart" style="height: 300px; width: 100%;"></div>
         <script>
-            var revenueData = ${revenueHistory};
-            var labels = revenueData.map(function(d) { return d.periodName; });
-            var revenues = revenueData.map(function(d) { return d.revenue; });
-
-            var ctx = document.getElementById('revenueChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Revenue',
-                        data: revenues,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Revenue'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Period'
-                            }
-                        }
-                    }
+            var revenueData = JSON.parse('${revenueHistory}');
+            if (revenueData && revenueData.length > 0) {
+                var labels = revenueData.map(function(d) { return d.periodName; });
+                var revenues = revenueData.map(function(d) { return d.revenue; });
+                
+                // Calculate SVG dimensions and scales
+                var width = 600;
+                var height = 300;
+                var padding = 50;
+                var maxRevenue = Math.max.apply(Math, revenues);
+                var minRevenue = Math.min.apply(Math, revenues);
+                var yRange = maxRevenue - minRevenue || 1;
+                
+                // Generate SVG points
+                var points = [];
+                for (var i = 0; i < revenues.length; i++) {
+                    var x = padding + (i * (width - 2 * padding) / (revenues.length - 1 || 1));
+                    var y = height - padding - ((revenues[i] - minRevenue) / yRange) * (height - 2 * padding);
+                    points.push(x + ',' + y);
                 }
-            });
+                
+                // Generate SVG
+                var svg = '<svg width="100%" height="100%" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">';
+                
+                // Draw axes
+                svg += '<line x1="' + padding + '" y1="' + padding + '" x2="' + padding + '" y2="' + (height - padding) + '" stroke="#333" stroke-width="1"/>';
+                svg += '<line x1="' + padding + '" y1="' + (height - padding) + '" x2="' + (width - padding) + '" y2="' + (height - padding) + '" stroke="#333" stroke-width="1"/>';
+                
+                // Draw line
+                if (points.length > 1) {
+                    svg += '<polyline points="' + points.join(' ') + '" fill="none" stroke="rgb(75, 192, 192)" stroke-width="2"/>';
+                }
+                
+                // Draw points
+                for (var i = 0; i < revenues.length; i++) {
+                    var x = padding + (i * (width - 2 * padding) / (revenues.length - 1 || 1));
+                    var y = height - padding - ((revenues[i] - minRevenue) / yRange) * (height - 2 * padding);
+                    svg += '<circle cx="' + x + '" cy="' + y + '" r="4" fill="rgb(75, 192, 192)"/>';
+                    
+                    // Add labels
+                    svg += '<text x="' + x + '" y="' + (height - padding + 20) + '" text-anchor="middle" font-size="12">' + labels[i] + '</text>';
+                    svg += '<text x="' + (padding - 10) + '" y="' + (y + 4) + '" text-anchor="end" font-size="12">' + revenues[i] + '</text>';
+                }
+                
+                // Add axis labels
+                svg += '<text x="' + (width / 2) + '" y="' + (height - 10) + '" text-anchor="middle" font-size="14" font-weight="bold">Period</text>';
+                svg += '<text x="15" y="' + (height / 2) + '" text-anchor="middle" font-size="14" font-weight="bold" transform="rotate(-90, 15, ' + (height / 2) + ')">Revenue</text>';
+                
+                svg += '</svg>';
+                document.getElementById('revenueChart').innerHTML = svg;
+            } else {
+                document.getElementById('revenueChart').innerHTML = '<p style="text-align:center; padding: 50px;">No revenue data available</p>';
+            }
         </script>
     </div>
     </c:if>

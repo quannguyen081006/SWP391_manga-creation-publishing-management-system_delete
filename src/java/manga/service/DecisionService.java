@@ -79,7 +79,8 @@ public class DecisionService {
         // Create session (repository handles creation)
         // Note: systemSuggestion is null here since this is manual session creation
         // The pipeline auto-generates suggestions for bottom 20% series
-        long sessionId = decisionRepository.createSession(request.getSeriesId(), request.getRankingRecordId(), null);
+        // revenueTrendSnapshot is null for manual sessions
+        long sessionId = decisionRepository.createSession(request.getSeriesId(), request.getRankingRecordId(), null, null);
 
         return sessionId;
     }

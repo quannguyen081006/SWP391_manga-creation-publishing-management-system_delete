@@ -256,10 +256,24 @@ public class ClosePeriodPipelineService {
             }
         }
 
-        // Batch fetch revenue history for all series at once
+        // Defensive logging: report if no bottom 20% series found
         if (seriesIds.isEmpty()) {
+            // Check if any RankingRecord exists for this period
+            String checkSql = "SELECT COUNT(*) FROM RankingRecord WHERE periodId = ?";
+            try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
+                ps.setLong(1, periodId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        int totalRecords = rs.getInt(1);
+                        // Log: No bottom 20% series found. Total RankingRecord count: totalRecords
+                    }
+                }
+            }
             return; // No series to process
         }
+
+        // Log number of series to process
+        // Log: Processing seriesIds.size() bottom 20% series for decision sessions
 
         // Build IN clause for series IDs
         StringBuilder inClause = new StringBuilder();
@@ -311,9 +325,26 @@ public class ClosePeriodPipelineService {
             java.util.Collections.reverse(revenueTrend);
             String suggestion = calculateSystemSuggestion(revenueTrend);
 
-            // Create DecisionSession
-            decisionRepository.createSession(seriesId, rankingRecordId, suggestion);
+            // Serialize revenue trend to JSON for snapshot storage (manual serialization)
+            StringBuilder jsonBuilder = new StringBuilder("[");
+            for (int j = 0; j < revenueTrend.size(); j++) {
+                if (j > 0) jsonBuilder.append(",");
+                RevenueDataPoint point = revenueTrend.get(j);
+                jsonBuilder.append("{\"periodId\":").append(point.getPeriodId())
+                           .append(",\"periodName\":\"").append(escapeJson(point.getPeriodName())).append("\"")
+                           .append(",\"revenue\":").append(point.getRevenue()).append("}");
+            }
+            jsonBuilder.append("]");
+            String revenueTrendJson = jsonBuilder.toString();
+
+            // Create DecisionSession with revenue trend snapshot
+            decisionRepository.createSession(seriesId, rankingRecordId, suggestion, revenueTrendJson);
         }
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String calculateSystemSuggestion(List<RevenueDataPoint> trend) {

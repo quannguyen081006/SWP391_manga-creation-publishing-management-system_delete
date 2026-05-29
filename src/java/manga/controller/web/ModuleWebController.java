@@ -920,20 +920,13 @@ public class ModuleWebController {
         model.addAttribute("sessionDetail", sessionDetail);
         
         if (sessionDetail != null) {
-            long seriesId = (Long) sessionDetail.get("seriesId");
-            long rankingRecordId = (Long) sessionDetail.get("rankingRecordId");
-            long periodId = rankingRepository.getPeriodIdByRankingRecordId(rankingRecordId);
-            
-            if (periodId != -1) {
-                List<manga.dto.RevenueDataPoint> history = rankingRepository.getRevenueHistory(seriesId, periodId, 3);
-                String revenueHistoryJson = "[]";
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    revenueHistoryJson = mapper.writeValueAsString(history);
-                } catch (Exception ex) {
-                    // Ignore
-                }
-                model.addAttribute("revenueHistory", revenueHistoryJson);
+            // Read revenue trend snapshot from DecisionSession (calculated during CLOSE PERIOD)
+            // This eliminates runtime revenue aggregation on page load
+            String revenueTrendSnapshot = (String) sessionDetail.get("revenueTrendSnapshot");
+            if (revenueTrendSnapshot != null && !revenueTrendSnapshot.isEmpty()) {
+                model.addAttribute("revenueHistory", revenueTrendSnapshot);
+            } else {
+                model.addAttribute("revenueHistory", "[]");
             }
             
             // Check if user has voted

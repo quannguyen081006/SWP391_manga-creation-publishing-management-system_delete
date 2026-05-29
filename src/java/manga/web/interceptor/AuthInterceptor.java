@@ -95,9 +95,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (path.startsWith("/main/manuscripts")) {
             return user.hasRole("ADMIN") || user.hasRole("MANGAKA") || user.hasRole("TANTOU_EDITOR");
         }
-        if (path.startsWith("/main/analytics")) {
-            return user.hasRole("ADMIN") || user.hasRole("EDITORIAL_BOARD") || user.hasRole("TANTOU_EDITOR");
-        }
         return true;
     }
 

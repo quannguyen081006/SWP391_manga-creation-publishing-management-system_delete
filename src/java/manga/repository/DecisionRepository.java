@@ -32,7 +32,7 @@ public class DecisionRepository {
             try (PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    rows.add(mapSession(rs, hasSystemSuggestion));
+                    rows.add(mapSession(rs, hasSystemSuggestion, false));
                 }
             }
         } catch (SQLException ex) {
@@ -50,8 +50,10 @@ public class DecisionRepository {
 
         try (Connection conn = dataSource.getConnection()) {
             boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
+            boolean hasRevenueTrendSnapshot = hasDecisionSessionRevenueTrendSnapshotColumn(conn);
             String sessionSql = "SELECT id, seriesId, rankingRecordId, status, result"
                               + (hasSystemSuggestion ? ", systemSuggestion" : "")
+                              + (hasRevenueTrendSnapshot ? ", revenueTrendSnapshot" : "")
                               + ", openedAt, closedAt FROM DecisionSession WHERE id = ?";
             Map<String, Object> session;
             try (PreparedStatement ps = conn.prepareStatement(sessionSql)) {
@@ -60,7 +62,7 @@ public class DecisionRepository {
                     if (!rs.next()) {
                         throw new IllegalArgumentException("Decision session not found");
                     }
-                    session = mapSession(rs, hasSystemSuggestion);
+                    session = mapSession(rs, hasSystemSuggestion, hasRevenueTrendSnapshot);
                 }
             }
 
@@ -280,18 +282,44 @@ public class DecisionRepository {
     // ------------------------------------------------------------------ //
     //  createSession — create new OPEN decision session                    //
     // ------------------------------------------------------------------ //
-    public long createSession(long seriesId, long rankingRecordId, String systemSuggestion) {
+    public long createSession(long seriesId, long rankingRecordId, String systemSuggestion, String revenueTrendSnapshot) {
         try (Connection conn = dataSource.getConnection()) {
             boolean hasSystemSuggestion = hasDecisionSessionSystemSuggestionColumn(conn);
-            String sql = hasSystemSuggestion
-                    ? "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, systemSuggestion, openedAt) VALUES (?, ?, 'OPEN', ?, GETDATE())"
-                    : "INSERT INTO DecisionSession (seriesId, rankingRecordId, status, openedAt) VALUES (?, ?, 'OPEN', GETDATE())";
+            boolean hasRevenueTrendSnapshot = hasDecisionSessionRevenueTrendSnapshotColumn(conn);
+            
+            StringBuilder sqlBuilder = new StringBuilder("INSERT INTO DecisionSession (seriesId, rankingRecordId, status");
+            List<Object> params = new ArrayList<>();
+            params.add(seriesId);
+            params.add(rankingRecordId);
+            
+            if (hasSystemSuggestion) {
+                sqlBuilder.append(", systemSuggestion");
+                params.add(systemSuggestion);
+            }
+            if (hasRevenueTrendSnapshot) {
+                sqlBuilder.append(", revenueTrendSnapshot");
+                params.add(revenueTrendSnapshot);
+            }
+            sqlBuilder.append(", openedAt) VALUES (?, ?, 'OPEN'");
+            
+            if (hasSystemSuggestion) {
+                sqlBuilder.append(", ?");
+            }
+            if (hasRevenueTrendSnapshot) {
+                sqlBuilder.append(", ?");
+            }
+            sqlBuilder.append(", GETDATE())");
+            
+            String sql = sqlBuilder.toString();
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setLong(1, seriesId);
-                ps.setLong(2, rankingRecordId);
-                if (hasSystemSuggestion) {
-                    ps.setString(3, systemSuggestion);
+                int paramIndex = 1;
+                for (Object param : params) {
+                    if (param instanceof Long) {
+                        ps.setLong(paramIndex++, (Long) param);
+                    } else if (param instanceof String) {
+                        ps.setString(paramIndex++, (String) param);
+                    }
                 }
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
@@ -358,7 +386,7 @@ public class DecisionRepository {
     // ------------------------------------------------------------------ //
     //  mapSession helper — không thay đổi                                 //
     // ------------------------------------------------------------------ //
-    private Map<String, Object> mapSession(ResultSet rs, boolean hasSystemSuggestion) throws SQLException {
+    private Map<String, Object> mapSession(ResultSet rs, boolean hasSystemSuggestion, boolean hasRevenueTrendSnapshot) throws SQLException {
         Map<String, Object> row = new HashMap<String, Object>();
         row.put("id",              rs.getLong("id"));
         row.put("seriesId",        rs.getLong("seriesId"));
@@ -368,11 +396,22 @@ public class DecisionRepository {
         row.put("systemSuggestion", hasSystemSuggestion ? rs.getString("systemSuggestion") : null);
         row.put("openedAt",        rs.getTimestamp("openedAt"));
         row.put("closedAt",        rs.getTimestamp("closedAt"));
+        if (hasRevenueTrendSnapshot) {
+            row.put("revenueTrendSnapshot", rs.getString("revenueTrendSnapshot"));
+        }
         return row;
     }
 
     private boolean hasDecisionSessionSystemSuggestionColumn(Connection conn) throws SQLException {
         String sql = "SELECT COL_LENGTH('DecisionSession', 'systemSuggestion')";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() && rs.getObject(1) != null;
+        }
+    }
+
+    private boolean hasDecisionSessionRevenueTrendSnapshotColumn(Connection conn) throws SQLException {
+        String sql = "SELECT COL_LENGTH('DecisionSession', 'revenueTrendSnapshot')";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             return rs.next() && rs.getObject(1) != null;

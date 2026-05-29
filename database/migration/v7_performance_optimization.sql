@@ -19,6 +19,14 @@ BEGIN
 END
 GO
 
+-- Add revenueTrendSnapshot column to DecisionSession for static chart rendering
+-- This eliminates runtime revenue aggregation on page load
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('DecisionSession') AND name = 'revenueTrendSnapshot')
+BEGIN
+    ALTER TABLE DecisionSession ADD revenueTrendSnapshot NVARCHAR(MAX) NULL;
+END
+GO
+
 -- Create indexes for ranking queries
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoteEntry_periodId_seriesId' AND object_id = OBJECT_ID('VoteEntry'))
 BEGIN
@@ -84,5 +92,13 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoteEntry_periodId' AN
 BEGIN
     CREATE NONCLUSTERED INDEX IX_VoteEntry_periodId 
     ON VoteEntry(periodId);
+END
+GO
+
+-- Create index for VoteEntry seriesId queries (for revenue history)
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoteEntry_seriesId' AND object_id = OBJECT_ID('VoteEntry'))
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_VoteEntry_seriesId 
+    ON VoteEntry(seriesId);
 END
 GO
