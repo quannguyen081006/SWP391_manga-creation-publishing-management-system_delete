@@ -12,6 +12,18 @@ public class AnnotationSummary {
     private String status;
     private String content;
     private Timestamp createdAt;
+    
+    // New fields for coordinate-based annotations
+    private Double xPercent;
+    private Double yPercent;
+    private Double widthPercent;
+    private Double heightPercent;
+    private String severity;
+    private Long parentAnnotationId;
+    private Timestamp resolvedAt;
+    private Long resolvedBy;
+    private Long manuscriptVersionId;
+    private Long manuscriptPageId;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -33,4 +45,26 @@ public class AnnotationSummary {
     public void setComment(String comment) { this.content = comment; }
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
+    
+    // New getters and setters
+    public Double getXPercent() { return xPercent; }
+    public void setXPercent(Double xPercent) { this.xPercent = xPercent; }
+    public Double getYPercent() { return yPercent; }
+    public void setYPercent(Double yPercent) { this.yPercent = yPercent; }
+    public Double getWidthPercent() { return widthPercent; }
+    public void setWidthPercent(Double widthPercent) { this.widthPercent = widthPercent; }
+    public Double getHeightPercent() { return heightPercent; }
+    public void setHeightPercent(Double heightPercent) { this.heightPercent = heightPercent; }
+    public String getSeverity() { return severity; }
+    public void setSeverity(String severity) { this.severity = severity; }
+    public Long getParentAnnotationId() { return parentAnnotationId; }
+    public void setParentAnnotationId(Long parentAnnotationId) { this.parentAnnotationId = parentAnnotationId; }
+    public Timestamp getResolvedAt() { return resolvedAt; }
+    public void setResolvedAt(Timestamp resolvedAt) { this.resolvedAt = resolvedAt; }
+    public Long getResolvedBy() { return resolvedBy; }
+    public void setResolvedBy(Long resolvedBy) { this.resolvedBy = resolvedBy; }
+    public Long getManuscriptVersionId() { return manuscriptVersionId; }
+    public void setManuscriptVersionId(Long manuscriptVersionId) { this.manuscriptVersionId = manuscriptVersionId; }
+    public Long getManuscriptPageId() { return manuscriptPageId; }
+    public void setManuscriptPageId(Long manuscriptPageId) { this.manuscriptPageId = manuscriptPageId; }
 }

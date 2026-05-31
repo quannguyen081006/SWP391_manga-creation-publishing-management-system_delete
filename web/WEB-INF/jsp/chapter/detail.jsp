@@ -197,6 +197,7 @@
 <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
     <button id="btnDelete" class="btn small" type="button" style="color:#ef4444;border-color:#fecaca;display:none;">Delete chapter</button>
     <button id="btnMarkDone" class="btn primary" type="button" style="display:none;">Submit for review</button>
+    <a id="btnManuscriptWorkspace" href="#" class="btn small" style="display:none;">📝 Manuscript Workspace</a>
 </div>
 
 <div class="chapter-workspace">
@@ -1046,6 +1047,17 @@
 
         document.getElementById('btnDelete').style.display = (owner && String(chapter.status || '').toUpperCase() === 'PLANNING') ? '' : 'none';
         document.getElementById('btnMarkDone').style.display = canSubmit ? '' : 'none';
+        
+        // Show manuscript workspace button for EDITORIAL_REVIEW status
+        var isEditorialReview = String(chapter.status || '').toUpperCase() === 'EDITORIAL_REVIEW';
+        var btnManuscriptWorkspace = document.getElementById('btnManuscriptWorkspace');
+        if (isEditorialReview) {
+            btnManuscriptWorkspace.style.display = '';
+            btnManuscriptWorkspace.href = '${pageContext.request.contextPath}/main/chapters/' + chapter.id + '/manuscript-workspace/create';
+        } else {
+            btnManuscriptWorkspace.style.display = 'none';
+        }
+        
         document.getElementById('pagesOwnerActions').style.display = owner ? 'flex' : 'none';
         document.getElementById('pagesOwnerActions').style.gap = '8px';
         document.getElementById('pagesHint').style.display = owner ? '' : 'none';

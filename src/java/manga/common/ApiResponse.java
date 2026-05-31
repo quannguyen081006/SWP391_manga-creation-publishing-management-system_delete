@@ -17,13 +17,24 @@ public class ApiResponse<T> {
         return response;
     }
 
-    public static <T> ApiResponse<T> fail(String message) {
+    public static <T> ApiResponse<T> success(T data) {
+        ApiResponse<T> response = new ApiResponse<T>();
+        response.setSuccess(true);
+        response.setData(data);
+        return response;
+    }
+
+    public static <T> ApiResponse<T> error(String message) {
         ApiResponse<T> response = new ApiResponse<T>();
         response.setSuccess(false);
         response.setMessage(message);
         response.setErrors(new ArrayList<String>());
         response.getErrors().add(message);
         return response;
+    }
+
+    public static <T> ApiResponse<T> fail(String message) {
+        return error(message);
     }
 
     public boolean isSuccess() {

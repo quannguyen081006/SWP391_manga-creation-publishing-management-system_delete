@@ -2,19 +2,17 @@ package manga.controller.web;
 
 import manga.model.AuthenticatedUser;
 import manga.model.ChapterSummary;
-import manga.model.ManuscriptSummary;
 import manga.model.Proposal;
 import manga.model.SeriesSummary;
 import manga.model.TaskSummary;
 import manga.repository.ChapterRepository;
 import manga.repository.DecisionRepository;
-import manga.repository.ManuscriptRepository;
 import manga.repository.PageTaskRepository;
 import manga.repository.ProductionRepository;
 import manga.repository.RankingRepository;
 import manga.repository.UserAdminRepository;
-import manga.service.AnnotationService;
-import manga.service.ManuscriptService;
+import manga.service.AnnotationServiceV2;
+import manga.service.ManuscriptVersionService;
 import manga.service.NotificationService;
 import manga.service.ProposalService;
 import manga.service.RankingCsvImportService;
@@ -48,8 +46,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RequestMapping("/main")
 public class ModuleWebController {
 
-    private static final long MAX_MANUSCRIPT_FILE_SIZE = ManuscriptService.MAX_MANUSCRIPT_FILE_SIZE;
-
     @Autowired
     private ProposalService proposalService;
 
@@ -62,14 +58,13 @@ public class ModuleWebController {
     @Autowired
     private PageTaskRepository pageTaskRepository;
 
+    // @Autowired
+    // private AnnotationService annotationService;
     @Autowired
-    private ManuscriptRepository manuscriptRepository;
+    private AnnotationServiceV2 annotationServiceV2;
 
     @Autowired
-    private ManuscriptService manuscriptService;
-
-    @Autowired
-    private AnnotationService annotationService;
+    private ManuscriptVersionService manuscriptVersionService;
 
     @Autowired
     private RankingRepository rankingRepository;
@@ -150,6 +145,7 @@ public class ModuleWebController {
     }
 
     private static class UploadInfo {
+
         private final String path;
         private final String originalName;
 
@@ -291,507 +287,6 @@ public class ModuleWebController {
         }
     }
 
-    @RequestMapping(value = "/manuscripts/{id}", method = RequestMethod.GET)
-    public String manuscriptDetail(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-        if (manuscript == null) {
-            throw new IllegalArgumentException("Manuscript not found");
-        }
-
-        long chapterId = manuscript.getChapterId();
-        long mangakaId = manuscriptRepository.getChapterMangaka(chapterId);
-        long tantouId = manuscriptRepository.getManuscriptTantou(id);
-        String status = manuscript.getStatus();
-        boolean isMangakaOwner = user.getId() == mangakaId;
-        boolean isAssignedTantou = user.getId() == tantouId;
-        boolean isUnderReview = "UNDER_REVIEW".equals(status);
-        boolean isRejected = "REJECTED".equals(status);
-        boolean isApproved = "APPROVED".equals(status);
-        boolean isDraft = "DRAFT".equals(status);
-        boolean isSubmitted = "SUBMITTED".equals(status);
-        boolean isRevisionRequired = "REVISION_REQUIRED".equals(status);
-
-        // Get version history
-        List<ManuscriptSummary> versionHistory = manuscriptRepository.listByChapter(chapterId);
-        boolean isCurrentVersion = !versionHistory.isEmpty() && versionHistory.get(0).getId() == manuscript.getId();
-        
-        // Check if there's an active review cycle (any manuscript in SUBMITTED or UNDER_REVIEW)
-        boolean hasActiveReviewCycle = versionHistory.stream()
-            .anyMatch(m -> "SUBMITTED".equals(m.getStatus()) || "UNDER_REVIEW".equals(m.getStatus()));
-
-        // Get chapter status for submit button validation
-        String chapterStatus = chapterRepository.getChapterStatus(chapterId);
-        
-        // Get series status for submit button validation
-        String seriesStatus = chapterRepository.getSeriesStatus(chapterId);
-
-        // Permission flags for JSP
-        model.addAttribute("manuscript", manuscript);
-        model.addAttribute("annotations", manuscriptRepository.listAnnotations(id));
-        model.addAttribute("versionHistory", versionHistory);
-        model.addAttribute("currentUser", user);
-        model.addAttribute("isMangakaOwner", isMangakaOwner);
-        model.addAttribute("isAssignedTantou", isAssignedTantou);
-        model.addAttribute("isUnderReview", isUnderReview);
-        model.addAttribute("isRejected", isRejected);
-        model.addAttribute("isApproved", isApproved);
-        model.addAttribute("isDraft", isDraft);
-        model.addAttribute("isSubmitted", isSubmitted);
-        model.addAttribute("isRevisionRequired", isRevisionRequired);
-        model.addAttribute("isCurrentVersion", isCurrentVersion);
-        model.addAttribute("hasActiveReviewCycle", hasActiveReviewCycle);
-        model.addAttribute("chapterStatus", chapterStatus);
-        model.addAttribute("seriesStatus", seriesStatus);
-        
-        // START REVIEW button: TANTOU_EDITOR assigned + SUBMITTED
-        model.addAttribute("canStartReview", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isSubmitted && isCurrentVersion);
-        
-        // Annotation button: TANTOU_EDITOR assigned + not approved
-        model.addAttribute("canAddAnnotation", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview && isCurrentVersion);
-        
-        // Approve/Reject buttons: TANTOU_EDITOR assigned + UNDER_REVIEW
-        model.addAttribute("canApproveReject", user.hasRole("TANTOU_EDITOR") && isAssignedTantou && isUnderReview && isCurrentVersion);
-        
-        // SUBMIT TO EDITOR button: MANGAKA owner + DRAFT/REJECTED + chapter COMPLETE + no active review cycle + series not CANCELLED
-        model.addAttribute("canSubmitToEditor", isMangakaOwner && isDraft && isCurrentVersion
-            && "COMPLETE".equals(chapterStatus) && !hasActiveReviewCycle && !"CANCELLED".equals(seriesStatus));
-        
-        // EDIT button: MANGAKA owner + DRAFT or REJECTED
-        model.addAttribute("canEdit", isMangakaOwner && isDraft && isCurrentVersion);
-        
-        // DELETE button: only current draft can be removed
-        model.addAttribute("canDelete", isMangakaOwner && isDraft && isCurrentVersion);
-        
-        // NEXT VERSION button: MANGAKA owner + latest version requires revision
-        model.addAttribute("canCreateNextVersion", isMangakaOwner && isRevisionRequired && isCurrentVersion);
-        
-        return "manuscript/detail";
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/review", method = RequestMethod.GET)
-    public String manuscriptReviewDeepLink(@PathVariable("id") long id, HttpSession session, Model model) {
-        return manuscriptDetail(id, session, model);
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/versions/{versionId}/review", method = RequestMethod.GET)
-    public String manuscriptVersionReviewDeepLink(
-            @PathVariable("id") long id,
-            @PathVariable("versionId") long versionId,
-            HttpSession session,
-            Model model) {
-        return manuscriptDetail(versionId, session, model);
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/approve", method = RequestMethod.POST)
-    public String manuscriptApprove(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
-                throw new IllegalArgumentException("Only assigned Tantou can approve");
-            }
-            manuscriptService.approveManuscript(id, new manga.dto.ApproveManuscriptRequest(), user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/reject", method = RequestMethod.POST)
-    public String manuscriptReject(
-            @PathVariable("id") long id,
-            @RequestParam("feedback") String feedback,
-            HttpSession session,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
-                throw new IllegalArgumentException("Only assigned Tantou can reject");
-            }
-            if (feedback == null || feedback.trim().isEmpty()) {
-                throw new IllegalArgumentException("Feedback is required for rejection (BR-40)");
-            }
-            manga.dto.RejectManuscriptRequest request = new manga.dto.RejectManuscriptRequest();
-            request.setFeedback(feedback.trim());
-            manuscriptService.rejectManuscript(id, request, user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/request-revision", method = RequestMethod.POST)
-    public String manuscriptRequestRevision(
-            @PathVariable("id") long id,
-            @RequestParam("feedback") String feedback,
-            HttpSession session,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can request revision");
-            manuscriptService.requestRevision(id, feedback, user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/annotate", method = RequestMethod.POST)
-    public String manuscriptAnnotate(
-            @PathVariable("id") long id,
-            HttpSession session,
-            @RequestParam("pageNumber") int pageNumber,
-            @RequestParam(value = "category", required = false) String category,
-            @RequestParam(value = "status", required = false) String status,
-            @RequestParam("content") String content,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
-                throw new IllegalArgumentException("Only assigned Tantou can annotate");
-            }
-            manga.dto.AddAnnotationRequest request = new manga.dto.AddAnnotationRequest();
-            request.setPageNumber(pageNumber);
-            request.setCategory(category);
-            request.setStatus(status);
-            request.setContent(content);
-            annotationService.addAnnotation(id, request, user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/start-review", method = RequestMethod.POST)
-    public String manuscriptStartReview(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            requireRole(user, "TANTOU_EDITOR", "Only TANTOU_EDITOR can start review");
-            if (manuscriptRepository.getManuscriptTantou(id) != user.getId()) {
-                throw new IllegalArgumentException("Only assigned Tantou can start review");
-            }
-            manuscriptService.startReview(id, user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/submit", method = RequestMethod.POST)
-    public String manuscriptSubmitToEditor(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            requireRole(user, "MANGAKA", "Only MANGAKA can submit manuscript");
-            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-            if (manuscript == null) {
-                throw new IllegalArgumentException("Manuscript not found");
-            }
-            long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
-            if (user.getId() != mangakaId) {
-                throw new IllegalArgumentException("Only owner can submit manuscript");
-            }
-            manuscriptService.submitDraft(id, user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/edit", method = RequestMethod.GET)
-    public String manuscriptEdit(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-        if (manuscript == null) {
-            throw new IllegalArgumentException("Manuscript not found");
-        }
-        long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
-        if (user.getId() != mangakaId) {
-            throw new IllegalArgumentException("Only owner can edit manuscript");
-        }
-        String status = manuscript.getStatus();
-        if (!"DRAFT".equals(status)) {
-            throw new IllegalArgumentException("Only DRAFT manuscript versions can be edited");
-        }
-        if (!manuscriptService.isCurrentVersion(id)) {
-            throw new IllegalArgumentException("Only current manuscript version can be edited");
-        }
-        model.addAttribute("manuscript", manuscript);
-        return "manuscript/edit";
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/edit", method = RequestMethod.POST)
-    public String manuscriptUpdate(
-            @PathVariable("id") long id,
-            HttpServletRequest request,
-            @RequestParam(value = "notes", required = false) String notes,
-            @RequestParam(value = "genre", required = false) String genre,
-            HttpSession session,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-            if (manuscript == null) {
-                throw new IllegalArgumentException("Manuscript not found");
-            }
-            long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
-            if (user.getId() != mangakaId) {
-                throw new IllegalArgumentException("Only owner can edit manuscript");
-            }
-            Part file = request.getPart("manuscriptFile");
-            ManuscriptUploadInfo upload = null;
-            if (file != null && file.getSize() > 0) {
-                validateManuscriptUploadPart(file);
-                upload = saveManuscriptUpload(request, file, manuscript.getId(), manuscript.getVersion());
-            }
-            manuscriptService.updateDraft(
-                    id,
-                    upload == null ? null : upload.path,
-                    upload == null ? null : upload.originalName,
-                    upload == null ? null : Long.valueOf(upload.size),
-                    upload == null ? null : upload.extension,
-                    notes,
-                    genre,
-                    user);
-            return "redirect:/main/manuscripts/" + id;
-        } catch (Exception ex) {
-            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-            model.addAttribute("manuscript", manuscript);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/edit";
-        }
-    }
-
-    private void validateManuscriptUploadPart(Part part) {
-        if (part == null || part.getSize() == 0) {
-            throw new IllegalArgumentException("Please choose a manuscript file to upload");
-        }
-        if (part.getSize() > MAX_MANUSCRIPT_FILE_SIZE) {
-            throw new IllegalArgumentException("Manuscript file must be 50MB or smaller");
-        }
-        String submittedName = part.getSubmittedFileName();
-        String extension = extractExtension(submittedName);
-        if (!"pdf".equals(extension) && !"zip".equals(extension) && !"rar".equals(extension) && !"cbz".equals(extension)) {
-            throw new IllegalArgumentException("Allowed manuscript formats are PDF, ZIP, RAR, and CBZ");
-        }
-        String originalName = submittedName == null ? "manuscript-file" : new File(submittedName).getName();
-        manuscriptService.validateManuscriptFileMetadata(originalName, Long.valueOf(part.getSize()), extension);
-    }
-
-    private ManuscriptUploadInfo saveManuscriptUpload(HttpServletRequest request, Part part, long manuscriptId, int version)
-            throws IOException {
-        String submittedName = part.getSubmittedFileName();
-        String originalName = submittedName == null ? "manuscript-file" : new File(submittedName).getName();
-        String extension = extractExtension(originalName);
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
-        String storedName = "manuscript_" + manuscriptId + "_v" + version + "_" + timestamp + "." + extension;
-        String uploadPath = request.getServletContext().getRealPath("/WEB-INF/uploads/manuscripts");
-        if (uploadPath == null) {
-            throw new IOException("Upload directory is not available");
-        }
-        File dir = new File(uploadPath);
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Cannot create manuscript upload directory");
-        }
-        File target = new File(dir, storedName);
-        if (target.exists()) {
-            timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date(System.currentTimeMillis() + 1000L));
-            storedName = "manuscript_" + manuscriptId + "_v" + version + "_" + timestamp + "." + extension;
-            target = new File(dir, storedName);
-        }
-        part.write(target.getAbsolutePath());
-        return new ManuscriptUploadInfo("/WEB-INF/uploads/manuscripts/" + storedName, originalName, part.getSize(), extension);
-    }
-
-    private String extractExtension(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-        String name = new File(fileName).getName();
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
-            return "";
-        }
-        return name.substring(dot + 1).toLowerCase();
-    }
-
-    private static class ManuscriptUploadInfo {
-        private final String path;
-        private final String originalName;
-        private final long size;
-        private final String extension;
-
-        private ManuscriptUploadInfo(String path, String originalName, long size, String extension) {
-            this.path = path;
-            this.originalName = originalName;
-            this.size = size;
-            this.extension = extension;
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/delete", method = RequestMethod.POST)
-    public String manuscriptDelete(@PathVariable("id") long id, HttpSession session, Model model) {
-        AuthenticatedUser user = requireUser(session);
-        try {
-            ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-            if (manuscript == null) {
-                throw new IllegalArgumentException("Manuscript not found");
-            }
-            long mangakaId = manuscriptRepository.getChapterMangaka(manuscript.getChapterId());
-            if (user.getId() != mangakaId) {
-                throw new IllegalArgumentException("Only owner can delete manuscript");
-            }
-            manuscriptService.deleteDraft(id, user);
-            return "redirect:/main/manuscripts";
-        } catch (RuntimeException ex) {
-            manuscriptDetail(id, session, model);
-            model.addAttribute("error", ex.getMessage());
-            return "manuscript/detail";
-        }
-    }
-
-    @RequestMapping(value = "/manuscripts/create", method = RequestMethod.GET)
-    public String manuscriptCreate(
-            HttpSession session,
-            @RequestParam(value = "chapterId", required = false) Long chapterId,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-        model.addAttribute("chapters", completedChaptersFor(user));
-        model.addAttribute("selectedChapterId", chapterId);
-        model.addAttribute("genres", proposalService.listGenres());
-        return "manuscript/create";
-    }
-
-    @RequestMapping(value = "/manuscripts/create", method = RequestMethod.POST)
-    public String manuscriptCreateSubmit(
-            HttpSession session,
-            @RequestParam("chapterId") long chapterId,
-            @RequestParam(value = "notes", required = false) String notes,
-            @RequestParam(value = "genre", required = false) String genre,
-            HttpServletRequest request,
-            Model model) {
-        AuthenticatedUser user = requireUser(session);
-        Long draftId = null;
-        try {
-            requireRole(user, "MANGAKA", "Only MANGAKA can create manuscripts");
-            Part file = request.getPart("manuscriptFile");
-            validateManuscriptUploadPart(file);
-
-            manga.dto.SubmitManuscriptRequest draftRequest = new manga.dto.SubmitManuscriptRequest();
-            draftRequest.setFileUrl("__PENDING_MANUSCRIPT_UPLOAD__");
-            String submittedName = file.getSubmittedFileName();
-            draftRequest.setOriginalFileName(submittedName == null ? "manuscript-file" : new File(submittedName).getName());
-            draftRequest.setFileSize(Long.valueOf(file.getSize()));
-            draftRequest.setFileExtension(extractExtension(file.getSubmittedFileName()));
-            draftRequest.setNotes(notes);
-            draftRequest.setGenre(genre);
-            ManuscriptSummary manuscript = manuscriptService.createDraft(chapterId, draftRequest, user);
-            draftId = Long.valueOf(manuscript.getId());
-
-            ManuscriptUploadInfo upload = saveManuscriptUpload(request, file, manuscript.getId(), manuscript.getVersion());
-            manuscriptService.updateDraft(
-                    manuscript.getId(),
-                    upload.path,
-                    upload.originalName,
-                    Long.valueOf(upload.size),
-                    upload.extension,
-                    notes,
-                    genre,
-                    user);
-            return "redirect:/main/manuscripts/" + manuscript.getId();
-        } catch (Exception ex) {
-            if (draftId != null) {
-                try {
-                    manuscriptService.deleteDraft(draftId.longValue(), user);
-                } catch (RuntimeException ignore) {
-                }
-            }
-            model.addAttribute("error", ex.getMessage());
-            model.addAttribute("chapters", completedChaptersFor(user));
-            model.addAttribute("selectedChapterId", chapterId);
-            model.addAttribute("genre", genre);
-            model.addAttribute("genres", proposalService.listGenres());
-            return "manuscript/create";
-        }
-    }
-
-    private List<ChapterSummary> completedChaptersFor(AuthenticatedUser user) {
-        List<ChapterSummary> chapters = chapterRepository.listAll(user);
-        List<ChapterSummary> completed = new ArrayList<ChapterSummary>();
-        for (ChapterSummary chapter : chapters) {
-            if (chapter != null && isCompletedChapterStatus(chapter.getStatus())) {
-                completed.add(chapter);
-            }
-        }
-        return completed;
-    }
-
-    private boolean isCompletedChapterStatus(String status) {
-        return "COMPLETE".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status);
-    }
-
-    @RequestMapping(value = "/manuscripts/{id}/download", method = RequestMethod.GET)
-    public void manuscriptDownload(
-            @PathVariable("id") long id,
-            HttpSession session,
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException {
-        AuthenticatedUser user = requireUser(session);
-        ManuscriptSummary manuscript = manuscriptRepository.findById(id);
-        if (manuscript == null) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-        if (!manuscriptService.canAccessManuscriptFile(id, user)) {
-            response.sendError(HttpServletResponse.SC_FORBIDDEN);
-            return;
-        }
-        String fileUrl = manuscript.getFileUrl();
-        if (fileUrl == null || (!fileUrl.startsWith("/WEB-INF/uploads/manuscripts/")
-                && !fileUrl.startsWith("/uploads/manuscripts/"))) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-        String absolutePath = request.getServletContext().getRealPath(fileUrl);
-        if (absolutePath == null) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-        File file = new File(absolutePath);
-        if (!file.isFile()) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-
-        String downloadName = manuscript.getOriginalFileName();
-        if (downloadName == null || downloadName.trim().isEmpty()) {
-            downloadName = file.getName();
-        }
-        response.setContentType("application/octet-stream");
-        response.setContentLengthLong(file.length());
-        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20"));
-        try (java.io.FileInputStream in = new java.io.FileInputStream(file);
-             OutputStream out = response.getOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-        }
-    }
-
     @RequestMapping(value = "/ranking/periods", method = RequestMethod.GET)
     public String rankingPeriods(HttpSession session, Model model) {
         requireUser(session);
@@ -855,7 +350,6 @@ public class ModuleWebController {
         }
     }
 
-
     @RequestMapping(value = "/ranking/periods/{id}/entries", method = RequestMethod.POST)
     public String rankingSubmitEntry(
             @PathVariable("id") long id,
@@ -917,10 +411,10 @@ public class ModuleWebController {
         if (!user.hasRole("ADMIN") && !user.hasRole("EDITORIAL_BOARD")) {
             throw new IllegalArgumentException("Only ADMIN/EDITORIAL_BOARD can view decision detail");
         }
-        
+
         Map<String, Object> sessionDetail = decisionRepository.getSessionDetail(id);
         model.addAttribute("sessionDetail", sessionDetail);
-        
+
         if (sessionDetail != null) {
             // Read revenue trend snapshot from DecisionSession (calculated during CLOSE PERIOD)
             // This eliminates runtime revenue aggregation on page load
@@ -930,7 +424,7 @@ public class ModuleWebController {
             } else {
                 model.addAttribute("revenueHistory", "[]");
             }
-            
+
             // Check if user has voted
             boolean hasVoted = false;
             List<Map<String, Object>> votes = (List<Map<String, Object>>) sessionDetail.get("votes");
@@ -945,7 +439,7 @@ public class ModuleWebController {
             }
             model.addAttribute("hasVoted", hasVoted);
         }
-        
+
         return "decision/session";
     }
 
@@ -1246,6 +740,336 @@ public class ModuleWebController {
         manga.common.util.RoleCombinationValidator.validate(merged);
     }
 
+    // ============================================================
+    // Manuscript Version Workspace (V2) - Editorial Review Workspace
+    // ============================================================
+    /**
+     * Create manuscript workspace for chapter. BR-1: Only chapters in
+     * EDITORIAL_REVIEW can create manuscripts
+     */
+    @RequestMapping(value = "/chapters/{chapterId}/manuscript-workspace/create", method = RequestMethod.GET)
+    public String manuscriptWorkspaceCreate(@PathVariable("chapterId") long chapterId, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        ChapterSummary chapter = chapterRepository.findById(chapterId);
+        if (chapter == null) {
+            throw new IllegalArgumentException("Chapter not found");
+        }
+        model.addAttribute("chapter", chapter);
+        return "manuscript-version/create";
+    }
+
+    @RequestMapping(value = "/chapters/{chapterId}/manuscript-workspace/create", method = RequestMethod.POST)
+    public String manuscriptWorkspaceCreatePost(@PathVariable("chapterId") long chapterId, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manga.model.ManuscriptVersion version = manuscriptVersionService.createWorkspace(chapterId, user);
+            return "redirect:/main/manuscript-workspace/" + version.getId();
+        } catch (RuntimeException ex) {
+            ChapterSummary chapter = chapterRepository.findById(chapterId);
+            model.addAttribute("chapter", chapter);
+            model.addAttribute("error", ex.getMessage());
+            return "manuscript-version/create";
+        }
+    }
+
+    /**
+     * View manuscript workspace - page-centric review interface.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}", method = RequestMethod.GET)
+    public String manuscriptWorkspaceView(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        manga.model.ManuscriptVersion version = manuscriptVersionService.getVersion(id);
+        if (version == null) {
+            throw new IllegalArgumentException("Manuscript version not found");
+        }
+
+        ChapterSummary chapter = chapterRepository.findById(version.getChapterId());
+        if (chapter == null) {
+            throw new IllegalArgumentException("Chapter not found");
+        }
+
+        // Get pages for this version - ensure never null
+        List<manga.model.ManuscriptPage> pages = manuscriptVersionService.getPages(id);
+        if (pages == null) {
+            pages = new java.util.ArrayList<>();
+        }
+
+        // Get annotations for this version - ensure never null
+        List<manga.model.AnnotationSummary> annotations = annotationServiceV2.listAnnotations(id);
+        if (annotations == null) {
+            annotations = new java.util.ArrayList<>();
+        }
+
+        // Get review dashboard data - ensure never null
+        manga.dto.ReviewDashboardDTO dashboard = manuscriptVersionService.getReviewDashboard(id);
+        if (dashboard == null) {
+            dashboard = new manga.dto.ReviewDashboardDTO();
+        }
+
+        // Get version history - ensure never null
+        List<manga.model.ManuscriptVersion> versionHistory = manuscriptVersionService.listVersions(version.getChapterId());
+        if (versionHistory == null) {
+            versionHistory = new java.util.ArrayList<>();
+        }
+
+        // Permission checks
+        long mangakaId = chapterRepository.findOwnerMangakaByChapter(version.getChapterId());
+        long tantouId = chapterRepository.findSeriesTantou(chapter.getSeriesId());
+        boolean isMangakaOwner = user.getId() == mangakaId;
+        boolean isAssignedTantou = user.getId() == tantouId;
+        boolean isAdmin = user.hasRole("ADMIN");
+
+        // Format LocalDateTime fields for JSP compatibility (Tomcat/JSTL doesn't support LocalDateTime with fmt:formatDate)
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        String createdAtFormatted = version.getCreatedAt() != null ? version.getCreatedAt().format(formatter) : "";
+        String submittedAtFormatted = version.getSubmittedAt() != null ? version.getSubmittedAt().format(formatter) : "";
+
+        // Format version history dates
+        java.util.Map<Long, String> versionHistoryDates = new java.util.HashMap<>();
+        for (manga.model.ManuscriptVersion v : versionHistory) {
+            if (v.getCreatedAt() != null) {
+                versionHistoryDates.put(v.getId(), v.getCreatedAt().format(formatter));
+            }
+        }
+
+        model.addAttribute("version", version);
+        model.addAttribute("chapter", chapter);
+        model.addAttribute("pages", pages);
+        model.addAttribute("annotations", annotations);
+        model.addAttribute("dashboard", dashboard);
+        model.addAttribute("versionHistory", versionHistory);
+        model.addAttribute("versionHistoryDates", versionHistoryDates);
+        model.addAttribute("createdAtFormatted", createdAtFormatted);
+        model.addAttribute("submittedAtFormatted", submittedAtFormatted);
+        model.addAttribute("currentUser", user);
+        model.addAttribute("isMangakaOwner", isMangakaOwner);
+        model.addAttribute("isAssignedTantou", isAssignedTantou);
+        model.addAttribute("isAdmin", isAdmin);
+        model.addAttribute("productionLocked", manuscriptVersionService.isProductionLocked(version.getChapterId()));
+
+        // Runtime logging for diagnostics
+        System.out.println("Workspace loaded: version=" + version.getId()
+                + ", chapter=" + chapter.getId()
+                + ", pages=" + pages.size()
+                + ", annotations=" + annotations.size()
+                + ", versionHistory=" + versionHistory.size());
+
+        return "manuscript-version/workspace";
+    }
+
+    /**
+     * Import chapter pages into manuscript workspace.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/import-pages", method = RequestMethod.POST)
+    public String manuscriptWorkspaceImportPages(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manga.model.ManuscriptVersion version = manuscriptVersionService.getVersion(id);
+            manuscriptVersionService.importChapterPages(id, version.getChapterId(), user);
+            return "redirect:/main/manuscript-workspace/" + id;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return manuscriptWorkspaceView(id, session, model);
+        }
+    }
+
+    /**
+     * Submit manuscript for review.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/submit", method = RequestMethod.POST)
+    public String manuscriptWorkspaceSubmit(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manuscriptVersionService.submitForReview(id, user);
+            return "redirect:/main/manuscript-workspace/" + id;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return manuscriptWorkspaceView(id, session, model);
+        }
+    }
+
+    /**
+     * Approve manuscript.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/approve", method = RequestMethod.POST)
+    public String manuscriptWorkspaceApprove(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manuscriptVersionService.approve(id, user);
+            return "redirect:/main/manuscript-workspace/" + id;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return manuscriptWorkspaceView(id, session, model);
+        }
+    }
+
+    /**
+     * Reject manuscript with feedback.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/reject", method = RequestMethod.POST)
+    public String manuscriptWorkspaceReject(@PathVariable("id") long id, HttpSession session,
+            @RequestParam("feedback") String feedback, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manuscriptVersionService.reject(id, feedback, user);
+            return "redirect:/main/manuscript-workspace/" + id;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return manuscriptWorkspaceView(id, session, model);
+        }
+    }
+
+    /**
+     * Publish manuscript.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/publish", method = RequestMethod.POST)
+    public String manuscriptWorkspacePublish(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manuscriptVersionService.publish(id, user);
+            return "redirect:/main/manuscript-workspace/" + id;
+        } catch (RuntimeException ex) {
+            model.addAttribute("error", ex.getMessage());
+            return manuscriptWorkspaceView(id, session, model);
+        }
+    }
+
+    /**
+     * Create new version after rejection. BR-3: Previous REJECTED version
+     * remains immutable
+     */
+    @RequestMapping(value = "/chapters/{chapterId}/manuscript-workspace/new-version", method = RequestMethod.POST)
+    public String manuscriptWorkspaceNewVersion(@PathVariable("chapterId") long chapterId, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        try {
+            manga.model.ManuscriptVersion version = manuscriptVersionService.createNewVersion(chapterId, user);
+            return "redirect:/main/manuscript-workspace/" + version.getId();
+        } catch (RuntimeException ex) {
+            ChapterSummary chapter = chapterRepository.findById(chapterId);
+            model.addAttribute("chapter", chapter);
+            model.addAttribute("error", ex.getMessage());
+            return "redirect:/main/chapters/" + chapterId;
+        }
+    }
+
+    /**
+     * View review dashboard.
+     */
+    @RequestMapping(value = "/manuscript-workspace/{id}/dashboard", method = RequestMethod.GET)
+    public String manuscriptWorkspaceDashboard(@PathVariable("id") long id, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        manga.dto.ReviewDashboardDTO dashboard = manuscriptVersionService.getReviewDashboard(id);
+        model.addAttribute("dashboard", dashboard);
+        model.addAttribute("currentUser", user);
+        return "manuscript-version/dashboard";
+    }
+
+    /**
+     * View version history for chapter.
+     */
+    @RequestMapping(value = "/chapters/{chapterId}/manuscript-workspace/history", method = RequestMethod.GET)
+    public String manuscriptWorkspaceHistory(@PathVariable("chapterId") long chapterId, HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        List<manga.model.ManuscriptVersion> versions = manuscriptVersionService.listVersions(chapterId);
+        if (versions == null) {
+            versions = new java.util.ArrayList<>();
+        }
+        ChapterSummary chapter = chapterRepository.findById(chapterId);
+
+        // Format LocalDateTime fields for JSP compatibility (Tomcat/JSTL doesn't support LocalDateTime with fmt:formatDate)
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        java.util.Map<String, String> versionDates = new java.util.HashMap<>();
+
+        for (manga.model.ManuscriptVersion v : versions) {
+            if (v.getCreatedAt() != null) {
+                versionDates.put(v.getId() + "_created", v.getCreatedAt().format(formatter));
+            }
+            if (v.getSubmittedAt() != null) {
+                versionDates.put(v.getId() + "_submitted", v.getSubmittedAt().format(formatter));
+            }
+            if (v.getApprovedAt() != null) {
+                versionDates.put(v.getId() + "_approved", v.getApprovedAt().format(formatter));
+            }
+            if (v.getRejectedAt() != null) {
+                versionDates.put(v.getId() + "_rejected", v.getRejectedAt().format(formatter));
+            }
+        }
+
+        model.addAttribute("versions", versions);
+        model.addAttribute("chapter", chapter);
+        model.addAttribute("versionDates", versionDates);
+        model.addAttribute("currentUser", user);
+        return "manuscript-version/history";
+    }
+
+    /**
+     * Compare two manuscript versions.
+     */
+    @RequestMapping(value = "/manuscript-workspace/compare", method = RequestMethod.GET)
+    public String manuscriptWorkspaceCompare(
+            @RequestParam("versionId1") long versionId1,
+            @RequestParam("versionId2") long versionId2,
+            HttpSession session,
+            Model model) {
+
+        AuthenticatedUser user = requireUser(session);
+
+        manga.dto.VersionComparisonDTO comparison
+                = manuscriptVersionService.compareVersions(versionId1, versionId2);
+
+        manga.model.ManuscriptVersion version1
+                = manuscriptVersionService.getVersion(versionId1);
+
+        manga.model.ManuscriptVersion version2
+                = manuscriptVersionService.getVersion(versionId2);
+
+        java.time.format.DateTimeFormatter formatter
+                = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+        String v1CreatedAtFormatted = "";
+        String v1SubmittedAtFormatted = "";
+        String v2CreatedAtFormatted = "";
+        String v2SubmittedAtFormatted = "";
+
+        if (version1 != null) {
+            v1CreatedAtFormatted = version1.getCreatedAt() != null
+                    ? version1.getCreatedAt().format(formatter)
+                    : "";
+
+            v1SubmittedAtFormatted = version1.getSubmittedAt() != null
+                    ? version1.getSubmittedAt().format(formatter)
+                    : "";
+        }
+
+        if (version2 != null) {
+            v2CreatedAtFormatted = version2.getCreatedAt() != null
+                    ? version2.getCreatedAt().format(formatter)
+                    : "";
+
+            v2SubmittedAtFormatted = version2.getSubmittedAt() != null
+                    ? version2.getSubmittedAt().format(formatter)
+                    : "";
+        }
+
+        model.addAttribute("comparison", comparison);
+
+        model.addAttribute("version1", version1);
+        model.addAttribute("version2", version2);
+
+        model.addAttribute("v1CreatedAtFormatted", v1CreatedAtFormatted);
+        model.addAttribute("v1SubmittedAtFormatted", v1SubmittedAtFormatted);
+
+        model.addAttribute("v2CreatedAtFormatted", v2CreatedAtFormatted);
+        model.addAttribute("v2SubmittedAtFormatted", v2SubmittedAtFormatted);
+
+        model.addAttribute("currentUser", user);
+
+        return "manuscript-version/compare";
+    }
+
+    // ============================================================
+    // Private Helper Methods
+    // ============================================================
     private boolean containsRole(String[] roles, String roleName) {
         if (roles == null) {
             return false;

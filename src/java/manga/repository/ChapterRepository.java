@@ -500,6 +500,20 @@ public class ChapterRepository {
         }
     }
 
+    public void updateChapterStatus(long chapterId, String status) {
+        String sql = "UPDATE Chapter SET status = ? WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            ps.setLong(2, chapterId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Chapter not found");
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot update chapter status", ex);
+        }
+    }
+
     public String getSeriesStatus(long chapterId) {
         String sql = "SELECT s.status FROM Chapter c JOIN Series s ON s.id = c.seriesId WHERE c.id = ?";
         try (Connection conn = dataSource.getConnection();
@@ -618,6 +632,38 @@ public class ChapterRepository {
         Date latestChapterDeadline = Date.valueOf(seriesDeadline.toLocalDate().minusDays(CHAPTER_SERIES_DEADLINE_BUFFER_DAYS));
         if (submissionDeadline.after(latestChapterDeadline)) {
             throw new IllegalArgumentException("Chapter deadline must be at least 14 days before series deadline");
+        }
+    }
+
+    public long getChapterMangaka(long chapterId) {
+        String sql = "SELECT s.mangakaId FROM Chapter c JOIN Series s ON s.id=c.seriesId WHERE c.id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Chapter not found");
+                }
+                return rs.getLong(1);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot resolve chapter owner", ex);
+        }
+    }
+
+    public long getChapterTantou(long chapterId) {
+        String sql = "SELECT s.tantouEditorId FROM Chapter c JOIN Series s ON s.id=c.seriesId WHERE c.id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("Chapter not found");
+                }
+                return rs.getLong(1);
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot resolve chapter tantou", ex);
         }
     }
 }

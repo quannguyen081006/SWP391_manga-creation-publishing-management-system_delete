@@ -97,12 +97,6 @@
                 <span class="nav-label">Tasks</span>
             </a>
         </c:if>
-        <c:if test="${isAdmin || isMangaka || isTantou}">
-            <a class="nav-item nav-manuscripts ${fn:contains(uri, '/main/manuscripts') ? 'active' : ''}" href="${ctx}/main/manuscripts" title="Manuscripts">
-                <span class="nav-icon" aria-hidden="true"></span>
-                <span class="nav-label">Manuscripts</span>
-            </a>
-        </c:if>
         <c:if test="${isAdmin || isBoard}">
             <a class="nav-item nav-decisions ${fn:contains(uri, '/main/decisions') ? 'active' : ''}" href="${ctx}/main/decisions" title="Decisions">
                 <span class="nav-icon" aria-hidden="true"></span>
