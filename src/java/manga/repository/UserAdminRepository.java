@@ -437,6 +437,27 @@ public class UserAdminRepository {
         row.put("updatedAt", rs.getTimestamp("updatedAt"));
         return row;
     }
+
+    /**
+     * Get user full name by ID.
+     * @param userId the user ID
+     * @return the full name, or null if user not found
+     */
+    public String getFullNameById(long userId) {
+        String sql = "SELECT fullName FROM [User] WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("fullName");
+                }
+                return null;
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot get user full name", ex);
+        }
+    }
 }
 
 

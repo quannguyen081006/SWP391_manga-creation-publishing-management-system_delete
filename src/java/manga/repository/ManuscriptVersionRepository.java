@@ -66,6 +66,77 @@ public class ManuscriptVersionRepository {
         }
         return null;
     }
+
+    /**
+     * Find active workspace for a chapter.
+     * Active workspace is the latest manuscript version with status in: DRAFT, IN_PROGRESS, SUBMITTED_FOR_REVIEW, UNDER_REVIEW
+     * Returns null if no active workspace exists.
+     */
+    public ManuscriptVersion findActiveWorkspace(Long chapterId) {
+        String sql = "SELECT TOP 1 id, chapterId, version, previousVersionId, status, createdAt, submittedAt, approvedAt, rejectedAt, publishedAt, createdBy, submittedBy, approvedBy, rejectedBy, feedback, revisionNotes, totalPageCount " +
+                    "FROM ManuscriptVersion " +
+                    "WHERE chapterId = ? AND status IN ('DRAFT', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'UNDER_REVIEW') " +
+                    "ORDER BY version DESC";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return map(rs);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find active workspace", ex);
+        }
+        return null;
+    }
+
+    /**
+     * Count active workspaces for a chapter.
+     * Used for validation and duplicate prevention.
+     */
+    public long countActiveWorkspaces(Long chapterId) {
+        String sql = "SELECT COUNT(*) FROM ManuscriptVersion " +
+                    "WHERE chapterId = ? AND status IN ('DRAFT', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'UNDER_REVIEW')";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot count active workspaces", ex);
+        }
+        return 0;
+    }
+
+    /**
+     * Find active workspace for a chapter with row-level lock (SELECT FOR UPDATE).
+     * Used in transactional context to prevent race conditions during workspace creation.
+     * Locks the chapter's manuscript versions row to prevent concurrent insertions.
+     * 
+     * This method should be called within a transaction to ensure the lock is held.
+     */
+    public ManuscriptVersion findActiveWorkspaceForUpdate(Long chapterId) {
+        String sql = "SELECT TOP 1 id, chapterId, version, previousVersionId, status, createdAt, submittedAt, approvedAt, rejectedAt, publishedAt, createdBy, submittedBy, approvedBy, rejectedBy, feedback, revisionNotes, totalPageCount " +
+                    "FROM ManuscriptVersion WITH (UPDLOCK, ROWLOCK) " +
+                    "WHERE chapterId = ? AND status IN ('DRAFT', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'UNDER_REVIEW') " +
+                    "ORDER BY version DESC";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return map(rs);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find active workspace with lock", ex);
+        }
+        return null;
+    }
     
     /**
      * Find a specific manuscript version by chapter and version number.
@@ -262,6 +333,40 @@ public class ManuscriptVersionRepository {
         return null;
     }
     
+    /**
+     * Find all manuscript versions with UNDER_REVIEW status, optionally filtered by series assignments.
+     * Used for Tantou review inbox.
+     */
+    public List<ManuscriptVersion> findUnderReviewForTantou(Long tantouUserId, boolean isAdmin) {
+        String sql;
+        if (isAdmin) {
+            sql = "SELECT id, chapterId, version, previousVersionId, status, createdAt, submittedAt, approvedAt, rejectedAt, publishedAt, createdBy, submittedBy, approvedBy, rejectedBy, feedback, revisionNotes, totalPageCount " +
+                  "FROM ManuscriptVersion WHERE status = 'UNDER_REVIEW' ORDER BY submittedAt DESC";
+        } else {
+            sql = "SELECT mv.id, mv.chapterId, mv.version, mv.previousVersionId, mv.status, mv.createdAt, mv.submittedAt, mv.approvedAt, mv.rejectedAt, mv.publishedAt, mv.createdBy, mv.submittedBy, mv.approvedBy, mv.rejectedBy, mv.feedback, mv.revisionNotes, mv.totalPageCount " +
+                  "FROM ManuscriptVersion mv " +
+                  "JOIN Chapter c ON c.id = mv.chapterId " +
+                  "JOIN Series s ON s.id = c.seriesId " +
+                  "WHERE mv.status = 'UNDER_REVIEW' AND s.tantouEditorId = ? " +
+                  "ORDER BY mv.submittedAt DESC";
+        }
+        List<ManuscriptVersion> results = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (!isAdmin) {
+                ps.setLong(1, tantouUserId);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    results.add(map(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException("Cannot find under review manuscripts", ex);
+        }
+        return results;
+    }
+
     private ManuscriptVersion map(ResultSet rs) throws SQLException {
         ManuscriptVersion version = new ManuscriptVersion();
         version.setId(rs.getLong("id"));

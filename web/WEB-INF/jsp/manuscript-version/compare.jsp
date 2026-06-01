@@ -209,29 +209,49 @@
         <div class="changes-section">
             <div class="changes-title">Changes Summary</div>
             
-            <c:if test="${empty comparison.pageChanges && empty comparison.annotationChanges}">
+            <c:if test="${empty comparison.addedPages && empty comparison.removedPages && empty comparison.changedPages && empty comparison.reorderedPages}">
                 <div class="no-changes">
-                    <h3>No changes detected</h3>
+                    <h3>No differences found between versions</h3>
                     <p>These versions appear to be identical.</p>
                 </div>
             </c:if>
 
-            <c:if test="${not empty comparison.pageChanges}">
-                <h3 style="margin-bottom: 15px;">Page Changes</h3>
-                <c:forEach var="change" items="${comparison.pageChanges}">
-                    <div class="change-item ${change.changeType}">
-                        <div class="change-label">${change.changeType}: Page ${change.pageNumber}</div>
-                        <div class="change-detail">${change.description}</div>
+            <c:if test="${not empty comparison.addedPages}">
+                <h3 style="margin-bottom: 15px;">Added Pages</h3>
+                <c:forEach var="page" items="${comparison.addedPages}">
+                    <div class="change-item added">
+                        <div class="change-label">ADDED: Page ${page.pageNumber}</div>
+                        <div class="change-detail">Display Order: ${page.displayOrder}</div>
                     </div>
                 </c:forEach>
             </c:if>
 
-            <c:if test="${not empty comparison.annotationChanges}">
-                <h3 style="margin-bottom: 15px; margin-top: 30px;">Annotation Changes</h3>
-                <c:forEach var="change" items="${comparison.annotationChanges}">
-                    <div class="change-item ${change.changeType}">
-                        <div class="change-label">${change.changeType}: ${change.category}</div>
-                        <div class="change-detail">${change.description}</div>
+            <c:if test="${not empty comparison.removedPages}">
+                <h3 style="margin-bottom: 15px; margin-top: 30px;">Removed Pages</h3>
+                <c:forEach var="page" items="${comparison.removedPages}">
+                    <div class="change-item removed">
+                        <div class="change-label">REMOVED: Page ${page.pageNumber}</div>
+                        <div class="change-detail">Display Order: ${page.displayOrder}</div>
+                    </div>
+                </c:forEach>
+            </c:if>
+
+            <c:if test="${not empty comparison.changedPages}">
+                <h3 style="margin-bottom: 15px; margin-top: 30px;">Changed Pages</h3>
+                <c:forEach var="page" items="${comparison.changedPages}">
+                    <div class="change-item modified">
+                        <div class="change-label">CHANGED: Page ${page.pageNumber}</div>
+                        <div class="change-detail">Display Order: ${page.displayOrder}</div>
+                    </div>
+                </c:forEach>
+            </c:if>
+
+            <c:if test="${not empty comparison.reorderedPages}">
+                <h3 style="margin-bottom: 15px; margin-top: 30px;">Reordered Pages</h3>
+                <c:forEach var="page" items="${comparison.reorderedPages}">
+                    <div class="change-item modified">
+                        <div class="change-label">REORDERED: Page ${page.pageNumber}</div>
+                        <div class="change-detail">Order: ${page.previousOrder} → ${page.newOrder}</div>
                     </div>
                 </c:forEach>
             </c:if>

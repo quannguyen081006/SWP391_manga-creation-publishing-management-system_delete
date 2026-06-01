@@ -9,6 +9,7 @@ import manga.model.AuthenticatedUser;
 import manga.model.ManuscriptPage;
 import manga.model.ManuscriptVersion;
 import manga.service.ManuscriptVersionService;
+import manga.service.ReviewTaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +27,9 @@ public class ManuscriptVersionApiController {
 
     @Autowired
     private ManuscriptVersionService manuscriptVersionService;
+
+    @Autowired
+    private ReviewTaskService reviewTaskService;
 
     /**
      * Create new manuscript workspace.
@@ -165,6 +169,19 @@ public class ManuscriptVersionApiController {
     }
 
     /**
+     * Get review task for manuscript version.
+     * GET /api/v1/manuscript-versions/{id}/review-task
+     */
+    @GetMapping("/{id}/review-task")
+    public ApiResponse<manga.model.ReviewTask> getReviewTask(
+            @PathVariable Long id,
+            @ModelAttribute AuthenticatedUser user) {
+        
+        manga.model.ReviewTask task = reviewTaskService.getReviewTask(id);
+        return ApiResponse.success(task);
+    }
+
+    /**
      * Create new version after rejection.
      * POST /api/v1/manuscript-versions/new-version
      */
@@ -259,6 +276,100 @@ public class ManuscriptVersionApiController {
 
         manga.dto.ReviewDashboardDTO dashboard = manuscriptVersionService.getReviewDashboard(id);
         return ApiResponse.success(dashboard);
+    }
+
+    /**
+     * Get active workspace for a chapter.
+     * GET /api/v1/manuscript-versions/workspace?chapterId={chapterId}
+     * 
+     * Returns workspace status information for the chapter.
+     * Frontend should use this endpoint before showing action buttons.
+     */
+    @GetMapping("/workspace")
+    public ApiResponse<WorkspaceStatusDTO> getWorkspaceStatus(
+            @RequestParam Long chapterId,
+            @ModelAttribute AuthenticatedUser user) {
+
+        manga.model.ManuscriptVersion workspace = manuscriptVersionService.getActiveWorkspace(chapterId);
+        
+        WorkspaceStatusDTO dto = new WorkspaceStatusDTO();
+        if (workspace != null) {
+            dto.setWorkspaceExists(true);
+            dto.setWorkspaceId(workspace.getId());
+            dto.setStatus(workspace.getStatus().name());
+            dto.setEditable(workspace.getStatus().isEditable());
+            dto.setVersionNumber(workspace.getVersion());
+            dto.setTotalPageCount(workspace.getTotalPageCount());
+        } else {
+            dto.setWorkspaceExists(false);
+            dto.setWorkspaceId(null);
+            dto.setStatus(null);
+            dto.setEditable(true); // Can create new workspace
+            dto.setVersionNumber(null);
+            dto.setTotalPageCount(0);
+        }
+        
+        return ApiResponse.success(dto);
+    }
+
+    /**
+     * DTO for workspace status response.
+     */
+    public static class WorkspaceStatusDTO {
+        private boolean workspaceExists;
+        private Long workspaceId;
+        private String status;
+        private boolean editable;
+        private Integer versionNumber;
+        private Integer totalPageCount;
+
+        public boolean isWorkspaceExists() {
+            return workspaceExists;
+        }
+
+        public void setWorkspaceExists(boolean workspaceExists) {
+            this.workspaceExists = workspaceExists;
+        }
+
+        public Long getWorkspaceId() {
+            return workspaceId;
+        }
+
+        public void setWorkspaceId(Long workspaceId) {
+            this.workspaceId = workspaceId;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public boolean isEditable() {
+            return editable;
+        }
+
+        public void setEditable(boolean editable) {
+            this.editable = editable;
+        }
+
+        public Integer getVersionNumber() {
+            return versionNumber;
+        }
+
+        public void setVersionNumber(Integer versionNumber) {
+            this.versionNumber = versionNumber;
+        }
+
+        public Integer getTotalPageCount() {
+            return totalPageCount;
+        }
+
+        public void setTotalPageCount(Integer totalPageCount) {
+            this.totalPageCount = totalPageCount;
+        }
     }
 
     private ManuscriptVersionDTO toDTO(ManuscriptVersion version) {

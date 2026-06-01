@@ -257,7 +257,7 @@
                 <div>
                     <c:if test="${version.status == 'DRAFT' && empty pages}">
                         <form method="post" action="${pageContext.request.contextPath}/main/manuscript-workspace/${version.id}/import-pages" style="display: inline;">
-                            <button type="submit" class="btn btn-primary">Import Chapter Pages</button>
+                            <button type="submit" class="btn btn-primary">Import Pages</button>
                         </form>
                     </c:if>
                     <c:if test="${version.status == 'DRAFT' && not empty pages}">
@@ -271,7 +271,7 @@
                         </form>
                         <button type="button" class="btn btn-danger" onclick="showRejectModal()">Reject</button>
                     </c:if>
-                    <c:if test="${version.status == 'REJECTED'}">
+                    <c:if test="${version.status == 'REJECTED' && isMangakaOwner}">
                         <form method="post" action="${pageContext.request.contextPath}/main/chapters/${chapter.id}/manuscript-workspace/new-version" style="display: inline;">
                             <button type="submit" class="btn btn-primary">Create New Version</button>
                         </form>
@@ -281,6 +281,8 @@
                             <button type="submit" class="btn btn-success">Publish</button>
                         </form>
                     </c:if>
+                    <a href="${pageContext.request.contextPath}/main/chapters/${chapter.id}/manuscript-workspace/history" class="btn btn-secondary">Version History</a>
+                    <a href="${pageContext.request.contextPath}/main/manuscript-workspace/${version.id}/dashboard" class="btn btn-secondary">Dashboard</a>
                     <a href="${pageContext.request.contextPath}/main/chapters/${chapter.id}" class="btn btn-secondary">Back to Chapter</a>
                 </div>
             </div>

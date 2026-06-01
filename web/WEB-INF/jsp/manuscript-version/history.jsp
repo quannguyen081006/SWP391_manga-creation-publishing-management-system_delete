@@ -210,6 +210,11 @@
                             <a href="${pageContext.request.contextPath}/main/manuscript-workspace/${version.id}/dashboard" class="btn btn-secondary">
                                 Dashboard
                             </a>
+                            <c:if test="${version.previousVersionId != null}">
+                                <a href="${pageContext.request.contextPath}/main/manuscript-workspace/compare?versionId1=${version.previousVersionId}&versionId2=${version.id}" class="btn btn-secondary">
+                                    Compare With Previous
+                                </a>
+                            </c:if>
                         </div>
                     </div>
                 </c:forEach>

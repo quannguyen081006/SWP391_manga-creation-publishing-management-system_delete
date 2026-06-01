@@ -108,9 +108,10 @@ public class ManuscriptProductionLockRepository {
     
     /**
      * Unlock production lock.
+     * Deletes the lock row to allow new locks to be created for the same chapter.
      */
     public void unlock(Long chapterId) {
-        String sql = "UPDATE ManuscriptProductionLock SET unlockedAt = GETDATE() WHERE chapterId = ? AND unlockedAt IS NULL";
+        String sql = "DELETE FROM ManuscriptProductionLock WHERE chapterId = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, chapterId);

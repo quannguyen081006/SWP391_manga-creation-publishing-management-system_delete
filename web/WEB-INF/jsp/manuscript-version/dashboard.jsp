@@ -113,6 +113,14 @@
             <p style="color: #666;">Manuscript version review progress and statistics</p>
         </div>
 
+        <c:if test="${dashboard == null || dashboard.totalPages == null || dashboard.totalPages == 0}">
+            <div class="no-changes" style="text-align: center; padding: 60px; color: #666; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <h3>No review data available</h3>
+                <p>The manuscript version has no pages or review data yet.</p>
+            </div>
+        </c:if>
+
+        <c:if test="${dashboard != null && dashboard.totalPages != null && dashboard.totalPages > 0}">
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value">${dashboard.totalPages}</div>
@@ -127,8 +135,8 @@
                 <div class="stat-label">Resolved</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">${dashboard.dismissedAnnotations}</div>
-                <div class="stat-label">Dismissed</div>
+                <div class="stat-value">${dashboard.totalAnnotations}</div>
+                <div class="stat-label">Total Annotations</div>
             </div>
         </div>
 
@@ -183,10 +191,6 @@
                     <div class="annotation-stat-label">Resolved</div>
                 </div>
                 <div class="annotation-stat">
-                    <div class="annotation-stat-value" style="color: #868e96;">${dashboard.dismissedAnnotations}</div>
-                    <div class="annotation-stat-label">Dismissed</div>
-                </div>
-                <div class="annotation-stat">
                     <div class="annotation-stat-value" style="color: #228be6;">${dashboard.totalAnnotations}</div>
                     <div class="annotation-stat-label">Total</div>
                 </div>
@@ -196,6 +200,7 @@
         <div style="margin-top: 30px; text-align: center;">
             <a href="javascript:history.back()" class="btn btn-secondary">Back</a>
         </div>
+        </c:if>
     </div>
 </body>
 </html>

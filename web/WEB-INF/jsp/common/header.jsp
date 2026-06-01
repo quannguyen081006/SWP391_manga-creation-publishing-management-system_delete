@@ -103,6 +103,12 @@
                 <span class="nav-label">Decisions</span>
             </a>
         </c:if>
+        <c:if test="${isAdmin || isTantou}">
+            <a class="nav-item nav-manuscript-review ${fn:contains(uri, '/main/manuscript-review') ? 'active' : ''}" href="${ctx}/main/manuscript-review" title="Manuscript Reviews">
+                <span class="nav-icon" aria-hidden="true"></span>
+                <span class="nav-label">Manuscript Reviews</span>
+            </a>
+        </c:if>
         <a class="nav-item nav-ranking ${fn:contains(uri, '/main/ranking') ? 'active' : ''}" href="${ctx}/main/ranking/periods" title="Ranking">
             <span class="nav-icon" aria-hidden="true"></span>
             <span class="nav-label">Ranking</span>

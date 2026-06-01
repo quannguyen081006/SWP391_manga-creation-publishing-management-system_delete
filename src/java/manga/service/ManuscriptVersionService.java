@@ -57,11 +57,15 @@ public class ManuscriptVersionService {
     private AnnotationServiceV2 annotationServiceV2;
 
     @Autowired
+    private ReviewTaskService reviewTaskService;
+
+    @Autowired
     private DataSource dataSource;
 
     /**
      * Validate that manuscript version can be edited.
      * Centralized immutability enforcement.
+     * Enforces review locking rules: DRAFT and IN_PROGRESS are editable, others are not.
      */
     private void validateEditable(Long manuscriptVersionId) {
         ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
@@ -72,10 +76,30 @@ public class ManuscriptVersionService {
     }
 
     /**
-     * Create new manuscript workspace.
-     * BR-1: Only chapters in EDITORIAL_REVIEW can create manuscripts
-     * BR-2: Only one UNDER_REVIEW per chapter
+     * Validate that manuscript version can be modified (add pages, reorder, etc.).
+     * Enforces review locking rules: only DRAFT and IN_PROGRESS are mutable.
+     * SUBMITTED_FOR_REVIEW and UNDER_REVIEW are read-only.
+     * APPROVED, PUBLISHED, REJECTED, ARCHIVED are immutable.
      */
+    private void validateMutable(Long manuscriptVersionId) {
+        ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
+        if (version == null) {
+            throw new BusinessRuleException("Manuscript version not found");
+        }
+        version.validateMutable();
+    }
+
+    /**
+     * Create new manuscript workspace (idempotent).
+     * BR-1: Only chapters in EDITORIAL_REVIEW can create manuscripts
+     * BR-2: Only one active workspace per chapter (DRAFT, IN_PROGRESS, SUBMITTED_FOR_REVIEW, UNDER_REVIEW)
+     * 
+     * If an active workspace already exists, returns the existing one.
+     * Only creates a new workspace if no active workspace exists.
+     * 
+     * Transaction Safety: Uses SELECT FOR UPDATE locking to prevent race conditions.
+     */
+    @Transactional
     public ManuscriptVersion createWorkspace(Long chapterId, AuthenticatedUser user) {
         // Validate chapter status (BR-1)
         String chapterStatus = chapterRepository.getChapterStatus(chapterId);
@@ -83,10 +107,22 @@ public class ManuscriptVersionService {
             throw new BusinessRuleException("Chapter must be in EDITORIAL_REVIEW to create manuscript (BR-1)");
         }
 
-        // Validate no UNDER_REVIEW exists (BR-2)
-        ManuscriptVersion underReview = manuscriptVersionRepository.findByChapterIdAndStatus(chapterId, ManuscriptStatus.UNDER_REVIEW);
-        if (underReview != null) {
-            throw new BusinessRuleException("Only one manuscript can be UNDER_REVIEW per chapter (BR-2)");
+        // Check for existing active workspace (idempotency)
+        ManuscriptVersion existingActive = manuscriptVersionRepository.findActiveWorkspace(chapterId);
+        if (existingActive != null) {
+            // Return existing active workspace instead of creating duplicate
+            return existingActive;
+        }
+
+        // Double-check with count for race condition protection
+        long activeCount = manuscriptVersionRepository.countActiveWorkspaces(chapterId);
+        if (activeCount > 0) {
+            // If another transaction created a workspace, find and return it
+            existingActive = manuscriptVersionRepository.findActiveWorkspace(chapterId);
+            if (existingActive != null) {
+                return existingActive;
+            }
+            throw new BusinessRuleException("Active workspace already exists for this chapter");
         }
 
         // Get next version number and previous version ID
@@ -111,20 +147,29 @@ public class ManuscriptVersionService {
     }
 
     /**
+     * Get active workspace for a chapter.
+     * Returns the latest manuscript version with status in: DRAFT, IN_PROGRESS, SUBMITTED_FOR_REVIEW, UNDER_REVIEW
+     * Returns null if no active workspace exists.
+     */
+    public ManuscriptVersion getActiveWorkspace(Long chapterId) {
+        return manuscriptVersionRepository.findActiveWorkspace(chapterId);
+    }
+
+    /**
      * Bulk import all chapter pages into manuscript workspace.
      * Imports final chapter pages directly without re-uploading.
      * Preserves page ordering from chapter.
      */
     public List<ManuscriptPage> importChapterPages(Long manuscriptVersionId, Long chapterId, AuthenticatedUser user) {
-        validateEditable(manuscriptVersionId);
+        validateMutable(manuscriptVersionId);
 
         ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
         if (version == null) {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.DRAFT) {
-            throw new BusinessRuleException("Can only import pages into DRAFT manuscripts");
+        if (!version.getStatus().isEditable()) {
+            throw new BusinessRuleException("Can only import pages into DRAFT or IN_PROGRESS manuscripts");
         }
 
         // Get all chapter images ordered by displayOrder
@@ -172,15 +217,15 @@ public class ManuscriptVersionService {
      */
     public ManuscriptPage addPageSnapshot(Long manuscriptVersionId, Long chapterImageId,
                                            Integer displayOrder, AuthenticatedUser user) {
-        validateEditable(manuscriptVersionId);
+        validateMutable(manuscriptVersionId);
         
         ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
         if (version == null) {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.DRAFT) {
-            throw new BusinessRuleException("Can only add pages to DRAFT manuscripts");
+        if (!version.getStatus().isEditable()) {
+            throw new BusinessRuleException("Can only add pages to DRAFT or IN_PROGRESS manuscripts");
         }
 
         // Get chapter image details - for now use a placeholder approach
@@ -215,15 +260,15 @@ public class ManuscriptVersionService {
      * Reorder pages in manuscript.
      */
     public void reorderPages(Long manuscriptVersionId, List<Integer> pageOrders, AuthenticatedUser user) {
-        validateEditable(manuscriptVersionId);
+        validateMutable(manuscriptVersionId);
         
         ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
         if (version == null) {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.DRAFT) {
-            throw new BusinessRuleException("Can only reorder pages in DRAFT manuscripts");
+        if (!version.getStatus().isEditable()) {
+            throw new BusinessRuleException("Can only reorder pages in DRAFT or IN_PROGRESS manuscripts");
         }
 
         // Get current pages
@@ -272,6 +317,7 @@ public class ManuscriptVersionService {
     /**
      * Submit manuscript for review.
      * Locks production assets (BR-9).
+     * Validates status transition: DRAFT/IN_PROGRESS → SUBMITTED_FOR_REVIEW → UNDER_REVIEW
      */
     public void submitForReview(Long manuscriptVersionId, AuthenticatedUser user) {
         validateLatestVersion(manuscriptVersionId);
@@ -281,9 +327,8 @@ public class ManuscriptVersionService {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.DRAFT) {
-            throw new BusinessRuleException("Only DRAFT manuscripts can be submitted");
-        }
+        // Validate status transition using state machine
+        version.validateTransition(ManuscriptStatus.SUBMITTED_FOR_REVIEW);
 
         long pageCount = manuscriptPageRepository.countByManuscriptVersionId(manuscriptVersionId);
         if (pageCount == 0) {
@@ -299,8 +344,14 @@ public class ManuscriptVersionService {
         // Lock production (BR-9)
         lockProduction(version.getChapterId(), manuscriptVersionId, user.getId());
 
-        // Update status with submittedBy
+        // Update status to SUBMITTED_FOR_REVIEW first, then UNDER_REVIEW
+        manuscriptVersionRepository.updateStatus(manuscriptVersionId, ManuscriptStatus.SUBMITTED_FOR_REVIEW);
+        
+        // Immediately transition to UNDER_REVIEW for reviewer assignment
         manuscriptVersionRepository.updateSubmit(manuscriptVersionId, user.getId());
+
+        // Create ReviewTask for SLA tracking (BR-51, BR-52)
+        reviewTaskService.createReviewTask(manuscriptVersionId, user);
 
         // Notify Tantou
         Long tantouId = chapterRepository.getChapterTantou(version.getChapterId());
@@ -320,6 +371,7 @@ public class ManuscriptVersionService {
      * BR-4: APPROVED manuscripts cannot be mutated
      * BR-6: Publishing requires APPROVED status
      * Approval Gate: Cannot approve while OPEN annotations exist
+     * Validates status transition: UNDER_REVIEW → APPROVED
      */
     public void approve(Long manuscriptVersionId, AuthenticatedUser user) {
         validateLatestVersion(manuscriptVersionId);
@@ -329,9 +381,8 @@ public class ManuscriptVersionService {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.UNDER_REVIEW) {
-            throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can be approved");
-        }
+        // Validate status transition using state machine
+        version.validateTransition(ManuscriptStatus.APPROVED);
 
         // Approval Gate: Check for OPEN annotations
         long openAnnotationCount = annotationServiceV2.countOpenAnnotations(manuscriptVersionId);
@@ -352,6 +403,9 @@ public class ManuscriptVersionService {
 
         // Update status
         manuscriptVersionRepository.updateApproval(manuscriptVersionId, ManuscriptStatus.APPROVED, null, user.getId());
+
+        // Complete ReviewTask
+        reviewTaskService.completeReviewTask(manuscriptVersionId, user);
 
         // Phase 11: Approval Finalization - Mark chapter as APPROVED
         // When manuscript is approved, chapter automatically becomes APPROVED
@@ -406,6 +460,7 @@ public class ManuscriptVersionService {
     /**
      * Reject manuscript.
      * BR-3: REJECTED manuscripts cannot be mutated
+     * Validates status transition: UNDER_REVIEW → REJECTED
      */
     public void reject(Long manuscriptVersionId, String feedback, AuthenticatedUser user) {
         validateLatestVersion(manuscriptVersionId);
@@ -415,9 +470,8 @@ public class ManuscriptVersionService {
             throw new BusinessRuleException("Manuscript version not found");
         }
 
-        if (version.getStatus() != ManuscriptStatus.UNDER_REVIEW) {
-            throw new BusinessRuleException("Only UNDER_REVIEW manuscripts can be rejected");
-        }
+        // Validate status transition using state machine
+        version.validateTransition(ManuscriptStatus.REJECTED);
 
         if (feedback == null || feedback.trim().isEmpty()) {
             throw new BusinessRuleException("Feedback is required when rejecting manuscript");
@@ -433,6 +487,9 @@ public class ManuscriptVersionService {
 
         // Update status
         manuscriptVersionRepository.updateApproval(manuscriptVersionId, ManuscriptStatus.REJECTED, feedback, user.getId());
+
+        // Complete ReviewTask
+        reviewTaskService.completeReviewTask(manuscriptVersionId, user);
 
         // Unlock production
         lockRepository.unlock(version.getChapterId());
@@ -748,6 +805,17 @@ public class ManuscriptVersionService {
      */
     public boolean isProductionLocked(Long chapterId) {
         return lockRepository.findByChapterId(chapterId) != null;
+    }
+
+    /**
+     * Find all manuscript versions with UNDER_REVIEW status, optionally filtered by series assignments.
+     * Used for Tantou review inbox.
+     * @param tantouUserId the Tantou user ID (null for admin to see all)
+     * @param isAdmin whether the user is an admin
+     * @return list of under-review manuscript versions
+     */
+    public List<ManuscriptVersion> findUnderReviewForTantou(Long tantouUserId, boolean isAdmin) {
+        return manuscriptVersionRepository.findUnderReviewForTantou(tantouUserId, isAdmin);
     }
 
     private void lockProduction(Long chapterId, Long manuscriptVersionId, Long lockedBy) {

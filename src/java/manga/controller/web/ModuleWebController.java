@@ -1067,6 +1067,64 @@ public class ModuleWebController {
         return "manuscript-version/compare";
     }
 
+    /**
+     * Tantou Review Inbox - Show all manuscripts waiting for Tantou review.
+     * Tantou only sees manuscripts from their assigned series.
+     * Admin sees all under-review manuscripts.
+     */
+    @RequestMapping(value = "/manuscript-review", method = RequestMethod.GET)
+    public String manuscriptReviewInbox(HttpSession session, Model model) {
+        AuthenticatedUser user = requireUser(session);
+        
+        if (!user.hasRole("TANTOU_EDITOR") && !user.hasRole("ADMIN")) {
+            throw new IllegalArgumentException("Only TANTOU_EDITOR or ADMIN can access review inbox");
+        }
+        
+        boolean isAdmin = user.hasRole("ADMIN");
+        List<manga.model.ManuscriptVersion> underReviewVersions = 
+            manuscriptVersionService.findUnderReviewForTantou(user.getId(), isAdmin);
+        
+        if (underReviewVersions == null) {
+            underReviewVersions = new java.util.ArrayList<>();
+        }
+        
+        // Load chapter and series information for each version
+        java.util.Map<Long, ChapterSummary> chapterMap = new java.util.HashMap<>();
+        java.util.Map<Long, String> mangakaNames = new java.util.HashMap<>();
+        java.util.Map<Long, String> submittedAtMap = new java.util.HashMap<>();
+        
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        
+        for (manga.model.ManuscriptVersion version : underReviewVersions) {
+            ChapterSummary chapter = chapterRepository.findById(version.getChapterId());
+            if (chapter != null) {
+                chapterMap.put(version.getId(), chapter);
+                
+                // Get mangaka name using UserAdminRepository
+                long mangakaId = chapterRepository.findOwnerMangakaByChapter(version.getChapterId());
+                String mangakaName = userAdminRepository.getFullNameById(mangakaId);
+                if (mangakaName == null) {
+                    mangakaName = "Unknown";
+                }
+                mangakaNames.put(version.getId(), mangakaName);
+            }
+            
+            // Format submittedAt
+            if (version.getSubmittedAt() != null) {
+                submittedAtMap.put(version.getId(), version.getSubmittedAt().format(formatter));
+            }
+        }
+        
+        model.addAttribute("underReviewVersions", underReviewVersions);
+        model.addAttribute("chapterMap", chapterMap);
+        model.addAttribute("mangakaNames", mangakaNames);
+        model.addAttribute("submittedAtMap", submittedAtMap);
+        model.addAttribute("currentUser", user);
+        model.addAttribute("isAdmin", isAdmin);
+        
+        return "manuscript-version/review-inbox";
+    }
+
     // ============================================================
     // Private Helper Methods
     // ============================================================
