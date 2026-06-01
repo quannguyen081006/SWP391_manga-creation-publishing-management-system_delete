@@ -1131,50 +1131,95 @@ public class PageTaskRepository {
     }
 
     private String notificationTitle(String type) {
-        if (type == null) {
+        if (type == null || type.trim().isEmpty()) {
             return "Notification";
         }
         String normalized = type.trim().toUpperCase(Locale.ENGLISH);
         if ("TASK_ASSIGNED".equals(normalized)) {
-            return "New page task assigned";
+            return "Bạn có task mới";
         }
-        if ("TASK_SUBMITTED".equals(normalized)) {
-            return "Task submitted for review";
-        }
-        if ("TASK_APPROVED".equals(normalized)) {
-            return "Task approved";
-        }
-        if ("TASK_REJECTED".equals(normalized)) {
-            return "Task rejected - rework needed";
-        }
-        if ("TASK_DELETED".equals(normalized)) {
-            return "Task deleted";
+        if ("TASK_UPDATED".equals(normalized)) {
+            return "Task đã được cập nhật";
         }
         if ("TASK_REASSIGNED".equals(normalized)) {
-            return "Task reassigned";
+            return "Task đã được chuyển giao";
         }
-        if ("TASK_DUE_SOON".equals(normalized)) {
-            return "Task due in 24 hours";
+        if ("TASK_DELETED".equals(normalized)) {
+            return "Task đã bị xóa";
         }
-        if ("TASK_DELAYED".equals(normalized)) {
-            return "Task delayed";
+        if ("TASK_SUBMITTED".equals(normalized)) {
+            return "Assistant đã nộp task";
         }
-        if ("TASK_OVERDUE".equals(normalized)) {
-            return "Task overdue";
+        if ("TASK_APPROVED".equals(normalized)) {
+            return "Task được duyệt";
+        }
+        if ("TASK_REJECTED".equals(normalized)) {
+            return "Task bị từ chối";
         }
         if ("TASK_ESCALATED".equals(normalized)) {
-            return "Task escalated";
+            return "Task leo thang lên Tantou Editor";
+        }
+        if ("TASK_DUE_SOON".equals(normalized)) {
+            return "Task sắp đến hạn";
+        }
+        if ("TASK_DELAYED".equals(normalized)) {
+            return "Task bị chậm tiến độ";
+        }
+        if ("TASK_OVERDUE".equals(normalized)) {
+            return "Task đã quá hạn";
         }
         if ("CHAPTER_AT_RISK".equals(normalized)) {
-            return "Chapter at risk";
+            return "Chapter có nguy cơ trễ deadline";
         }
-        if (normalized.startsWith("MANUSCRIPT")) {
-            return "Manuscript update";
+        if ("MANUSCRIPT_SUBMITTED".equals(normalized)) {
+            return "Bản thảo đã được nộp";
         }
-        if (normalized.startsWith("CHAPTER")) {
-            return "Chapter update";
+        if ("MANUSCRIPT_APPROVED".equals(normalized)) {
+            return "Bản thảo được duyệt";
         }
-        return "Notification";
+        if ("MANUSCRIPT_PUBLISHED".equals(normalized)) {
+            return "Bản thảo đã xuất bản";
+        }
+        if ("MANUSCRIPT_REJECTED".equals(normalized)) {
+            return "Bản thảo bị từ chối";
+        }
+        if ("REVIEW_ASSIGNED".equals(normalized)) {
+            return "Bạn được giao review bản thảo";
+        }
+        if ("REVIEW_WARNING".equals(normalized)) {
+            return "Sắp hết hạn review bản thảo";
+        }
+        if ("REVIEW_OVERDUE".equals(normalized)) {
+            return "Review bản thảo đã quá hạn";
+        }
+        if ("PROPOSAL_BOARD_REVIEW_OPENED".equals(normalized)) {
+            return "Proposal mở phiên bỏ phiếu";
+        }
+        if ("PROPOSAL_BOARD_VOTE_CLOSING_SOON".equals(normalized)) {
+            return "Phiên bỏ phiếu sắp kết thúc";
+        }
+        if ("PROPOSAL_TANTOU_REVIEW_OVERDUE".equals(normalized)) {
+            return "Tantou Editor trễ hạn review proposal";
+        }
+        if ("PROPOSAL_APPROVED_SERIES_CREATED".equals(normalized)) {
+            return "Proposal được duyệt, Series đã được tạo";
+        }
+        if ("PROPOSAL_BOARD_REVISION_REQUESTED".equals(normalized)) {
+            return "Proposal yêu cầu chỉnh sửa";
+        }
+        if ("DECISION_SESSION_OPENED".equals(normalized)) {
+            return "Phiên quyết định mới được mở";
+        }
+        if ("DECISION_RESOLVED".equals(normalized)) {
+            return "Phiên quyết định đã kết thúc";
+        }
+        if ("RANKING_PERIOD_OPENED".equals(normalized)) {
+            return "Kỳ bình chọn xếp hạng mới";
+        }
+        if ("SERIES_DEADLINE_UPDATED".equals(normalized)) {
+            return "Deadline series đã được cập nhật";
+        }
+        return type.trim();
     }
 
     private String notificationViewUrl(String type, long referenceId, String referenceType) {
@@ -1193,7 +1238,7 @@ public class PageTaskRepository {
             return "/main/chapters/" + referenceId;
         }
         if ("MANUSCRIPT".equals(normalizedRef)) {
-            if ("MANUSCRIPT_REVIEW_REMINDER".equals(normalizedType)) {
+            if ("REVIEW_WARNING".equals(normalizedType)) {
                 return "/main/manuscripts/" + referenceId + "/review";
             }
             if ("MANUSCRIPT_REJECTED".equals(normalizedType)) {
