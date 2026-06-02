@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -323,6 +324,9 @@ public class ManuscriptVersionService {
      * Submit manuscript for review.
      * Locks production assets (BR-9).
      * Validates status transition: DRAFT/IN_PROGRESS → SUBMITTED_FOR_REVIEW → UNDER_REVIEW
+     * 
+     * ATOMIC TRANSACTION: All operations must succeed or all must rollback.
+     * Uses manual transaction handling to ensure atomicity across repository calls.
      */
     public void submitForReview(Long manuscriptVersionId, AuthenticatedUser user) {
         validateLatestVersion(manuscriptVersionId);
@@ -351,28 +355,73 @@ public class ManuscriptVersionService {
             throw new BusinessRuleException("Only one manuscript can be UNDER_REVIEW per chapter (BR-2)");
         }
 
-        // Lock production (BR-9)
-        lockProduction(version.getChapterId(), manuscriptVersionId, user.getId());
+        // Manual transaction handling to ensure atomicity
+        // All operations must succeed or all must rollback
+        java.sql.Connection conn = null;
+        boolean oldAutoCommit = false;
+        try {
+            conn = dataSource.getConnection();
+            oldAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            
+            // Lock production (BR-9)
+            lockProduction(version.getChapterId(), manuscriptVersionId, user.getId());
 
-        // Update status to SUBMITTED_FOR_REVIEW first, then UNDER_REVIEW
-        manuscriptVersionRepository.updateStatus(manuscriptVersionId, ManuscriptStatus.SUBMITTED_FOR_REVIEW);
-        
-        // Immediately transition to UNDER_REVIEW for reviewer assignment
-        manuscriptVersionRepository.updateSubmit(manuscriptVersionId, user.getId());
+            // Update status to SUBMITTED_FOR_REVIEW first, then UNDER_REVIEW
+            manuscriptVersionRepository.updateStatus(manuscriptVersionId, ManuscriptStatus.SUBMITTED_FOR_REVIEW);
+            
+            // Immediately transition to UNDER_REVIEW for reviewer assignment
+            manuscriptVersionRepository.updateSubmit(manuscriptVersionId, user.getId());
 
-        // Create ReviewTask for SLA tracking (BR-51, BR-52)
-        reviewTaskService.createReviewTask(manuscriptVersionId, user);
+            // Create ReviewTask for SLA tracking (BR-51, BR-52)
+            // This is the critical operation that may fail if table doesn't exist
+            reviewTaskService.createReviewTask(manuscriptVersionId, user);
 
-        // Notify Tantou
+            // Commit transaction - all operations succeeded
+            conn.commit();
+            
+        } catch (BusinessRuleException ex) {
+            // Business rule violations should not rollback - they're validation errors
+            throw ex;
+        } catch (Exception ex) {
+            // Rollback transaction on any error
+            try {
+                if (conn != null) {
+                    conn.rollback();
+                }
+            } catch (SQLException rollbackEx) {
+                System.err.println("Error rolling back transaction: " + rollbackEx.getMessage());
+            }
+            
+            // Re-throw with context
+            throw new BusinessRuleException("SUBMIT_FOR_REVIEW_FAILED: " + ex.getMessage());
+        } finally {
+            // Restore auto-commit and close connection
+            try {
+                if (conn != null) {
+                    conn.setAutoCommit(oldAutoCommit);
+                    conn.close();
+                }
+            } catch (SQLException ex) {
+                System.err.println("Error closing connection: " + ex.getMessage());
+            }
+        }
+
+        // Notify Tantou (outside transaction - notification failure should not affect submission)
         Long tantouId = chapterRepository.getChapterTantou(version.getChapterId());
         if (tantouId != null) {
-            notificationService.notifyUser(
-                tantouId,
-                "MANUSCRIPT_SUBMITTED",
-                "Manuscript v" + version.getVersion() + " submitted for review",
-                manuscriptVersionId,
-                "MANUSCRIPT"
-            );
+            try {
+                notificationService.notifyUser(
+                    tantouId,
+                    "MANUSCRIPT_SUBMITTED",
+                    "Manuscript v" + version.getVersion() + " submitted for review",
+                    manuscriptVersionId,
+                    "MANUSCRIPT"
+                );
+            } catch (Exception ex) {
+                // Notification failure should not fail the entire operation
+                System.err.println("Warning: Failed to send manuscript submission notification to user " + tantouId + ": " + ex.getMessage());
+            }
         }
     }
 

@@ -40,18 +40,24 @@ public class ReviewTaskService {
     /**
      * Create review task when manuscript is submitted for review.
      * BR-52: 48h review deadline
+     * 
+     * @throws BusinessRuleException with domain-specific error codes:
+     * - REVIEW_TASK_TABLE_MISSING: ReviewTask table doesn't exist (run migration)
+     * - REVIEW_TASK_REVIEWER_NOT_FOUND: No tantou editor assigned
+     * - REVIEW_TASK_FK_VIOLATION_VERSION: ManuscriptVersion doesn't exist
+     * - REVIEW_TASK_FK_VIOLATION_REVIEWER: Reviewer user doesn't exist
      */
     public ReviewTask createReviewTask(Long manuscriptVersionId, AuthenticatedUser user) {
         // Validate manuscript version exists
         manga.model.ManuscriptVersion version = manuscriptVersionRepository.findById(manuscriptVersionId);
         if (version == null) {
-            throw new BusinessRuleException("Manuscript version not found");
+            throw new BusinessRuleException("REVIEW_TASK_VERSION_NOT_FOUND: Manuscript version with id " + manuscriptVersionId + " does not exist");
         }
         
         // Get tantou editor for the chapter
         Long tantouId = chapterRepository.getChapterTantou(version.getChapterId());
         if (tantouId == null) {
-            throw new BusinessRuleException("No tantou editor assigned to chapter");
+            throw new BusinessRuleException("REVIEW_TASK_REVIEWER_NOT_FOUND: No tantou editor assigned to chapter " + version.getChapterId() + ". Assign a tantou editor before submitting for review.");
         }
         
         // Create review task
@@ -62,17 +68,33 @@ public class ReviewTaskService {
         task.setDueAt(LocalDateTime.now().plusHours(48)); // BR-52: 48h deadline
         task.setReviewStatus("ASSIGNED");
         
-        long taskId = reviewTaskRepository.create(task);
-        task.setId(taskId);
+        try {
+            long taskId = reviewTaskRepository.create(task);
+            task.setId(taskId);
+        } catch (RuntimeException ex) {
+            // Convert repository exceptions to BusinessRuleException with domain codes
+            String message = ex.getMessage();
+            if (message != null) {
+                if (message.startsWith("REVIEW_TASK_")) {
+                    throw new BusinessRuleException(message);
+                }
+            }
+            throw new BusinessRuleException("REVIEW_TASK_CREATION_FAILED: " + ex.getMessage());
+        }
         
         // Notify reviewer
-        notificationService.notifyUser(
-            tantouId,
-            "REVIEW_ASSIGNED",
-            "Manuscript review assigned. Due in 48 hours.",
-            manuscriptVersionId,
-            "MANUSCRIPT"
-        );
+        try {
+            notificationService.notifyUser(
+                tantouId,
+                "REVIEW_ASSIGNED",
+                "Manuscript review assigned. Due in 48 hours.",
+                manuscriptVersionId,
+                "MANUSCRIPT"
+            );
+        } catch (Exception ex) {
+            // Notification failure should not fail the entire operation
+            System.err.println("Warning: Failed to send review assignment notification to user " + tantouId + ": " + ex.getMessage());
+        }
         
         return task;
     }

@@ -22,6 +22,7 @@ public class ReviewTaskRepository {
     
     /**
      * Create new review task.
+     * Throws domain-specific exceptions for different failure scenarios.
      */
     public long create(ReviewTask reviewTask) {
         String sql = "INSERT INTO ReviewTask (versionId, reviewerId, assignedAt, dueAt, reviewStatus) VALUES (?, ?, ?, ?, ?)";
@@ -39,9 +40,36 @@ public class ReviewTaskRepository {
                 }
             }
         } catch (SQLException ex) {
-            throw new RuntimeException("Cannot create review task", ex);
+            // Parse SQL error message to provide domain-specific errors
+            String errorMessage = ex.getMessage();
+            if (errorMessage != null) {
+                String lowerMsg = errorMessage.toLowerCase();
+                
+                // Table doesn't exist
+                if (lowerMsg.contains("invalid object name") || lowerMsg.contains("object 'reviewtask'") || lowerMsg.contains("table 'reviewtask'")) {
+                    throw new RuntimeException("REVIEW_TASK_TABLE_MISSING: ReviewTask table does not exist in database. Run migration_add_review_task_table.sql to create it.", ex);
+                }
+                
+                // Foreign key violation - versionId
+                if (lowerMsg.contains("foreign key") && lowerMsg.contains("versionid")) {
+                    throw new RuntimeException("REVIEW_TASK_FK_VIOLATION_VERSION: ManuscriptVersion with id " + reviewTask.getVersionId() + " does not exist.", ex);
+                }
+                
+                // Foreign key violation - reviewerId
+                if (lowerMsg.contains("foreign key") && lowerMsg.contains("reviewerid")) {
+                    throw new RuntimeException("REVIEW_TASK_FK_VIOLATION_REVIEWER: User with id " + reviewTask.getReviewerId() + " does not exist or is not a valid reviewer.", ex);
+                }
+                
+                // NOT NULL violation
+                if (lowerMsg.contains("cannot insert null") || lowerMsg.contains("not null")) {
+                    throw new RuntimeException("REVIEW_TASK_NULL_VIOLATION: Required field is null. versionId=" + reviewTask.getVersionId() + ", reviewerId=" + reviewTask.getReviewerId(), ex);
+                }
+            }
+            
+            // Generic SQL error with original message
+            throw new RuntimeException("REVIEW_TASK_SQL_ERROR: " + errorMessage, ex);
         }
-        throw new RuntimeException("Failed to create review task");
+        throw new RuntimeException("REVIEW_TASK_GENERATION_FAILED: Failed to retrieve generated key after insert");
     }
     
     /**

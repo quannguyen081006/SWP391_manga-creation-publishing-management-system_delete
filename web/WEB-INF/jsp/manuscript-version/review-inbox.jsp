@@ -8,78 +8,154 @@
     <title>Manuscript Review Inbox</title>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css">
     <style>
+        /* Professional Light Editorial Review Inbox Styles */
+        
         .inbox-container {
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 30px;
+            max-width: 1400px;
+            margin: 32px auto;
+            padding: 0 24px;
         }
+        
         .inbox-header {
-            margin-bottom: 30px;
+            margin-bottom: 28px;
         }
+        
+        .inbox-header h1 {
+            margin: 0 0 8px;
+            font-size: 32px;
+            font-weight: 700;
+            color: #111827;
+        }
+        
+        .inbox-header p {
+            margin: 0;
+            color: #6b7280;
+            font-size: 15px;
+        }
+        
         .inbox-table {
             width: 100%;
             border-collapse: collapse;
-            background: #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            border-radius: 12px;
             overflow: hidden;
+            border: 1px solid #e5e7eb;
         }
+        
         .inbox-table th {
-            background: #f8f9fa;
-            padding: 15px;
+            background: #f9fafb;
+            padding: 16px 20px;
             text-align: left;
-            font-weight: bold;
-            color: #333;
-            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            color: #374151;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 2px solid #e5e7eb;
         }
+        
         .inbox-table td {
-            padding: 15px;
-            border-bottom: 1px solid #dee2e6;
+            padding: 18px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: middle;
         }
+        
         .inbox-table tr:last-child td {
             border-bottom: none;
         }
+        
         .inbox-table tr:hover {
-            background: #f8f9fa;
+            background: #f8fafc;
         }
+        
+        .inbox-table tbody tr {
+            transition: background-color 0.15s ease;
+        }
+        
+        /* Status Badges */
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
+            padding: 6px 14px;
+            border-radius: 999px;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
-        .status-under_review { background: #74c0fc; color: #fff; }
+        
+        .status-under_review { 
+            background: #dbeafe; 
+            color: #1d4ed8; 
+            border: 1px solid #93c5fd;
+        }
+        
+        /* Buttons */
         .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
+            padding: 10px 18px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 500;
             text-decoration: none;
             display: inline-block;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: #374151;
         }
-        .btn-primary { background: #228be6; color: #fff; }
-        .btn-primary:hover { background: #1c7ed6; }
+        
+        .btn:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary { 
+            background: #2563eb; 
+            border-color: #2563eb;
+            color: #ffffff;
+        }
+        
+        .btn-primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+        
+        /* Empty State */
         .empty-state {
             text-align: center;
-            padding: 60px;
-            color: #666;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 80px 40px;
+            color: #6b7280;
+            background: #ffffff;
+            border-radius: 12px;
+            border: 2px dashed #e5e7eb;
         }
+        
         .empty-state h3 {
-            margin-bottom: 10px;
-            color: #333;
+            margin: 0 0 8px;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 600;
         }
-        .chapter-info {
+        
+        .empty-state p {
+            margin: 0;
             font-size: 14px;
         }
+        
+        /* Chapter Info */
+        .chapter-info {
+            font-size: 14px;
+            font-weight: 500;
+            color: #111827;
+        }
+        
         .chapter-series {
-            color: #666;
+            color: #6b7280;
             font-size: 12px;
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -89,7 +165,7 @@
     <div class="inbox-container">
         <div class="inbox-header">
             <h1>Manuscript Review Inbox</h1>
-            <p style="color: #666;">
+            <p>
                 <c:if test="${isAdmin}">
                     All manuscripts waiting for review
                 </c:if>
@@ -131,16 +207,16 @@
                                 </div>
                             </td>
                             <td>
-                                <strong>v${version.version}</strong>
+                                <span style="font-weight: 600; color: #111827;">v${version.version}</span>
                             </td>
                             <td>
                                 <span class="status-badge status-under_review">${version.status}</span>
                             </td>
                             <td>
-                                ${mangakaNames[version.id]}
+                                <span style="color: #374151; font-weight: 500;">${mangakaNames[version.id]}</span>
                             </td>
                             <td>
-                                ${submittedAtMap[version.id]}
+                                <span style="color: #6b7280; font-size: 13px;">${submittedAtMap[version.id]}</span>
                             </td>
                             <td>
                                 <a href="${pageContext.request.contextPath}/main/manuscript-workspace/${version.id}" class="btn btn-primary">

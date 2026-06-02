@@ -9,171 +9,470 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/styles.css">
     <script src="${pageContext.request.contextPath}/assets/manuscript-workspace.js"></script>
     <style>
+        /* Professional Light Editorial Workspace Styles */
+        
         .workspace-container {
             display: flex;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 64px);
+            background: #f8f9fa;
         }
+        
+        /* Left Sidebar - Version & Metadata */
         .workspace-sidebar {
-            width: 280px;
-            background: #f5f5f5;
-            border-right: 1px solid #ddd;
-            padding: 20px;
+            width: 300px;
+            background: #ffffff;
+            border-right: 1px solid #e5e7eb;
+            padding: 24px 20px;
             overflow-y: auto;
+            flex-shrink: 0;
         }
+        
+        /* Right Sidebar - Annotations & Feedback */
         .workspace-right-sidebar {
-            width: 320px;
-            background: #f5f5f5;
-            border-left: 1px solid #ddd;
-            padding: 20px;
+            width: 340px;
+            background: #ffffff;
+            border-left: 1px solid #e5e7eb;
+            padding: 24px 20px;
             overflow-y: auto;
+            flex-shrink: 0;
         }
+        
+        /* Main Content - Manga Workspace */
         .workspace-main {
             flex: 1;
             display: flex;
             flex-direction: column;
             min-width: 0;
+            background: #f1f3f4;
         }
+        
+        /* Toolbar */
         .workspace-toolbar {
-            background: #fff;
-            border-bottom: 1px solid #ddd;
-            padding: 15px 20px;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            flex-shrink: 0;
         }
+        
+        .workspace-toolbar > div:first-child {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .workspace-toolbar > div:last-child {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        /* Pages Area */
         .workspace-pages {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            background: #f9f9f9;
+            padding: 32px 24px;
+            background: #f1f3f4;
         }
+        
+        /* Page Card */
         .page-card {
-            background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 32px;
             overflow: hidden;
             position: relative;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
         }
+        
+        .page-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-color: #d1d5db;
+        }
+        
+        /* Page Image Container - Neutral Reading Area */
         .page-image-container {
             position: relative;
             width: 100%;
-            min-height: 400px;
-            background: #f0f0f0;
+            min-height: 500px;
+            background: #e8eaed;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 24px;
         }
+        
         .page-image {
             max-width: 100%;
-            max-height: 600px;
+            max-height: 700px;
             object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
+        
+        /* Annotation Markers */
         .annotation-marker {
             position: absolute;
-            border: 2px solid #ff6b6b;
-            background: rgba(255, 107, 107, 0.2);
+            border: 2px solid #ef4444;
+            background: rgba(239, 68, 68, 0.15);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            border-radius: 2px;
         }
+        
         .annotation-marker:hover {
-            background: rgba(255, 107, 107, 0.4);
+            background: rgba(239, 68, 68, 0.3);
             border-width: 3px;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
         }
+        
         .annotation-marker.resolved {
-            border-color: #51cf66;
-            background: rgba(81, 207, 102, 0.2);
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.15);
         }
+        
+        .annotation-marker.resolved:hover {
+            background: rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        }
+        
         .annotation-marker.dismissed {
-            border-color: #868e96;
-            background: rgba(134, 142, 150, 0.2);
+            border-color: #9ca3af;
+            background: rgba(156, 163, 175, 0.15);
         }
+        
+        .annotation-marker.dismissed:hover {
+            background: rgba(156, 163, 175, 0.3);
+            box-shadow: 0 0 0 4px rgba(156, 163, 175, 0.1);
+        }
+        
+        /* Page Info */
         .page-info {
-            padding: 15px;
-            border-top: 1px solid #ddd;
+            padding: 16px 20px;
+            border-top: 1px solid #e5e7eb;
+            background: #fafbfc;
         }
+        
+        /* Status Badges */
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
+            padding: 6px 14px;
+            border-radius: 999px;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
-        .status-draft { background: #ffd43b; color: #333; }
-        .status-under_review { background: #74c0fc; color: #fff; }
-        .status-approved { background: #51cf66; color: #fff; }
-        .status-rejected { background: #ff6b6b; color: #fff; }
+        
+        .status-draft { 
+            background: #fef3c7; 
+            color: #92400e; 
+            border: 1px solid #fcd34d;
+        }
+        .status-under_review { 
+            background: #dbeafe; 
+            color: #1d4ed8; 
+            border: 1px solid #93c5fd;
+        }
+        .status-approved { 
+            background: #d1fae5; 
+            color: #065f46; 
+            border: 1px solid #6ee7b7;
+        }
+        .status-rejected { 
+            background: #fee2e2; 
+            color: #991b1b; 
+            border: 1px solid #fca5a5;
+        }
+        
+        /* Buttons */
         .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
+            padding: 10px 18px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 500;
             margin-right: 8px;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: #374151;
         }
-        .btn-primary { background: #228be6; color: #fff; }
-        .btn-success { background: #40c057; color: #fff; }
-        .btn-danger { background: #fa5252; color: #fff; }
-        .btn-secondary { background: #868e96; color: #fff; }
+        
+        .btn:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary { 
+            background: #2563eb; 
+            border-color: #2563eb;
+            color: #ffffff;
+        }
+        
+        .btn-primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+        
+        .btn-success { 
+            background: #059669; 
+            border-color: #059669;
+            color: #ffffff;
+        }
+        
+        .btn-success:hover {
+            background: #047857;
+            border-color: #047857;
+            box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+        }
+        
+        .btn-danger { 
+            background: #dc2626; 
+            border-color: #dc2626;
+            color: #ffffff;
+        }
+        
+        .btn-danger:hover {
+            background: #b91c1c;
+            border-color: #b91c1c;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+        }
+        
+        .btn-secondary { 
+            background: #6b7280; 
+            border-color: #6b7280;
+            color: #ffffff;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+            border-color: #4b5563;
+        }
+        
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
+        
+        /* Sidebar Sections */
         .sidebar-section {
-            margin-bottom: 25px;
+            margin-bottom: 28px;
         }
+        
         .sidebar-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #6b7280;
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5e7eb;
         }
+        
+        /* Dashboard Stats */
         .dashboard-stat {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 14px;
         }
-        .stat-label { color: #666; }
-        .stat-value { font-weight: bold; }
+        
+        .dashboard-stat:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label { 
+            color: #6b7280; 
+            font-weight: 500;
+        }
+        
+        .stat-value { 
+            font-weight: 600; 
+            color: #111827;
+        }
+        
+        /* Version Items */
         .version-item {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 8px;
+            padding: 14px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 10px;
             cursor: pointer;
+            transition: all 0.2s ease;
+            background: #ffffff;
         }
+        
         .version-item:hover {
-            background: #e7f5ff;
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            transform: translateX(2px);
         }
+        
         .version-item.current {
-            border-color: #228be6;
-            background: #e7f5ff;
+            border-color: #3b82f6;
+            background: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
+        
+        .version-item strong {
+            display: block;
+            color: #111827;
+            font-weight: 600;
+        }
+        
+        /* Annotation List */
         .annotation-list {
-            margin-top: 10px;
+            margin-top: 12px;
         }
+        
         .annotation-item {
-            padding: 10px;
-            border-left: 3px solid #ff6b6b;
-            background: #fff5f5;
-            margin-bottom: 8px;
-            border-radius: 4px;
+            padding: 14px 16px;
+            border-left: 4px solid #ef4444;
+            background: #fef2f2;
+            margin-bottom: 10px;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
+        
+        .annotation-item:hover {
+            background: #fee2e2;
+            transform: translateX(2px);
+        }
+        
         .annotation-item.resolved {
-            border-left-color: #51cf66;
-            background: #f6fff9;
+            border-left-color: #10b981;
+            background: #ecfdf5;
         }
+        
+        .annotation-item.resolved:hover {
+            background: #d1fae5;
+        }
+        
         .annotation-item.dismissed {
-            border-left-color: #868e96;
-            background: #f8f9fa;
+            border-left-color: #9ca3af;
+            background: #f3f4f6;
         }
-        .error-message {
-            background: #ffe3e3;
-            color: #c92a2a;
-            padding: 12px;
-            border-radius: 4px;
+        
+        .annotation-item.dismissed:hover {
+            background: #e5e7eb;
+        }
+        
+        .annotation-item > div:first-child {
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+        
+        .annotation-item > div:nth-child(2) {
+            font-size: 13px;
+            color: #4b5563;
+            line-height: 1.4;
+        }
+        
+        .annotation-item > div:last-child {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+        
+        /* Feedback Panel */
+        .feedback-panel {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            padding: 16px;
             margin-bottom: 20px;
+        }
+        
+        .feedback-panel.empty {
+            background: #f9fafb;
+            border: 1px dashed #d1d5db;
+        }
+        
+        .feedback-title {
+            font-weight: 600;
+            font-size: 13px;
+            color: #92400e;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .feedback-content {
+            font-size: 14px;
+            color: #78350f;
+            line-height: 1.5;
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #fde68a;
+        }
+        
+        .feedback-empty {
+            color: #9ca3af;
+            font-size: 13px;
+            font-style: italic;
+            text-align: center;
+            padding: 12px;
+        }
+        
+        /* Error Message */
+        .error-message {
+            background: #fef2f2;
+            color: #991b1b;
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #fca5a5;
+            font-weight: 500;
+        }
+        
+        /* Empty States */
+        .empty-state {
+            text-align: center;
+            padding: 80px 40px;
+            color: #6b7280;
+            background: #ffffff;
+            border-radius: 12px;
+            border: 2px dashed #e5e7eb;
+        }
+        
+        .empty-state h3 {
+            margin: 0 0 8px;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .empty-state p {
+            margin: 0;
+            font-size: 14px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .workspace-sidebar { width: 260px; }
+            .workspace-right-sidebar { width: 300px; }
+        }
+        
+        @media (max-width: 1200px) {
+            .workspace-sidebar { width: 240px; padding: 20px 16px; }
+            .workspace-right-sidebar { width: 280px; padding: 20px 16px; }
         }
     </style>
 </head>
@@ -181,14 +480,44 @@
     <jsp:include page="/WEB-INF/jsp/common/header.jsp"/>
     
     <div class="workspace-container">
-        <!-- Left Sidebar: Version List -->
+        <!-- Left Sidebar: Manuscript Info & Version History -->
         <div class="workspace-sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">Manuscript Info</div>
+                <div class="dashboard-stat">
+                    <span class="stat-label">Chapter</span>
+                    <span class="stat-value">${chapter.chapterNumber}</span>
+                </div>
+                <div class="dashboard-stat">
+                    <span class="stat-label">Version</span>
+                    <span class="stat-value">v${version.version}</span>
+                </div>
+                <div class="dashboard-stat">
+                    <span class="stat-label">Status</span>
+                    <span class="status-badge status-${fn:toLowerCase(version.status)}">${version.status}</span>
+                </div>
+                <div class="dashboard-stat">
+                    <span class="stat-label">Pages</span>
+                    <span class="stat-value">${version.totalPageCount}</span>
+                </div>
+                <div class="dashboard-stat">
+                    <span class="stat-label">Created</span>
+                    <span class="stat-value" style="font-size: 12px;">${createdAtFormatted}</span>
+                </div>
+                <c:if test="${not empty submittedAtFormatted}">
+                    <div class="dashboard-stat">
+                        <span class="stat-label">Submitted</span>
+                        <span class="stat-value" style="font-size: 12px;">${submittedAtFormatted}</span>
+                    </div>
+                </c:if>
+            </div>
+            
             <div class="sidebar-section">
                 <div class="sidebar-title">Version History</div>
                 <c:forEach var="v" items="${versionHistory}">
                     <a href="${pageContext.request.contextPath}/main/manuscript-workspace/${v.id}" class="version-item ${v.id == version.id ? 'current' : ''}" style="text-decoration: none; display: block;">
                         <div><strong>v${v.version}</strong> - ${v.status}</div>
-                        <div style="font-size: 12px; color: #666;">
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
                             ${versionHistoryDates[v.id]}
                         </div>
                     </a>
@@ -258,21 +587,21 @@
 
             <div class="workspace-pages">
                 <c:if test="${empty pages}">
-                    <div style="text-align: center; padding: 60px; color: #666;">
+                    <div class="empty-state">
                         <h3>No pages imported yet</h3>
-                        <p>Import chapter pages to begin the review workspace.</p>
+                        <p>Import chapter pages to begin the manuscript workspace.</p>
                     </div>
                 </c:if>
                 <c:forEach var="page" items="${pages}">
                     <div class="page-card" id="page-${page.id}">
                         <div class="page-image-container">
-                            <img src="${page.snapshotFileUrl}" alt="Page ${page.pageNumber}" class="page-image" id="img-${page.id}">
+                            <img data-original-url="${page.snapshotFileUrl}" alt="Page ${page.pageNumber}" class="page-image" id="img-${page.id}">
                             <!-- Annotation markers will be rendered here via JavaScript -->
                         </div>
                         <div class="page-info">
-                            <div><strong>Page ${page.pageNumber}</strong> (Display Order: ${page.displayOrder})</div>
-                            <div style="font-size: 12px; color: #666;">
-                                Checksum: ${page.snapshotChecksum}
+                            <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">Page ${page.pageNumber}</div>
+                            <div style="font-size: 12px; color: #6b7280;">
+                                Display Order: ${page.displayOrder} | Checksum: ${page.snapshotChecksum}
                             </div>
                         </div>
                     </div>
@@ -280,21 +609,31 @@
             </div>
         </div>
 
-        <!-- Right Sidebar: Annotation Panel -->
+        <!-- Right Sidebar: Feedback & Annotations -->
         <div class="workspace-right-sidebar">
+            <c:if test="${not empty version.feedback}">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Version Feedback</div>
+                    <div class="feedback-panel">
+                        <div class="feedback-title">Feedback for v${version.version}</div>
+                        <div class="feedback-content">${version.feedback}</div>
+                    </div>
+                </div>
+            </c:if>
+            
             <div class="sidebar-section">
                 <div class="sidebar-title">Annotations</div>
                 <div class="annotation-list">
                     <c:if test="${empty annotations}">
-                        <div style="text-align: center; color: #999; font-size: 13px; padding: 20px;">
-                            No annotations
+                        <div class="feedback-empty">
+                            No annotations yet
                         </div>
                     </c:if>
                     <c:forEach var="annotation" items="${annotations}">
                         <div class="annotation-item ${annotation.status == 'RESOLVED' ? 'resolved' : annotation.status == 'DISMISSED' ? 'dismissed' : ''}" style="cursor: pointer;" onclick="scrollToPage(${annotation.manuscriptPageId})">
-                            <div style="font-weight: bold;">${annotation.category}</div>
-                            <div style="font-size: 13px;">${annotation.content}</div>
-                            <div style="font-size: 11px; color: #666; margin-top: 4px;">
+                            <div>${annotation.category}</div>
+                            <div>${annotation.content}</div>
+                            <div>
                                 Page ${annotation.pageNumber} - ${annotation.status}
                             </div>
                         </div>
@@ -306,22 +645,31 @@
 
     <!-- Reject Modal -->
     <div id="rejectModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; border-radius: 8px; width: 400px;">
-            <h3>Reject Manuscript</h3>
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 32px; border-radius: 16px; width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="margin: 0 0 20px; font-size: 20px; font-weight: 700; color: #111827;">Reject Manuscript</h3>
             <form method="post" action="${pageContext.request.contextPath}/main/manuscript-workspace/${version.id}/reject">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Feedback (required):</label>
-                    <textarea name="feedback" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" required></textarea>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151; font-size: 14px;">Feedback (required):</label>
+                    <textarea name="feedback" rows="5" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;" required placeholder="Please provide feedback for rejection..."></textarea>
                 </div>
-                <div style="text-align: right;">
+                <div style="text-align: right; display: flex; gap: 12px; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="hideRejectModal()">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Reject</button>
+                    <button type="submit" class="btn btn-danger">Reject Manuscript</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
+        var ctx = '${pageContext.request.contextPath}';
+
+        function imageUrl(fileUrl) {
+            var url = String(fileUrl || '');
+            if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) { return url; }
+            if (url.indexOf(ctx + '/') === 0) { return url; }
+            return ctx + url;
+        }
+
         function showRejectModal() {
             document.getElementById('rejectModal').style.display = 'block';
         }
@@ -336,6 +684,22 @@
                 pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
+
+        // Normalize image URLs on page load
+        (function() {
+            var images = document.querySelectorAll('img.page-image[data-original-url]');
+            for (var i = 0; i < images.length; i++) {
+                var img = images[i];
+                var originalUrl = img.getAttribute('data-original-url');
+                if (originalUrl) {
+                    console.log('Manuscript workspace image normalization:');
+                    console.log('  Original URL:', originalUrl);
+                    var normalizedUrl = imageUrl(originalUrl);
+                    console.log('  Normalized URL:', normalizedUrl);
+                    img.src = normalizedUrl;
+                }
+            }
+        })();
 
         // Render annotation markers on pages
         <c:forEach var="annotation" items="${annotations}">
